@@ -1,0 +1,30 @@
+name: Build Documentation
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  run-on-self-hosted:
+    runs-on: [self-hosted, seame-computer-2]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Go to the repository
+        run: cd $GITHUB_WORKSPACE
+
+      - name: List the files in the repository
+        run: ls -la
+
+      - name: Run Doxygen
+        run: doxygen Doxyfile
+
+      - name: Copy folder to ~/Documents
+        run: |
+          mkdir -p ~/Documents/${{ github.event.repository.name }}
+          cp -r $GITHUB_WORKSPACE/docs ~/Documents/${{ github.event.repository.name }}/docs
