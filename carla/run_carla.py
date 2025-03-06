@@ -52,12 +52,11 @@ def spawn_vehicle_and_camera():
         client = carla.Client("localhost", 2000)
         client.set_timeout(10.0)
 
-        client.load_world("Town05")
-        world = client.get_world()
+        world = client.load_world('Town03')
         blueprint_library = world.get_blueprint_library()
 
         # Choose a vehicle blueprint
-        vehicle_bp = blueprint_library.find("vehicle.mercedes.coupe_2020")
+        vehicle_bp = blueprint_library.find("vehicle.lincoln.mkz_2020")
         spawn_points = world.get_map().get_spawn_points()
         spawn_point = spawn_points[0] if spawn_points else carla.Transform()
 
