@@ -93,13 +93,20 @@ class CarEnv(gymnasium.Env):
 			else:
 				return 0.3 # tweak this if the car is way over or under preferred speed 
 			
-	def apply_cnn(self,im):
-		img = np.float32(im)
-		img = img /255
-		img = np.expand_dims(img, axis=0)
-		cnn_applied = self.cnn_model([img,0],training=False)
-		cnn_applied = np.squeeze(cnn_applied)
-		return  cnn_applied ##[0][0]
+	def apply_cnn(self, im):
+		try:
+			img = cv2.resize(im, (256, 256))  # Resize to (256, 256)
+			img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)  # Convert to grayscale
+			img = np.expand_dims(img, axis=-1)  # Add channel dimension
+			img = np.float32(img) / 255.0  # Normalize to [0, 1]
+			img = np.expand_dims(img, axis=0)  # Add batch dimension
+			cnn_applied = self.cnn_model(img, training=False)
+			cnn_applied = np.squeeze(cnn_applied)
+			return cnn_applied
+		except tf.errors.InvalidArgumentError as e:
+			logging.error(f"Error applying CNN: {e}")
+			return np.zeros((256, 256))  # Return a default value or handle the error as needed
+
 	def step(self, action):
 		trans = self.vehicle.get_transform()
 		if self.SHOW_CAM:
@@ -270,3 +277,68 @@ class CarEnv(gymnasium.Env):
 		self.collision_hist.append(event)
 	def lane_data(self, event):
 		self.lane_invade_hist.append(event)
+
+def run_carla():
+    env = os.environ.copy()
+    env["DISPLAY"] = os.getenv("DISPLAY")
+    with tempfile.TemporaryDirectory() as temp_runtime_dir:
+        env["XDG_RUNTIME_DIR"] = temp_runtime_dir
+
+    command = [
+        "sudo", "docker", "run", "--privileged", "--gpus", "all", "--net=host",
+        "-e", "DISPLAY=:0",
+        "carlasim/carla:0.9.15", "/bin/bash", "./CarlaUE4.sh"
+    ]
+
+    logging.info("Starting CARLA...")
+    try:
+        carla_process = subprocess.Popen(command)
+        logging.info("CARLA process started.")
+        time.sleep(10)
+
+        # Check if CARLA server is running
+        client = carla.Client('localhost', 2000)
+        client.set_timeout(10.0)
+        try:
+            client.get_world()
+            logging.info("CARLA server is running.")
+        except:
+            logging.error("CARLA server is not running. Exiting.")
+            carla_process.terminate()
+            return
+
+        # Initialize the CarEnv environment
+        env = CarEnv()
+        logging.info("Environment initialized.")
+
+        # Run episodes
+        for episode in range(10):  # Adjust the number of episodes as needed
+            logging.info(f"Starting episode {episode + 1}")
+            obs = env.reset()
+            done = False
+            total_reward = 0
+
+            while not done:
+                action = env.action_space.sample()  # Replace with your model's action
+                logging.info(f"Action taken: {action}")
+                obs, reward, done, _, _ = env.step(action)
+                logging.info(f"Observation: {obs}, Reward: {reward}, Done: {done}")
+                total_reward += reward
+
+            logging.info(f"Episode {episode + 1} finished with total reward: {total_reward}")
+            env.clean_up()
+            logging.info(f"Environment cleaned up after episode {episode + 1}")
+
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Error running CARLA: {e}")
+    except KeyboardInterrupt:
+        logging.info("CARLA interrupted by user.")
+    finally:
+        env.clean_up()
+        carla_process.terminate()
+        logging.info("CARLA process terminated.")
+
+# Call run_carla to start the simulation
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    run_carla()
