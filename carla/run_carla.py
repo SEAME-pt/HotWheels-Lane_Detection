@@ -4,8 +4,9 @@ import carla
 import time
 import pygame
 import tempfile
-from traffic import spawn_traffic, spawn_pedestrians
-from process_image import sharpen_image, process_and_visualize, process_image
+#from traffic import spawn_traffic, spawn_pedestrians
+#from process_image import sharpen_image, process_and_visualize, process_image
+from process_image import KerasLaneDetector
 
 # Initialize Pygame for keyboard input
 pygame.init()
@@ -70,9 +71,9 @@ def spawn_vehicle_and_camera():
 
         # 📷 Attach a camera sensor
         camera_bp = blueprint_library.find("sensor.camera.rgb")
-        camera_bp.set_attribute("image_size_x", "1920")
-        camera_bp.set_attribute("image_size_y", "1080")
-        camera_bp.set_attribute("fov", "110")
+        camera_bp.set_attribute("image_size_x", "512")
+        camera_bp.set_attribute("image_size_y", "256")
+        camera_bp.set_attribute("fov", "100")
 
         # Camera position: Slightly above and behind the car
         camera_transform = carla.Transform(carla.Location(x=0, z=2))
@@ -95,8 +96,9 @@ def capture_image():
     def process_frame(image):
         global captured_image
         # Convert CARLA image to OpenCV format and save it
-        image_path = process_image(image)  # Process and update segmentation result
-        captured_image = process_and_visualize(image_path)  # Get the processed surface
+        detector = KerasLaneDetector('lane_detector_final.keras')
+        image_path = detector.process_image(image)  # Process and update segmentation result
+        captured_image = detector.process_and_visualize(image_path)  # Get the processed surface
 
     camera.listen(process_frame)  # Start continuous listening
 

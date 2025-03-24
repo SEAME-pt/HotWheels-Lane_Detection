@@ -1,0 +1,300 @@
+
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Lane Detection Model Layer Visualization</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            h1 { color: #333; }
+            .layer-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+            .layer-card { border: 1px solid #ddd; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            .layer-card h3 { padding: 10px; margin: 0; background-color: #f5f5f5; }
+            .layer-card img { width: 100%; height: auto; display: block; }
+            .overview { margin-bottom: 30px; }
+            .overview img { max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; }
+        </style>
+    </head>
+    <body>
+        <h1>Lane Detection Model Layer Visualization</h1>
+        
+        <div class="overview">
+            <h2>Overview of All Layers</h2>
+            <img src="all_layers_overview.png" alt="Overview of all layers">
+        </div>
+        
+        <h2>Individual Layer Outputs</h2>
+        <div class="layer-grid">
+    
+            <div class="layer-card">
+                <h3>Input Image</h3>
+                <img src="all_layers_overview.png" alt="Input Image">
+            </div>
+            <div class="layer-card">
+                <h3>Ground Truth</h3>
+                <img src="all_layers_overview.png" alt="Ground Truth">
+            </div>
+    
+            <div class="layer-card">
+                <h3>gaussian_blur</h3>
+                <img src="000_gaussian_blur.png" alt="gaussian_blur">
+            </div>
+        
+            <div class="layer-card">
+                <h3>sobel_x</h3>
+                <img src="001_sobel_x.png" alt="sobel_x">
+            </div>
+        
+            <div class="layer-card">
+                <h3>sobel_y</h3>
+                <img src="002_sobel_y.png" alt="sobel_y">
+            </div>
+        
+            <div class="layer-card">
+                <h3>gradient_magnitude</h3>
+                <img src="003_gradient_magnitude.png" alt="gradient_magnitude">
+            </div>
+        
+            <div class="layer-card">
+                <h3>non_max_suppression</h3>
+                <img src="004_non_max_suppression.png" alt="non_max_suppression">
+            </div>
+        
+            <div class="layer-card">
+                <h3>adaptive_threshold</h3>
+                <img src="005_adaptive_threshold.png" alt="adaptive_threshold">
+            </div>
+        
+            <div class="layer-card">
+                <h3>encoder_conv1_1</h3>
+                <img src="006_encoder_conv1_1.png" alt="encoder_conv1_1">
+            </div>
+        
+            <div class="layer-card">
+                <h3>batch_normalization</h3>
+                <img src="007_batch_normalization.png" alt="batch_normalization">
+            </div>
+        
+            <div class="layer-card">
+                <h3>encoder_conv1_2</h3>
+                <img src="008_encoder_conv1_2.png" alt="encoder_conv1_2">
+            </div>
+        
+            <div class="layer-card">
+                <h3>batch_normalization_1</h3>
+                <img src="009_batch_normalization_1.png" alt="batch_normalization_1">
+            </div>
+        
+            <div class="layer-card">
+                <h3>encoder_pool1</h3>
+                <img src="010_encoder_pool1.png" alt="encoder_pool1">
+            </div>
+        
+            <div class="layer-card">
+                <h3>spatial_dropout2d</h3>
+                <img src="011_spatial_dropout2d.png" alt="spatial_dropout2d">
+            </div>
+        
+            <div class="layer-card">
+                <h3>encoder_conv2_1</h3>
+                <img src="012_encoder_conv2_1.png" alt="encoder_conv2_1">
+            </div>
+        
+            <div class="layer-card">
+                <h3>batch_normalization_2</h3>
+                <img src="013_batch_normalization_2.png" alt="batch_normalization_2">
+            </div>
+        
+            <div class="layer-card">
+                <h3>encoder_conv2_2</h3>
+                <img src="014_encoder_conv2_2.png" alt="encoder_conv2_2">
+            </div>
+        
+            <div class="layer-card">
+                <h3>batch_normalization_3</h3>
+                <img src="015_batch_normalization_3.png" alt="batch_normalization_3">
+            </div>
+        
+            <div class="layer-card">
+                <h3>encoder_pool2</h3>
+                <img src="016_encoder_pool2.png" alt="encoder_pool2">
+            </div>
+        
+            <div class="layer-card">
+                <h3>spatial_dropout2d_1</h3>
+                <img src="017_spatial_dropout2d_1.png" alt="spatial_dropout2d_1">
+            </div>
+        
+            <div class="layer-card">
+                <h3>encoder_conv3_1</h3>
+                <img src="018_encoder_conv3_1.png" alt="encoder_conv3_1">
+            </div>
+        
+            <div class="layer-card">
+                <h3>batch_normalization_4</h3>
+                <img src="019_batch_normalization_4.png" alt="batch_normalization_4">
+            </div>
+        
+            <div class="layer-card">
+                <h3>encoder_conv3_2</h3>
+                <img src="020_encoder_conv3_2.png" alt="encoder_conv3_2">
+            </div>
+        
+            <div class="layer-card">
+                <h3>batch_normalization_5</h3>
+                <img src="021_batch_normalization_5.png" alt="batch_normalization_5">
+            </div>
+        
+            <div class="layer-card">
+                <h3>encoder_pool3</h3>
+                <img src="022_encoder_pool3.png" alt="encoder_pool3">
+            </div>
+        
+            <div class="layer-card">
+                <h3>spatial_dropout2d_2</h3>
+                <img src="023_spatial_dropout2d_2.png" alt="spatial_dropout2d_2">
+            </div>
+        
+            <div class="layer-card">
+                <h3>middle_conv1</h3>
+                <img src="024_middle_conv1.png" alt="middle_conv1">
+            </div>
+        
+            <div class="layer-card">
+                <h3>batch_normalization_6</h3>
+                <img src="025_batch_normalization_6.png" alt="batch_normalization_6">
+            </div>
+        
+            <div class="layer-card">
+                <h3>middle_conv2</h3>
+                <img src="026_middle_conv2.png" alt="middle_conv2">
+            </div>
+        
+            <div class="layer-card">
+                <h3>batch_normalization_7</h3>
+                <img src="027_batch_normalization_7.png" alt="batch_normalization_7">
+            </div>
+        
+            <div class="layer-card">
+                <h3>spatial_dropout2d_3</h3>
+                <img src="028_spatial_dropout2d_3.png" alt="spatial_dropout2d_3">
+            </div>
+        
+            <div class="layer-card">
+                <h3>decoder_up3</h3>
+                <img src="029_decoder_up3.png" alt="decoder_up3">
+            </div>
+        
+            <div class="layer-card">
+                <h3>conv2d</h3>
+                <img src="030_conv2d.png" alt="conv2d">
+            </div>
+        
+            <div class="layer-card">
+                <h3>concatenate</h3>
+                <img src="031_concatenate.png" alt="concatenate">
+            </div>
+        
+            <div class="layer-card">
+                <h3>decoder_conv3_1</h3>
+                <img src="032_decoder_conv3_1.png" alt="decoder_conv3_1">
+            </div>
+        
+            <div class="layer-card">
+                <h3>batch_normalization_8</h3>
+                <img src="033_batch_normalization_8.png" alt="batch_normalization_8">
+            </div>
+        
+            <div class="layer-card">
+                <h3>decoder_conv3_2</h3>
+                <img src="034_decoder_conv3_2.png" alt="decoder_conv3_2">
+            </div>
+        
+            <div class="layer-card">
+                <h3>batch_normalization_9</h3>
+                <img src="035_batch_normalization_9.png" alt="batch_normalization_9">
+            </div>
+        
+            <div class="layer-card">
+                <h3>decoder_up2</h3>
+                <img src="036_decoder_up2.png" alt="decoder_up2">
+            </div>
+        
+            <div class="layer-card">
+                <h3>conv2d_1</h3>
+                <img src="037_conv2d_1.png" alt="conv2d_1">
+            </div>
+        
+            <div class="layer-card">
+                <h3>concatenate_1</h3>
+                <img src="038_concatenate_1.png" alt="concatenate_1">
+            </div>
+        
+            <div class="layer-card">
+                <h3>decoder_conv2_1</h3>
+                <img src="039_decoder_conv2_1.png" alt="decoder_conv2_1">
+            </div>
+        
+            <div class="layer-card">
+                <h3>batch_normalization_10</h3>
+                <img src="040_batch_normalization_10.png" alt="batch_normalization_10">
+            </div>
+        
+            <div class="layer-card">
+                <h3>decoder_conv2_2</h3>
+                <img src="041_decoder_conv2_2.png" alt="decoder_conv2_2">
+            </div>
+        
+            <div class="layer-card">
+                <h3>batch_normalization_11</h3>
+                <img src="042_batch_normalization_11.png" alt="batch_normalization_11">
+            </div>
+        
+            <div class="layer-card">
+                <h3>decoder_up1</h3>
+                <img src="043_decoder_up1.png" alt="decoder_up1">
+            </div>
+        
+            <div class="layer-card">
+                <h3>conv2d_2</h3>
+                <img src="044_conv2d_2.png" alt="conv2d_2">
+            </div>
+        
+            <div class="layer-card">
+                <h3>concatenate_2</h3>
+                <img src="045_concatenate_2.png" alt="concatenate_2">
+            </div>
+        
+            <div class="layer-card">
+                <h3>decoder_conv1_1</h3>
+                <img src="046_decoder_conv1_1.png" alt="decoder_conv1_1">
+            </div>
+        
+            <div class="layer-card">
+                <h3>batch_normalization_12</h3>
+                <img src="047_batch_normalization_12.png" alt="batch_normalization_12">
+            </div>
+        
+            <div class="layer-card">
+                <h3>decoder_conv1_2</h3>
+                <img src="048_decoder_conv1_2.png" alt="decoder_conv1_2">
+            </div>
+        
+            <div class="layer-card">
+                <h3>batch_normalization_13</h3>
+                <img src="049_batch_normalization_13.png" alt="batch_normalization_13">
+            </div>
+        
+            <div class="layer-card">
+                <h3>lane_attention</h3>
+                <img src="050_lane_attention.png" alt="lane_attention">
+            </div>
+        
+            <div class="layer-card">
+                <h3>output</h3>
+                <img src="051_output.png" alt="output">
+            </div>
+        
+        </div>
+    </body>
+    </html>
+    

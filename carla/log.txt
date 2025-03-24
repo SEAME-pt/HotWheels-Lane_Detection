@@ -1,0 +1,279 @@
+2025-03-20 10:09:15.643370: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2025-03-20 10:09:15.682155: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX_VNNI FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+2025-03-20 10:09:16.612211: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+sh: 1: xdg-user-dir: not found
+4.26.2-0+++UE4+Release-4.26 522 0
+Disabling core dumps.
+ALSA lib confmisc.c:767:(parse_card) cannot find card '0'
+ALSA lib conf.c:4528:(_snd_config_evaluate) function snd_func_card_driver returned error: No such file or directory
+ALSA lib confmisc.c:392:(snd_func_concat) error evaluating strings
+ALSA lib conf.c:4528:(_snd_config_evaluate) function snd_func_concat returned error: No such file or directory
+ALSA lib confmisc.c:1246:(snd_func_refer) error evaluating name
+ALSA lib conf.c:4528:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5007:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2495:(snd_pcm_open_noupdate) Unknown PCM default
+ALSA lib confmisc.c:767:(parse_card) cannot find card '0'
+ALSA lib conf.c:4528:(_snd_config_evaluate) function snd_func_card_driver returned error: No such file or directory
+ALSA lib confmisc.c:392:(snd_func_concat) error evaluating strings
+ALSA lib conf.c:4528:(_snd_config_evaluate) function snd_func_concat returned error: No such file or directory
+ALSA lib confmisc.c:1246:(snd_func_refer) error evaluating name
+ALSA lib conf.c:4528:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5007:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2495:(snd_pcm_open_noupdate) Unknown PCM default
+ALSA lib confmisc.c:767:(parse_card) cannot find card '0'
+ALSA lib conf.c:4528:(_snd_config_evaluate) function snd_func_card_driver returned error: No such file or directory
+ALSA lib confmisc.c:392:(snd_func_concat) error evaluating strings
+ALSA lib conf.c:4528:(_snd_config_evaluate) function snd_func_concat returned error: No such file or directory
+ALSA lib confmisc.c:1246:(snd_func_refer) error evaluating name
+ALSA lib conf.c:4528:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5007:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2495:(snd_pcm_open_noupdate) Unknown PCM default
+ALSA lib confmisc.c:767:(parse_card) cannot find card '0'
+ALSA lib conf.c:4528:(_snd_config_evaluate) function snd_func_card_driver returned error: No such file or directory
+ALSA lib confmisc.c:392:(snd_func_concat) error evaluating strings
+ALSA lib conf.c:4528:(_snd_config_evaluate) function snd_func_concat returned error: No such file or directory
+ALSA lib confmisc.c:1246:(snd_func_refer) error evaluating name
+ALSA lib conf.c:4528:(_snd_config_evaluate) function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5007:(snd_config_expand) Evaluate error: No such file or directory
+ALSA lib pcm.c:2495:(snd_pcm_open_noupdate) Unknown PCM default
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1742465374.749694  796110 gpu_device.cc:2018] Created device /job:localhost/replica:0/task:0/device:GPU:0 with 531 MB memory:  -> device: 0, name: NVIDIA RTX 2000 Ada Generation Laptop GPU, pci bus id: 0000:01:00.0, compute capability: 8.9
+/home/michel/.local/lib/python3.10/site-packages/keras/src/models/functional.py:238: UserWarning: The structure of `inputs` doesn't match the expected structure.
+Expected: ['model_input']
+Received: inputs=Tensor(shape=(1, 256, 256, 1))
+  warnings.warn(msg)
+I0000 00:00:1742465376.188440  796245 cuda_dnn.cc:529] Loaded cuDNN version 90300
+2025-03-20 10:09:37.215584: W external/local_xla/xla/tsl/framework/bfc_allocator.cc:310] Allocator (GPU_0_bfc) ran out of memory trying to allocate 1.04GiB with freed_by_count=0. The caller indicates that this is not a failure, but this may mean that there could be performance gains if more memory were available.
+2025-03-20 10:09:37.245797: W external/local_xla/xla/tsl/framework/bfc_allocator.cc:310] Allocator (GPU_0_bfc) ran out of memory trying to allocate 2.06GiB with freed_by_count=0. The caller indicates that this is not a failure, but this may mean that there could be performance gains if more memory were available.
+2025-03-20 10:09:37.274436: W external/local_xla/xla/tsl/framework/bfc_allocator.cc:310] Allocator (GPU_0_bfc) ran out of memory trying to allocate 1.04GiB with freed_by_count=0. The caller indicates that this is not a failure, but this may mean that there could be performance gains if more memory were available.
+2025-03-20 10:09:37.312908: W external/local_xla/xla/tsl/framework/bfc_allocator.cc:310] Allocator (GPU_0_bfc) ran out of memory trying to allocate 2.06GiB with freed_by_count=0. The caller indicates that this is not a failure, but this may mean that there could be performance gains if more memory were available.
+2025-03-20 10:09:37.344586: W external/local_xla/xla/tsl/framework/bfc_allocator.cc:310] Allocator (GPU_0_bfc) ran out of memory trying to allocate 1.05GiB with freed_by_count=0. The caller indicates that this is not a failure, but this may mean that there could be performance gains if more memory were available.
+2025-03-20 10:09:37.379714: W external/local_xla/xla/tsl/framework/bfc_allocator.cc:310] Allocator (GPU_0_bfc) ran out of memory trying to allocate 2.09GiB with freed_by_count=0. The caller indicates that this is not a failure, but this may mean that there could be performance gains if more memory were available.
+WARNING:tensorflow:5 out of the last 5 calls to <function TensorFlowTrainer.make_predict_function.<locals>.one_step_on_data_distributed at 0x7a99e1d06440> triggered tf.function retracing. Tracing is expensive and the excessive number of tracings could be due to (1) creating @tf.function repeatedly in a loop, (2) passing tensors with different shapes, (3) passing Python objects instead of tensors. For (1), please define your @tf.function outside of the loop. For (2), @tf.function has reduce_retracing=True option that can avoid unnecessary retracing. For (3), please refer to https://www.tensorflow.org/guide/function#controlling_retracing and https://www.tensorflow.org/api_docs/python/tf/function for  more details.
+WARNING:tensorflow:6 out of the last 6 calls to <function TensorFlowTrainer.make_predict_function.<locals>.one_step_on_data_distributed at 0x7a99cff37c70> triggered tf.function retracing. Tracing is expensive and the excessive number of tracings could be due to (1) creating @tf.function repeatedly in a loop, (2) passing tensors with different shapes, (3) passing Python objects instead of tensors. For (1), please define your @tf.function outside of the loop. For (2), @tf.function has reduce_retracing=True option that can avoid unnecessary retracing. For (3), please refer to https://www.tensorflow.org/guide/function#controlling_retracing and https://www.tensorflow.org/api_docs/python/tf/function for  more details.
+pygame 2.6.1 (SDL 2.28.4, Python 3.10.12)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+GPUs disponíveis: [PhysicalDevice(name='/physical_device:GPU:0', device_type='GPU')]
+Versão do TensorFlow: 2.20.0-dev20250310
+Versão do CUDA: 12.5.1
+Versão do cuDNN: 9
+Starting CARLA...
+Vehicle spawned: 109
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+✅ Lane detection model loaded successfully from lane_detector_final.keras
+Model input shape: (256, 256)
+
+Exiting...
+Fatal Python error: PyGILState_Release: thread state 0x7a98709ae320 must be current when releasing
+Python runtime state: finalizing (tstate=0x00005e266946a940)
+
+Thread 0x00007a9b3562b000 (most recent call first):
+  <no Python frame>
+
+Extension modules: carla.libcarla, pygame.base, pygame.constants, pygame.rect, pygame.rwobject, pygame.surflock, pygame.bufferproxy, pygame.math, pygame.surface, pygame.display, pygame.draw, pygame.event, pygame.imageext, pygame.image, pygame.joystick, pygame.key, pygame.mouse, pygame.time, pygame.mask, pygame.pixelcopy, pygame.transform, pygame.font, pygame.mixer_music, pygame.mixer, pygame.scrap, numpy._core._multiarray_umath, numpy.linalg._umath_linalg, google._upb._message, charset_normalizer.md, h5py._errors, h5py.defs, h5py._objects, h5py.h5, h5py.utils, h5py.h5t, h5py.h5s, h5py.h5ac, h5py.h5p, h5py.h5r, h5py._proxy, h5py._conv, h5py.h5z, h5py.h5a, h5py.h5d, h5py.h5ds, h5py.h5g, h5py.h5i, h5py.h5o, h5py.h5f, h5py.h5fd, h5py.h5pl, h5py.h5l, h5py._selector, scipy._lib._ccallback_c, numpy.random._common, numpy.random.bit_generator, numpy.random._bounded_integers, numpy.random._mt19937, numpy.random.mtrand, numpy.random._philox, numpy.random._pcg64, numpy.random._sfc64, numpy.random._generator, scipy.sparse._sparsetools, _csparsetools, scipy.sparse._csparsetools, scipy.linalg._fblas, scipy.linalg._flapack, scipy.linalg.cython_lapack, scipy.linalg._cythonized_array_utils, scipy.linalg._solve_toeplitz, scipy.linalg._decomp_lu_cython, scipy.linalg._matfuncs_sqrtm_triu, scipy.linalg._matfuncs_expm, scipy.linalg._linalg_pythran, scipy.linalg.cython_blas, scipy.linalg._decomp_update, scipy.sparse.linalg._dsolve._superlu, scipy.sparse.linalg._eigen.arpack._arpack, scipy.sparse.linalg._propack._spropack, scipy.sparse.linalg._propack._dpropack, scipy.sparse.linalg._propack._cpropack, scipy.sparse.linalg._propack._zpropack, scipy.sparse.csgraph._tools, scipy.sparse.csgraph._shortest_path, scipy.sparse.csgraph._traversal, scipy.sparse.csgraph._min_spanning_tree, scipy.sparse.csgraph._flow, scipy.sparse.csgraph._matching, scipy.sparse.csgraph._reordering, PIL._imaging, pandas._libs.tslibs.ccalendar, pandas._libs.tslibs.np_datetime, pandas._libs.tslibs.dtypes, pandas._libs.tslibs.base, pandas._libs.tslibs.nattype, pandas._libs.tslibs.timezones, pandas._libs.tslibs.fields, pandas._libs.tslibs.timedeltas, pandas._libs.tslibs.tzconversion, pandas._libs.tslibs.timestamps, pandas._libs.properties, pandas._libs.tslibs.offsets, pandas._libs.tslibs.strptime, pandas._libs.tslibs.parsing, pandas._libs.tslibs.conversion, pandas._libs.tslibs.period, pandas._libs.tslibs.vectorized, pandas._libs.ops_dispatch, pandas._libs.missing, pandas._libs.hashtable, pandas._libs.algos, pandas._libs.interval, pandas._libs.lib, pandas._libs.ops, pandas._libs.hashing, pandas._libs.arrays, pandas._libs.tslib, pandas._libs.sparse, pandas._libs.internals, pandas._libs.indexing, pandas._libs.index, pandas._libs.writers, pandas._libs.join, pandas._libs.window.aggregations, pandas._libs.window.indexers, pandas._libs.reshape, pandas._libs.groupby, pandas._libs.json, pandas._libs.parsers, pandas._libs.testing, kiwisolver._cext, sklearn.__check_build._check_build, scipy.special._ufuncs_cxx, scipy.special._ufuncs, scipy.special._specfun, scipy.special._comb, scipy.special._ellip_harm_2, scipy.spatial._ckdtree, scipy._lib.messagestream, scipy.spatial._qhull, scipy.spatial._voronoi, scipy.spatial._distance_wrap, scipy.spatial._hausdorff, scipy.spatial.transform._rotation, scipy.optimize._group_columns, scipy.optimize._trlib._trlib, scipy.optimize._lbfgsb, _moduleTNC, scipy.optimize._moduleTNC, scipy.optimize._cobyla, scipy.optimize._slsqp, scipy.optimize._minpack, scipy.optimize._lsq.givens_elimination, scipy.optimize._zeros, scipy.optimize._cython_nnls, scipy._lib._uarray._uarray, scipy.linalg._decomp_interpolative, scipy.optimize._bglu_dense, scipy.optimize._lsap, scipy.optimize._direct, scipy.integrate._odepack, scipy.integrate._quadpack, scipy.integrate._vode, scipy.integrate._dop, scipy.integrate._lsoda, scipy.interpolate._fitpack, scipy.interpolate._dfitpack, scipy.interpolate._dierckx, scipy.interpolate._ppoly, scipy.interpolate._interpnd, scipy.interpolate._rbfinterp_pythran, scipy.interpolate._rgi_cython, scipy.interpolate._bspl, scipy.special.cython_special, scipy.stats._stats, scipy.stats._sobol, scipy.stats._qmc_cy, scipy.stats._biasedurn, scipy.stats._stats_pythran, scipy.stats._levy_stable.levyst, scipy.stats._ansari_swilk_statistics, scipy.stats._mvn, scipy.stats._rcont.rcont, scipy.ndimage._nd_image, scipy.ndimage._rank_filter_1d, _ni_label, scipy.ndimage._ni_label, sklearn.utils._isfinite, sklearn.utils.sparsefuncs_fast, sklearn.utils.murmurhash, sklearn.utils._openmp_helpers, pygame._freetype (total: 193)
