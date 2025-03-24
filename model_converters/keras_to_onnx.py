@@ -40,7 +40,7 @@ def convert_keras_to_onnx(keras_model_path, onnx_model_path):
     os.system(f"rm -rf {saved_model_dir}")
 
 # Caminho do modelo .keras e do output ONNX
-keras_model_path = "../model/lane_detector_final.keras"
+keras_model_path = "lane_detector_final.keras"
 onnx_model_path = "model.onnx"
 
 convert_keras_to_onnx(keras_model_path, onnx_model_path)
