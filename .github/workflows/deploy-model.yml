@@ -1,0 +1,26 @@
+name: Deploy lane detection model to Jetson
+
+on:
+  push:
+    branches:
+      - lane-detection
+    paths:
+      - 'carla/**'
+  pull_request:
+    branches:
+      - lane-detection
+    paths:
+      - 'carla/**'
+
+jobs:
+  run-on-self-hosted:
+    runs-on: [self-hosted, seame-computer-2]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Deploy model to the Jetson
+        env:
+          SSHPASS: ${{ secrets.JETSON_PASSWORD }}
+        run: |
+          sshpass -e rsync -avz --rsync-path="sudo rsync" --delete carla/lane_detector_final.keras hotweels@10.21.221.78:/home/hotweels/lane-detection-model/
