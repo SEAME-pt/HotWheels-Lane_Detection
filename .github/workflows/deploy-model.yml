@@ -3,14 +3,14 @@ name: Deploy lane detection model to Jetson
 on:
   push:
     branches:
-      - lane-detection
-    paths:
-      - 'carla/**'
+      - carla-setup
+    #paths:
+      #- 'carla/**'
   pull_request:
     branches:
-      - lane-detection
-    paths:
-      - 'carla/**'
+      - carla-setup
+    #paths:
+      #- 'carla/**'
 
 jobs:
   run-on-self-hosted:
