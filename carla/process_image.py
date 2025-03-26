@@ -71,14 +71,9 @@ class KerasLaneDetector:
 
         return binary_seg
 
-    def process_and_visualize(self, input_image_path, save_dir="lane_output"):
+    def process_and_visualize(self, input_image, save_dir="lane_output"):
         """Processes the image through the lane detection model and returns a Pygame surface."""
         os.makedirs(save_dir, exist_ok=True)
-
-        # Load input image
-        input_image = cv2.imread(input_image_path)
-        if input_image is None:
-            raise ValueError(f"Could not load image from {input_image_path}")
 
         # Preprocess the image
         preprocessed_image = self.preprocess_image(input_image)
@@ -93,9 +88,9 @@ class KerasLaneDetector:
         binary_seg = cv2.cvtColor(binary_seg, cv2.COLOR_GRAY2RGB)
 
         # Optional: Save the result
-        if save_dir:
-            save_path = os.path.join(save_dir, f"lane_{int(time.time())}.png")
-            cv2.imwrite(save_path, binary_seg)
+        #if save_dir:
+            #save_path = os.path.join(save_dir, f"lane_{int(time.time())}.png")
+            #cv2.imwrite(save_path, binary_seg)
 
         # Convert NumPy array to Pygame surface
         surface = pygame.surfarray.make_surface(binary_seg.swapaxes(0, 1))  # Swap axes for correct orientation
@@ -109,12 +104,8 @@ class KerasLaneDetector:
             array = array.reshape((image.height, image.width, 4))  # BGRA format
             array = array[:, :, :3]  # Remove alpha channel
 
-            # Save image with no compression loss
-            filename = "carla_camera.png"
-            cv2.imwrite(filename, array, [cv2.IMWRITE_PNG_COMPRESSION, 0])  # Set compression to 0
-
             # Return the filename for further processing
-            return filename
+            return array
 
         except Exception as e:
             print(f"Error processing image: {e}")

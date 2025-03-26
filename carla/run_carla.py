@@ -53,7 +53,7 @@ def spawn_vehicle_and_camera():
         client = carla.Client("localhost", 2000)
         client.set_timeout(10.0)
 
-        world = client.load_world('Town03')
+        world = client.load_world('Town05')
         blueprint_library = world.get_blueprint_library()
 
         # Choose a vehicle blueprint
@@ -92,13 +92,14 @@ def capture_image():
         print("No camera found!")
         return
 
+    detector = KerasLaneDetector('lane_detector_final.keras')
+
     # Camera listener: Process image on every frame
     def process_frame(image):
         global captured_image
         # Convert CARLA image to OpenCV format and save it
-        detector = KerasLaneDetector('lane_detector_final.keras')
-        image_path = detector.process_image(image)  # Process and update segmentation result
-        captured_image = detector.process_and_visualize(image_path)  # Get the processed surface
+        image_array = detector.process_image(image)  # Process and update segmentation result
+        captured_image = detector.process_and_visualize(image_array)  # Get the processed surface
 
     camera.listen(process_frame)  # Start continuous listening
 
