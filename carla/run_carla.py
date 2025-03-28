@@ -20,10 +20,28 @@ camera_mode = "third_person"  # 'third_person' or 'inside_camera'
 camera = None
 capture_flag = False
 captured_image = None
+command = None
 
 # Desired size for displaying the image
 desired_width = 400
 desired_height = 300
+
+def get_container_id(image_name):
+    """Returns the container ID if a container with the specified image exists, otherwise None."""
+    try:
+        result = subprocess.run(
+            ["sudo", "docker", "ps", "-a", "--format", "{{.ID}} {{.Image}}"],
+            capture_output=True, text=True, check=True
+        )
+        for line in result.stdout.splitlines():
+            container_id, image = line.split(maxsplit=1)
+            if image == image_name:
+                return container_id  # Return the container ID
+        return None  # No container found with the given image
+    except subprocess.CalledProcessError as e:
+        print(f"Error checking containers: {e}")
+        return None
+
 
 def run_carla():
     env = os.environ.copy()
@@ -31,11 +49,20 @@ def run_carla():
     with tempfile.TemporaryDirectory() as temp_runtime_dir:
         env["XDG_RUNTIME_DIR"] = temp_runtime_dir
 
-    command = [
-        "sudo", "docker", "run", "--privileged", "--gpus", "all", "--net=host",
-        "-e", "DISPLAY=:0",
-        "carlasim/carla:0.9.15", "/bin/bash", "./CarlaUE4.sh"
-    ]
+    image_name = "carlasim/carla:0.9.15"
+    container_id = get_container_id(image_name)
+
+    if not get_container_id(image_name):
+        print(f"No container with image {image_name} found. Running container...")
+        command = [
+            "sudo", "docker", "run", "--privileged", "--gpus", "all", "--net=host",
+            "-e", "DISPLAY=:0",
+            image_name, "/bin/bash", "./CarlaUE4.sh"
+        ]
+    else:
+        command = [
+            "sudo", "docker", "start", container_id
+        ]
 
     try:
         print("Starting CARLA...")
@@ -53,7 +80,7 @@ def spawn_vehicle_and_camera():
         client = carla.Client("localhost", 2000)
         client.set_timeout(10.0)
 
-        world = client.load_world('Town05')
+        world = client.load_world('Town12')
         blueprint_library = world.get_blueprint_library()
 
         # Choose a vehicle blueprint
@@ -69,7 +96,7 @@ def spawn_vehicle_and_camera():
         print(f"Vehicle spawned: {vehicle.id}")
         vehicle.set_autopilot(True)
 
-        # 📷 Attach a camera sensor
+        # Attach a camera sensor
         camera_bp = blueprint_library.find("sensor.camera.rgb")
         camera_bp.set_attribute("image_size_x", "512")
         camera_bp.set_attribute("image_size_y", "256")
