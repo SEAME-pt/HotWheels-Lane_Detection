@@ -1,0 +1,35 @@
+# name: Deploy lane detection model to Jetson
+
+# on:
+#   push:
+#     branches:
+#       - main
+#     paths:
+#       - 'carla/**'
+#   pull_request:
+#     branches:
+#       - main
+#     paths:
+#       - 'carla/**'
+
+# jobs:
+#   run-on-self-hosted:
+#     runs-on: [self-hosted, seame-computer-2]
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v3
+
+#       - name: Run script to convert from Keras to ONNX
+#         run: |
+#           cd model_converters
+#           python3 keras_to_onnx.py
+
+#       - name: Run script to convert from ONNX to TensorRT
+#         run: |
+#           python3 model_converters/onnx_to_tensorrt.py
+
+#       - name: Deploy model to the Jetson
+#         env:
+#           SSHPASS: ${{ secrets.JETSON_PASSWORD }}
+#         run: |
+#           sshpass -e rsync -avz --rsync-path="sudo rsync" --delete model_converters/model.trt hotweels@10.21.221.78:/home/hotweels/lane-detection-model/
