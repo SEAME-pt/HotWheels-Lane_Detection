@@ -1,7 +1,3 @@
-carla/lane_output/
 carla/__pycache__/
-carla/v3/lane_output/
 carla/v3/__pycache__/
-carla/v3/output/
-carla/v3/output-retrospective/
 autonomous_driving/
