@@ -223,59 +223,54 @@ void CameraStreamer::initUndistortMaps() {
 } */
 
 void CameraStreamer::start() {
-    initUndistortMaps(); // Undistortion maps on GPU
-    initOpenGL();        // OpenGL window setup
+    initUndistortMaps();
+    initOpenGL();
 
     cv::Mat frame;
     cv::cuda::Stream stream;
 
+    const int framesToSkip = 2;  // Skip 2 frames, process every 3rd frame
+
     while (!glfwWindowShouldClose(window)) {
-        cap >> frame;
+        // Grab and discard 'framesToSkip' frames
+        for (int i = 0; i < framesToSkip; ++i) {
+            cap.grab();  // Only grab without decoding
+        }
+        cap >> frame;    // Decode only the latest frame
+
         if (frame.empty()) break;
 
-        // Upload captured frame to GPU
+        // Your existing GPU pipeline here
         cv::cuda::GpuMat d_frame(frame);
-
-        // Undistort directly on GPU
         cv::cuda::GpuMat d_undistorted;
         cv::cuda::remap(d_frame, d_undistorted, d_mapx, d_mapy, cv::INTER_LINEAR, 0, cv::Scalar(), stream);
 
-        // Run inference — returns GpuMat directly
         cv::cuda::GpuMat d_prediction_mask = inferencer.makePrediction(d_undistorted);
-
-        // Convert prediction to 8-bit
         cv::cuda::GpuMat d_visualization;
         d_prediction_mask.convertTo(d_visualization, CV_8U, 255.0, 0, stream);
 
-        // Apply color map using CPU (download + CPU colormap + upload)
         cv::Mat visualization_cpu;
-        d_visualization.download(visualization_cpu, stream);  // Download 8-bit mask to CPU
-
-        stream.waitForCompletion();  // Ensure download is complete before CPU access
+        d_visualization.download(visualization_cpu, stream);
+        stream.waitForCompletion();
 
         cv::Mat colorized_mask_cpu;
-        cv::applyColorMap(visualization_cpu, colorized_mask_cpu, cv::COLORMAP_JET);  // Apply colormap on CPU
+        cv::applyColorMap(visualization_cpu, colorized_mask_cpu, cv::COLORMAP_JET);
 
         cv::cuda::GpuMat d_colorized_mask;
-        d_colorized_mask.upload(colorized_mask_cpu);  // Upload back to GPU
+        d_colorized_mask.upload(colorized_mask_cpu);
 
-        // Resize for display
         cv::cuda::GpuMat d_resized_mask;
         cv::cuda::resize(d_colorized_mask, d_resized_mask,
                          cv::Size(frame.cols * scale_factor, frame.rows * scale_factor),
                          0, 0, cv::INTER_LINEAR, stream);
+        stream.waitForCompletion();
 
-        // Upload to OpenGL
-        uploadFrameToTexture(d_resized_mask);  // Using your CUDA-OpenGL interop method
-
-        // Display
+        uploadFrameToTexture(d_resized_mask);
         renderTexture();
 
-        // Optional: limit to ~30 FPS
-        std::this_thread::sleep_for(std::chrono::milliseconds(33));
+        std::this_thread::sleep_for(std::chrono::milliseconds(33));  // ~30 FPS cap
     }
 
-    // Cleanup
     glfwDestroyWindow(window);
     glfwTerminate();
 }
