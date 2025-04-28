@@ -37,7 +37,10 @@ void CameraStreamer::initOpenGL() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    // ⚡ Register the texture with CUDA-OpenGL interop
+    // Correct format: GL_RGBA8 and GL_RGBA
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, window_width, window_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+    // ⚡ Register the texture with CUDA
     cudaError_t err = cudaGraphicsGLRegisterImage(&cuda_resource, textureID, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsWriteDiscard);
     if (err != cudaSuccess) {
         std::cerr << "Failed to register OpenGL texture with CUDA: " << cudaGetErrorString(err) << std::endl;
@@ -54,6 +57,16 @@ void CameraStreamer::initOpenGL() {
 } */
 
 void CameraStreamer::uploadFrameToTexture(const cv::cuda::GpuMat& gpuFrame) {
+    // Convert input GpuMat to RGBA if it's not already
+    cv::cuda::GpuMat d_rgba_frame;
+    if (gpuFrame.channels() == 3) {
+        cv::cuda::cvtColor(gpuFrame, d_rgba_frame, cv::COLOR_BGR2RGBA);
+    } else if (gpuFrame.channels() == 1) {
+        cv::cuda::cvtColor(gpuFrame, d_rgba_frame, cv::COLOR_GRAY2RGBA);
+    } else {
+        d_rgba_frame = gpuFrame;  // Assume already RGBA
+    }
+
     // Map the OpenGL texture to CUDA
     cudaGraphicsMapResources(1, &cuda_resource, 0);
 
@@ -61,14 +74,14 @@ void CameraStreamer::uploadFrameToTexture(const cv::cuda::GpuMat& gpuFrame) {
     cudaArray_t texture_ptr;
     cudaGraphicsSubResourceGetMappedArray(&texture_ptr, cuda_resource, 0, 0);
 
-    // Copy directly from GpuMat to the texture array
+    // Copy directly from GpuMat to the texture array (now guaranteed to be RGBA)
     cudaMemcpy2DToArray(
         texture_ptr,
         0, 0,
-        gpuFrame.ptr(),
-        gpuFrame.step,
-        gpuFrame.cols * gpuFrame.elemSize(),
-        gpuFrame.rows,
+        d_rgba_frame.ptr(),
+        d_rgba_frame.step,
+        d_rgba_frame.cols * d_rgba_frame.elemSize(),
+        d_rgba_frame.rows,
         cudaMemcpyDeviceToDevice
     );
 
@@ -271,4 +284,21 @@ void CameraStreamer::start() {
 CameraStreamer::~CameraStreamer() {
     cap.release();
     cv::destroyAllWindows();
+
+    if (cuda_resource) {
+        cudaGraphicsUnregisterResource(cuda_resource);
+        cuda_resource = nullptr;
+    }
+
+    if (textureID) {
+        glDeleteTextures(1, &textureID);
+        textureID = 0;
+    }
+
+    if (window) {
+        glfwDestroyWindow(window);
+        window = nullptr;
+    }
+
+    glfwTerminate();
 }

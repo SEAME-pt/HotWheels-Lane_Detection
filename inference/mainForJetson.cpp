@@ -28,7 +28,7 @@ int main(int argc, char* argv[]) {
 
         // Create the camera streamer with the inferencer
         std::cout << "Initializing CSI camera..." << std::endl;
-        CameraStreamer streamer(inferencer, 0.5, "Jetson Camera Inference", false);
+        CameraStreamer streamer(inferencer, 0.5, "Jetson Camera Inference", true);
         streamer.initUndistortMaps();
 
         // Start the stream (this will run until ESC is pressed or program is terminated)
