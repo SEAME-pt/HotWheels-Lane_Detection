@@ -17,14 +17,14 @@ public:
     CameraStreamer(TensorRTInferencer& infer, double scale = 0.5, const std::string& win_name = "CSI Camera", bool show_orig = false);
     ~CameraStreamer();
 
-    void start();
-
-private:
     void initOpenGL();
     void initUndistortMaps();
     void uploadFrameToTexture(const cv::cuda::GpuMat& gpuFrame);
     void renderTexture();
 
+    void start();
+
+private:
     cv::VideoCapture cap;
     double scale_factor;
     std::string window_name;

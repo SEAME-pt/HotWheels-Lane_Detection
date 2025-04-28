@@ -17,7 +17,7 @@ CXX           = /home/seame/qtjetson/tools/gcc-linaro-7.3.1-2018.05-x86_64_aarch
 DEFINES       = 
 CFLAGS        = -pipe -march=armv8-a --sysroot=/home/seame/qtjetson/sysroot -O2 -Wall -Wextra -fPIC $(DEFINES)
 CXXFLAGS      = -pipe -march=armv8-a --sysroot=/home/seame/qtjetson/sysroot -std=c++14 -O2 -std=gnu++1y -Wall -Wextra -fPIC $(DEFINES)
-INCPATH       = -I../../inference -I. -I/home/seame/qtjetson/sysroot/usr/local/cuda-10.2/targets/aarch64-linux/include -I/home/seame/qtjetson/sysroot/usr/include/aarch64-linux-gnu -I/home/seame/qtjetson/sysroot/usr/local/include/opencv4 -I/home/seame/qtjetson/sysroot/usr/include/opencv4 -I/home/seame/qtjetson/sysroot/usr/include/gstreamer-1.0 -I/home/seame/qtjetson/sysroot/usr/include/glib-2.0 -I/home/seame/qtjetson/sysroot/usr/lib/aarch64-linux-gnu/glib-2.0/include -I/home/seame/qtjetson/sysroot/usr/include -I/home/seame/qtjetson/sysroot/usr/include/aarch64-linux-gnu -I/home/seame/qtjetson/qt5.15/mkspecs/devices/linux-jetson-tk1-g++
+INCPATH       = -I../../inference -I. -I/home/seame/qtjetson/sysroot/usr/local/cuda-10.2/targets/aarch64-linux/include -I/home/seame/qtjetson/sysroot/usr/include/aarch64-linux-gnu -I/home/seame/qtjetson/sysroot/usr/local/include/opencv4 -I/home/seame/qtjetson/sysroot/usr/include/opencv4 -I/home/seame/qtjetson/sysroot/usr/include/gstreamer-1.0 -I/home/seame/qtjetson/sysroot/usr/include/glib-2.0 -I/home/seame/qtjetson/sysroot/usr/lib/aarch64-linux-gnu/glib-2.0/include -I/usr/local/include -I/usr/include/GL -I/usr/include/GLFW -I/home/seame/qtjetson/sysroot/usr/include -I/home/seame/qtjetson/sysroot/usr/include/aarch64-linux-gnu -I/home/seame/qtjetson/qt5.15/mkspecs/devices/linux-jetson-tk1-g++
 QMAKE         = /home/seame/qtjetson/qt5.15/bin/qmake
 DEL_FILE      = rm -f
 CHK_DIR_EXISTS= test -d
@@ -40,7 +40,7 @@ DISTNAME      = trt_inference1.0.0
 DISTDIR = /home/seame/dev/tenserFlow/cpp/camera-manager/lane-detection/inference/build_jetson/.tmp/trt_inference1.0.0
 LINK          = /home/seame/qtjetson/tools/gcc-linaro-7.3.1-2018.05-x86_64_aarch64-linux-gnu/bin/aarch64-linux-gnu-g++
 LFLAGS        = --sysroot=/home/seame/qtjetson/sysroot -Wl,-rpath-link,/home/seame/qtjetson/sysroot/usr/local/lib -Wl,-rpath-link,/home/seame/qtjetson/sysroot/usr/lib/aarch64-linux-gnu/tegra -Wl,-O1 -Wl,-rpath-link,/home/seame/qtjetson/sysroot/usr/lib -Wl,-rpath-link,/home/seame/qtjetson/sysroot/usr/lib/aarch64-linux-gnu -Wl,-rpath-link,/home/seame/qtjetson/sysroot/lib/aarch64-linux-gnu
-LIBS          = $(SUBLIBS) -L/home/seame/qtjetson/sysroot/usr/local/lib -L/home/seame/qtjetson/sysroot/usr/local/cuda-10.2/targets/aarch64-linux/lib -L/home/seame/qtjetson/sysroot/usr/lib/aarch64-linux-gnu -L/home/seame/qtjetson/sysroot/usr/lib/aarch64-linux-gnu/tegra -L/home/seame/qtjetson/sysroot/usr/lib/aarch64-linux-gnu/openblas -lcudart -lnvinfer -l:libopencv_core.so.405 -l:libopencv_imgproc.so.405 -l:libopencv_imgcodecs.so.405 -l:libopencv_videoio.so.405 -l:libopencv_highgui.so.405 -l:libopencv_calib3d.so.405 -l:libopencv_cudaarithm.so.405 -l:libopencv_cudawarping.so.405 -l:libopencv_cudaimgproc.so.405 -lcublasLt -llapack -lblas -lnvmedia -lnvdla_compiler -lgstreamer-1.0 -lgobject-2.0 -lglib-2.0  -L/home/seame/qtjetson/sysroot/usr/lib -L/home/seame/qtjetson/sysroot/lib/aarch64-linux-gnu 
+LIBS          = $(SUBLIBS) -L/home/seame/qtjetson/sysroot/usr/local/lib -L/home/seame/qtjetson/sysroot/usr/local/cuda-10.2/targets/aarch64-linux/lib -L/home/seame/qtjetson/sysroot/usr/lib/aarch64-linux-gnu -L/home/seame/qtjetson/sysroot/usr/lib/aarch64-linux-gnu/tegra -L/home/seame/qtjetson/sysroot/usr/lib/aarch64-linux-gnu/openblas -L/usr/local/lib -lcudart -lnvinfer -l:libopencv_core.so.405 -l:libopencv_imgproc.so.405 -l:libopencv_imgcodecs.so.405 -l:libopencv_videoio.so.405 -l:libopencv_highgui.so.405 -l:libopencv_calib3d.so.405 -l:libopencv_cudaarithm.so.405 -l:libopencv_cudawarping.so.405 -l:libopencv_cudaimgproc.so.405 -lcublasLt -llapack -lblas -lnvmedia -lnvdla_compiler -lgstreamer-1.0 -lgobject-2.0 -lglib-2.0 -lGLEW -lglfw -lGL  -L/home/seame/qtjetson/sysroot/usr/lib -L/home/seame/qtjetson/sysroot/lib/aarch64-linux-gnu 
 AR            = /home/seame/qtjetson/tools/gcc-linaro-7.3.1-2018.05-x86_64_aarch64-linux-gnu/bin/aarch64-linux-gnu-ar cqs
 RANLIB        = 
 SED           = sed
@@ -703,6 +703,7 @@ CameraStreamer.o: ../CameraStreamer.cpp ../CameraStreamer.hpp \
 		/home/seame/qtjetson/sysroot/usr/local/cuda-10.2/targets/aarch64-linux/include/surface_types.h \
 		/home/seame/qtjetson/sysroot/usr/local/cuda-10.2/targets/aarch64-linux/include/texture_types.h \
 		/home/seame/qtjetson/sysroot/usr/local/cuda-10.2/targets/aarch64-linux/include/cuda_device_runtime_api.h \
+		/usr/local/include/GLFW/glfw3.h \
 		/home/seame/qtjetson/sysroot/usr/local/cuda-10.2/targets/aarch64-linux/include/cuda_gl_interop.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o CameraStreamer.o ../CameraStreamer.cpp
 
@@ -717,6 +718,7 @@ mainForJetson.o: ../mainForJetson.cpp ../TensorRTInferencer.hpp \
 		/home/seame/qtjetson/sysroot/usr/local/cuda-10.2/targets/aarch64-linux/include/texture_types.h \
 		/home/seame/qtjetson/sysroot/usr/local/cuda-10.2/targets/aarch64-linux/include/cuda_device_runtime_api.h \
 		../CameraStreamer.hpp \
+		/usr/local/include/GLFW/glfw3.h \
 		/home/seame/qtjetson/sysroot/usr/local/cuda-10.2/targets/aarch64-linux/include/cuda_gl_interop.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o mainForJetson.o ../mainForJetson.cpp
 

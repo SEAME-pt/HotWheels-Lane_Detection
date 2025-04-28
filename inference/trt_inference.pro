@@ -20,7 +20,6 @@ QMAKE_CXXFLAGS += -std=c++14
 contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
     message("Building for ARM architecture")
 
-    # Define paths for Jetson cross-compilation
     JETSON_SYSROOT = /home/seame/qtjetson/sysroot
 
     # CUDA includes
@@ -29,9 +28,8 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
     # TensorRT includes
     INCLUDEPATH += $${JETSON_SYSROOT}/usr/include/aarch64-linux-gnu
 
-    # Prioritize the custom OpenCV include path
+    # OpenCV includes
     INCLUDEPATH += $${JETSON_SYSROOT}/usr/local/include/opencv4
-    # Add system OpenCV as fallback
     INCLUDEPATH += $${JETSON_SYSROOT}/usr/include/opencv4
 
     # GStreamer includes
@@ -39,14 +37,20 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
     INCLUDEPATH += $${JETSON_SYSROOT}/usr/include/glib-2.0
     INCLUDEPATH += $${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu/glib-2.0/include
 
-    # Library paths - list custom OpenCV path FIRST
-    LIBS += -L$${JETSON_SYSROOT}/usr/local/lib  # Custom OpenCV library path first
+    # OpenGL, GLFW, GLEW includes
+    INCLUDEPATH += /usr/local/include
+    INCLUDEPATH += /usr/include/GL
+    INCLUDEPATH += /usr/include/GLFW
+
+    # Library paths
+    LIBS += -L$${JETSON_SYSROOT}/usr/local/lib
     LIBS += -L$${JETSON_SYSROOT}/usr/local/cuda-10.2/targets/aarch64-linux/lib
     LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu
     LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu/tegra
     LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu/openblas
+    LIBS += -L/usr/local/lib  # <- Add this for GLEW/GLFW libs
 
-    # Link against specific 4.0.5 versions
+    # TensorRT, CUDA, OpenCV
     LIBS += -lcudart -lnvinfer
     LIBS += -l:libopencv_core.so.405 -l:libopencv_imgproc.so.405 -l:libopencv_imgcodecs.so.405 -l:libopencv_videoio.so.405 -l:libopencv_highgui.so.405 -l:libopencv_calib3d.so.405
     LIBS += -l:libopencv_cudaarithm.so.405 -l:libopencv_cudawarping.so.405 -l:libopencv_cudaimgproc.so.405
@@ -56,38 +60,42 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
     # GStreamer libraries
     LIBS += -lgstreamer-1.0 -lgobject-2.0 -lglib-2.0
 
-    # Add rpath to find custom OpenCV at runtime
+    # OpenGL, GLEW, GLFW libraries (ORDER MATTERS!)
+    LIBS += -lGLEW -lglfw -lGL
+
+    # RPath for custom OpenCV runtime
     QMAKE_LFLAGS += -Wl,-rpath-link,$${JETSON_SYSROOT}/usr/local/lib
     QMAKE_LFLAGS += -Wl,-rpath-link,$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu/tegra
 
 } else {
     message("Building for x86 architecture")
 
-    # Standard include paths for x86
+    # x86 includes
     INCLUDEPATH += /usr/local/cuda/include
     INCLUDEPATH += /usr/include
     INCLUDEPATH += /usr/include/opencv4
-
-    # GStreamer includes for x86
     INCLUDEPATH += /usr/include/gstreamer-1.0
     INCLUDEPATH += /usr/include/glib-2.0
     INCLUDEPATH += /usr/lib/x86_64-linux-gnu/glib-2.0/include
+    INCLUDEPATH += /usr/include/GL
+    INCLUDEPATH += /usr/include/GLFW
+    INCLUDEPATH += /usr/local/include  # For GLEW/GLFW if built from source
 
-    # Include CUDA modules of OpenCV (this is usually where cudaimgproc.hpp lives)
-    INCLUDEPATH += $${JETSON_SYSROOT}/usr/include/opencv4/opencv2
-
-    # Library paths for x86
+    # Library paths
     LIBS += -L/usr/local/cuda/lib64
     LIBS += -L/usr/lib
     LIBS += -L/usr/lib/x86_64-linux-gnu
-    LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu/openblas
+    LIBS += -L/usr/local/lib  # Add this for GLEW/GLFW
 
-    # Libraries for x86
+    # TensorRT, CUDA, OpenCV
     LIBS += -lcudart -lnvinfer -lopencv_core -lopencv_imgproc -lopencv_imgcodecs -lopencv_videoio -lopencv_highgui -lopencv_calib3d
     LIBS += -lopencv_cudaarithm -lopencv_cudawarping -lopencv_cudaimgproc -lcublasLt -llapack -lblas
 
     # GStreamer libraries
     LIBS += -lgstreamer-1.0 -lgobject-2.0 -lglib-2.0
+
+    # OpenGL, GLEW, GLFW libraries (ORDER MATTERS!)
+    LIBS += -lGLEW -lglfw -lGL
 }
 
 # Deployment - copy model and configuration files
