@@ -1,6 +1,0 @@
-    # Include CUDA modules of OpenCV (this is usually where cudaimgproc.hpp lives)
-    INCLUDEPATH += $${JETSON_SYSROOT}/usr/include/opencv4/opencv2/cudaimgproc
-    INCLUDEPATH += $${JETSON_SYSROOT}/usr/include/opencv4/opencv2/cudaarithm
-    INCLUDEPATH += $${JETSON_SYSROOT}/usr/include/opencv4/opencv2/cudawarping
-
-	-lopencv_cudaarithm -lopencv_cudawarping -lopencv_cudaimgproc

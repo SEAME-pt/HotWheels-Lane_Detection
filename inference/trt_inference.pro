@@ -11,7 +11,7 @@ HEADERS += TensorRTInferencer.hpp \
 
 SOURCES += TensorRTInferencer.cpp \
            CameraStreamer.cpp \
-           mainForJetson.cpp  # Always include the Jetson main file for ARM builds
+           main.cpp  # Always include the Jetson main file for ARM builds
 
 # Common configuration for all builds
 QMAKE_CXXFLAGS += -std=c++14

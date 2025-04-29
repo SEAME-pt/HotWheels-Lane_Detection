@@ -54,10 +54,10 @@ OBJECTS_DIR   = ./
 
 SOURCES       = ../TensorRTInferencer.cpp \
 		../CameraStreamer.cpp \
-		../mainForJetson.cpp 
+		../main.cpp 
 OBJECTS       = TensorRTInferencer.o \
 		CameraStreamer.o \
-		mainForJetson.o
+		main.o
 DIST          = /home/seame/qtjetson/qt5.15/mkspecs/features/spec_pre.prf \
 		/home/seame/qtjetson/qt5.15/mkspecs/common/unix.conf \
 		/home/seame/qtjetson/qt5.15/mkspecs/common/linux.conf \
@@ -248,7 +248,7 @@ DIST          = /home/seame/qtjetson/qt5.15/mkspecs/features/spec_pre.prf \
 		../../trt_inference.pro TensorRTInferencer.hpp \
 		CameraStreamer.hpp ../TensorRTInferencer.cpp \
 		../CameraStreamer.cpp \
-		../mainForJetson.cpp
+		../main.cpp
 QMAKE_TARGET  = trt_inference
 DESTDIR       = 
 TARGET        = trt_inference
@@ -707,7 +707,7 @@ CameraStreamer.o: ../CameraStreamer.cpp ../CameraStreamer.hpp \
 		/home/seame/qtjetson/sysroot/usr/local/cuda-10.2/targets/aarch64-linux/include/cuda_gl_interop.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o CameraStreamer.o ../CameraStreamer.cpp
 
-mainForJetson.o: ../mainForJetson.cpp ../TensorRTInferencer.hpp \
+main.o: ../main.cpp ../TensorRTInferencer.hpp \
 		/home/seame/qtjetson/sysroot/usr/local/cuda-10.2/targets/aarch64-linux/include/cuda_runtime_api.h \
 		/home/seame/qtjetson/sysroot/usr/local/cuda-10.2/targets/aarch64-linux/include/crt/host_defines.h \
 		/home/seame/qtjetson/sysroot/usr/local/cuda-10.2/targets/aarch64-linux/include/builtin_types.h \
@@ -720,7 +720,7 @@ mainForJetson.o: ../mainForJetson.cpp ../TensorRTInferencer.hpp \
 		../CameraStreamer.hpp \
 		/usr/local/include/GLFW/glfw3.h \
 		/home/seame/qtjetson/sysroot/usr/local/cuda-10.2/targets/aarch64-linux/include/cuda_gl_interop.h
-	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o mainForJetson.o ../mainForJetson.cpp
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o main.o ../main.cpp
 
 ####### Install
 
