@@ -1,4 +1,4 @@
 carla/__pycache__/
 carla/v3/__pycache__/
 autonomous_driving/
-inference/build_jetson/
+inference/build/
