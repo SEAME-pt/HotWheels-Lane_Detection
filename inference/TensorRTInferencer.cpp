@@ -187,63 +187,6 @@ cv::cuda::GpuMat TensorRTInferencer::preprocessImage(const cv::cuda::GpuMat& gpu
     return gpuFloat;  // Return preprocessed image (still on GPU)
 }
 
-/* std::vector<float> TensorRTInferencer::runInference(const cv::Mat& inputImage) {
-    // Check for correct input dimensions
-    if (inputImage.rows != inputSize.height || inputImage.cols != inputSize.width) {
-        throw std::runtime_error("Input image dimensions do not match expected dimensions");
-    }
-
-    // Profile the bottleneck
-    auto start = std::chrono::high_resolution_clock::now();
-
-    // Copy input data to pinned memory buffer - this can be a CPU bottleneck
-    if (inputImage.isContinuous()) {
-        // Fast path for continuous data
-        std::memcpy(hostInput, inputImage.ptr<float>(0), inputByteSize);
-    } else {
-        // Handle non-continuous data
-        for (int h = 0; h < inputSize.height; h++) {
-            const float* rowPtr = inputImage.ptr<float>(h);
-            std::memcpy(hostInput + h * inputSize.width, rowPtr, inputSize.width * sizeof(float));
-        }
-    }
-
-    auto memcpyEnd = std::chrono::high_resolution_clock::now();
-    float memcpyMs = std::chrono::duration<float, std::milli>(memcpyEnd - start).count();
-    // Uncomment for debugging: std::cout << "CPU memcpy took: " << memcpyMs << "ms\n";
-
-    try {
-        // Copy data from host to device asynchronously
-        cudaMemcpyAsync(deviceInput, hostInput, inputByteSize, cudaMemcpyHostToDevice, stream);
-
-        // Execute inference asynchronously
-        bool status = context->enqueueV2(bindings.data(), stream, nullptr);
-        if (!status) {
-            throw std::runtime_error("TensorRT inference execution failed");
-        }
-
-        // Copy results back from device to host asynchronously
-        cudaMemcpyAsync(hostOutput, deviceOutput, outputByteSize, cudaMemcpyDeviceToHost, stream);
-
-        // Synchronize to ensure operations are complete
-        cudaStreamSynchronize(stream);
-
-        auto inferEnd = std::chrono::high_resolution_clock::now();
-        float inferMs = std::chrono::duration<float, std::milli>(inferEnd - memcpyEnd).count();
-        // Uncomment for debugging: std::cout << "GPU inference took: " << inferMs << "ms\n";
-
-        // Create return vector - avoid extra copy when possible
-        std::vector<float> outputBuffer(outputElementCount);
-        std::memcpy(outputBuffer.data(), hostOutput, outputByteSize);
-
-        return outputBuffer;
-    } catch (const std::exception& e) {
-        cudaStreamSynchronize(stream);
-        std::cerr << "Error during inference: " << e.what() << std::endl;
-        throw;
-    }
-} */
-
 // Run inference given a GpuMat input (already preprocessed)
 void TensorRTInferencer::runInference(const cv::cuda::GpuMat& gpuInput) {
     if (gpuInput.rows != inputSize.height || gpuInput.cols != inputSize.width) {  // Verify input dimensions

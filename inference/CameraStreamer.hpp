@@ -21,6 +21,7 @@ public:
     void initUndistortMaps();
     void uploadFrameToTexture(const cv::cuda::GpuMat& gpuFrame);
     void renderTexture();
+    void applyJetColormap(const cv::cuda::GpuMat& srcGray, cv::cuda::GpuMat& dstBGR, cv::cuda::Stream& stream);
 
     void start();
 

@@ -73,14 +73,6 @@ void CameraStreamer::initOpenGL() {
     }
 }
 
-/* void CameraStreamer::uploadFrameToTexture(const cv::Mat& frame) {
-    cv::Mat frame_rgb;
-    cv::cvtColor(frame, frame_rgb, cv::COLOR_BGR2RGB);
-
-    glBindTexture(GL_TEXTURE_2D, textureID);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, frame_rgb.cols, frame_rgb.rows, 0, GL_RGB, GL_UNSIGNED_BYTE, frame_rgb.data);
-} */
-
 // Upload a GpuMat frame (on GPU) directly into an OpenGL texture using CUDA interop
 void CameraStreamer::uploadFrameToTexture(const cv::cuda::GpuMat& gpuFrame) {
     cv::cuda::GpuMat d_rgba_frame;
@@ -145,104 +137,6 @@ void CameraStreamer::initUndistortMaps() {
     d_mapx.upload(mapx);  // Upload X map to GPU
     d_mapy.upload(mapy);  // Upload Y map to GPU
 }
-
-/* void CameraStreamer::start() {
-    initUndistortMaps(); // Initialize undistortion maps
-    initOpenGL();        // Initialize OpenGL and GLFW
-
-    cv::Mat frame;
-
-    // Load camera calibration data once, not in the loop
-    cv::Mat cameraMatrix, distCoeffs;
-    cv::FileStorage fs("camera_calibration.yml", cv::FileStorage::READ);
-    fs["camera_matrix"] >> cameraMatrix;
-    fs["distortion_coefficients"] >> distCoeffs;
-    fs.release();
-
-    // Create CUDA stream for asynchronous operations
-    cv::cuda::Stream stream;
-
-    while (!glfwWindowShouldClose(window)) {
-        cap >> frame;
-        if (frame.empty())
-            break;
-
-        // Upload to GPU
-        cv::cuda::GpuMat d_frame(frame);
-        cv::cuda::GpuMat d_undistorted;
-
-        // Undistort on GPU
-        cv::cuda::remap(d_frame, d_undistorted, d_mapx, d_mapy, cv::INTER_LINEAR, 0, cv::Scalar(), stream);
-
-        // Run inference on the frame
-        cv::Mat undistorted;
-        d_undistorted.download(undistorted, stream);
-        cv::Mat prediction_mask = inferencer.makePrediction(undistorted);
-
-        // Upload prediction mask to GPU
-        cv::cuda::GpuMat d_prediction_mask(prediction_mask);
-        cv::cuda::GpuMat d_visualization;
-
-        // Convert to 8-bit on GPU
-        d_prediction_mask.convertTo(d_visualization, CV_8U, 255.0, 0, stream);
-
-        // Download for color mapping (if not available in CUDA)
-        cv::Mat visualization;
-        d_visualization.download(visualization, stream);
-
-        // Apply color map
-        cv::Mat colorized_mask;
-        cv::applyColorMap(visualization, colorized_mask, cv::COLORMAP_JET);
-
-        // Upload for resizing
-        cv::cuda::GpuMat d_colorized_mask(colorized_mask);
-        cv::cuda::GpuMat d_resized_mask;
-
-        // Resize on GPU
-        cv::cuda::resize(d_colorized_mask, d_resized_mask,
-                         cv::Size(frame.cols * scale_factor, frame.rows * scale_factor),
-                         0, 0, cv::INTER_LINEAR, stream);
-
-        // Download for OpenGL rendering
-        cv::Mat resized_mask;
-        d_resized_mask.download(resized_mask, stream);
-
-        if (show_original) {
-            // Resize original on GPU too
-            cv::cuda::GpuMat d_resized_frame;
-            cv::cuda::resize(d_frame, d_resized_frame,
-                             cv::Size(frame.cols * scale_factor, frame.rows * scale_factor),
-                             0, 0, cv::INTER_LINEAR, stream);
-
-            cv::Mat resized_frame;
-            d_resized_frame.download(resized_frame, stream);
-
-            // Make sure both images have the same type before concatenation
-            if (resized_frame.type() != resized_mask.type()) {
-                cv::cvtColor(resized_mask, resized_mask, cv::COLOR_BGR2BGRA);
-                cv::cvtColor(resized_frame, resized_frame, cv::COLOR_BGR2BGRA);
-            }
-
-            // Concatenate frames
-            cv::Mat combined;
-            try {
-                cv::hconcat(resized_frame, resized_mask, combined);
-                uploadFrameToTexture(combined);  // Upload combined image to OpenGL texture
-            } catch (const cv::Exception& e) {
-                std::cerr << "Warning: Could not concatenate images: " << e.what() << std::endl;
-                uploadFrameToTexture(resized_mask);  // Fallback
-            }
-        } else {
-            uploadFrameToTexture(resized_mask);  // Upload only the prediction mask
-        }
-
-        renderTexture();  // Render the frame using OpenGL
-    }
-
-    // Cleanup
-    glfwDestroyWindow(window);
-    glfwTerminate();
-} */
 
 // Main loop: capture, undistort, predict, visualize and render frames
 void CameraStreamer::start() {
