@@ -161,7 +161,7 @@ void CameraStreamer::start() {
         cv::cuda::remap(d_frame, d_undistorted, d_mapx, d_mapy, cv::INTER_LINEAR, 0, cv::Scalar(), stream);  // Undistort frame
 
         cv::cuda::GpuMat d_prediction_mask = inferencer.makePrediction(d_undistorted);  // Run model inference
-        cv::cuda::GpuMat d_visualization;
+        /* cv::cuda::GpuMat d_visualization;
         d_prediction_mask.convertTo(d_visualization, CV_8U, 255.0, 0, stream);  // Normalize prediction mask
 
         cv::Mat visualization_cpu;
@@ -172,10 +172,14 @@ void CameraStreamer::start() {
         cv::applyColorMap(visualization_cpu, colorized_mask_cpu, cv::COLORMAP_JET);  // Apply color map
 
         cv::cuda::GpuMat d_colorized_mask;
-        d_colorized_mask.upload(colorized_mask_cpu);  // Upload colored mask back to GPU
+        d_colorized_mask.upload(colorized_mask_cpu);  // Upload colored mask back to GPU */
+
+        // Convert model output to 8-bit binary mask on GPU
+        cv::cuda::GpuMat d_visualization;
+        d_prediction_mask.convertTo(d_visualization, CV_8U, 255.0, 0, stream);
 
         cv::cuda::GpuMat d_resized_mask;
-        cv::cuda::resize(d_colorized_mask, d_resized_mask,
+        cv::cuda::resize(d_visualization, d_resized_mask,
                          cv::Size(frame.cols * scale_factor, frame.rows * scale_factor),
                          0, 0, cv::INTER_LINEAR, stream);  // Resize for display
         stream.waitForCompletion();  // Synchronize
