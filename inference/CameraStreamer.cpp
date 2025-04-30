@@ -161,6 +161,8 @@ void CameraStreamer::start() {
         cv::cuda::remap(d_frame, d_undistorted, d_mapx, d_mapy, cv::INTER_LINEAR, 0, cv::Scalar(), stream);  // Undistort frame
 
         cv::cuda::GpuMat d_prediction_mask = inferencer.makePrediction(d_undistorted);  // Run model inference
+
+        //this code is for the red mask visualization
         /* cv::cuda::GpuMat d_visualization;
         d_prediction_mask.convertTo(d_visualization, CV_8U, 255.0, 0, stream);  // Normalize prediction mask
 
