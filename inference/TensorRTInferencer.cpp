@@ -106,7 +106,7 @@ TensorRTInferencer::TensorRTInferencer(const std::string& enginePath) :
     bindings[inputBindingIndex] = deviceInput;  // Assign device input buffer
     bindings[outputBindingIndex] = deviceOutput;  // Assign device output buffer
 
-    status = cudaHostAlloc((void**)&hostInput, inputByteSize, cudaHostAllocDefault);  // Allocate pinned host memory for input
+/*     status = cudaHostAlloc((void**)&hostInput, inputByteSize, cudaHostAllocDefault);  // Allocate pinned host memory for input
     if (status != cudaSuccess) {  // Check host input allocation
         cleanupResources();  // Clean up GPU resources
         throw std::runtime_error("Failed to allocate pinned host memory for input: " + std::string(cudaGetErrorString(status)));
@@ -117,7 +117,7 @@ TensorRTInferencer::TensorRTInferencer(const std::string& enginePath) :
         cudaFreeHost(hostInput);  // Free previously allocated host input
         cleanupResources();  // Clean up GPU resources
         throw std::runtime_error("Failed to allocate pinned host memory for output: " + std::string(cudaGetErrorString(status)));
-    }
+    } */
 }
 
 // Clean up allocated GPU resources (device memory, streams)
@@ -220,22 +220,20 @@ cv::cuda::GpuMat TensorRTInferencer::makePrediction(const cv::cuda::GpuMat& gpuI
 
     runInference(gpuInputFloat);  // Run inference
 
-    int height = outputDims.d[1];  // Extract output tensor height
-    int width  = outputDims.d[2];  // Extract output tensor width
-    cv::cuda::GpuMat outputMaskGpu(height, width, CV_32F);  // Allocate GPU matrix for output
+    int height = outputDims.d[1];
+    int width  = outputDims.d[2];
+
+    // Instead of allocating a new GpuMat each time, reuse one if possible (optimization tip)
+    if (outputMaskGpu.empty() || outputMaskGpu.rows != height || outputMaskGpu.cols != width) {
+        outputMaskGpu = cv::cuda::GpuMat(height, width, CV_32F);
+    }
 
     cudaMemcpy2DAsync(
-        outputMaskGpu.ptr<float>(),                 // Destination pointer
-        outputMaskGpu.step,                         // Destination stride
-        deviceOutput,                               // Source pointer (inference result)
-        width * sizeof(float),                      // Source stride
-        width * sizeof(float),                      // Width to copy in bytes
-        height,                                     // Height in rows
-        cudaMemcpyDeviceToDevice,                   // GPU to GPU copy
-        stream                                      // Use CUDA stream
+        outputMaskGpu.ptr<float>(), outputMaskGpu.step,
+        deviceOutput, width * sizeof(float),
+        width * sizeof(float), height,
+        cudaMemcpyDeviceToDevice, stream
     );
 
-    cudaStreamSynchronize(stream);  // Ensure the copy operation is completed
-
-    return outputMaskGpu;  // Return output mask (still on GPU)
+    return outputMaskGpu;  // GPU mask only, no sync
 }

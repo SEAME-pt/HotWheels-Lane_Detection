@@ -42,6 +42,8 @@ private:
     float* hostInput;
     float* hostOutput;
 
+    cv::cuda::GpuMat outputMaskGpu;
+
     std::vector<char> readEngineFile(const std::string& enginePath);
     void cleanupResources();
 
