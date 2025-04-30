@@ -179,6 +179,8 @@ void CameraStreamer::start() {
         d_prediction_mask.convertTo(d_visualization, CV_8U, 255.0, 0, stream);
 
         cv::cuda::GpuMat d_resized_mask;
+
+        //in case of red mask usage, change d_vizualization to d_colorized_mask
         cv::cuda::resize(d_visualization, d_resized_mask,
                          cv::Size(frame.cols * scale_factor, frame.rows * scale_factor),
                          0, 0, cv::INTER_LINEAR, stream);  // Resize for display
