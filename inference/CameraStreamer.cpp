@@ -144,48 +144,40 @@ void CameraStreamer::start() {
     initOpenGL();  // Initialize OpenGL and CUDA interop
 
     cv::Mat frame;
-    cv::cuda::Stream stream;  // CUDA stream for asynchronous operations
+    cv::cuda::Stream stream;
 
-    const int framesToSkip = 2;  // Skip frames to reduce processing load
+    const int framesToSkip = 2;
 
-    while (!glfwWindowShouldClose(window)) {  // Main loop until window closed
-        for (int i = 0; i < framesToSkip; ++i) {
-            cap.grab();  // Grab frames without decoding
-        }
-        cap >> frame;  // Read one frame (decoded)
+    while (!glfwWindowShouldClose(window)) {
+        for (int i = 0; i < framesToSkip; ++i)
+            cap.grab();
+        cap >> frame;
 
-        if (frame.empty()) break;  // Stop if frame is invalid
+        if (frame.empty()) break;
 
-        cv::cuda::GpuMat d_frame(frame);  // Upload frame to GPU
+        cv::cuda::GpuMat d_frame(frame);
         cv::cuda::GpuMat d_undistorted;
-        cv::cuda::remap(d_frame, d_undistorted, d_mapx, d_mapy, cv::INTER_LINEAR, 0, cv::Scalar(), stream);  // Undistort frame
+        cv::cuda::remap(d_frame, d_undistorted, d_mapx, d_mapy, cv::INTER_LINEAR, 0, cv::Scalar(), stream);
 
-        cv::cuda::GpuMat d_prediction_mask = inferencer.makePrediction(d_undistorted);  // Run model inference
-        cv::cuda::GpuMat d_visualization;
-        d_prediction_mask.convertTo(d_visualization, CV_8U, 255.0, 0, stream);  // Normalize prediction mask
+        // Run model inference and convert to binary mask (normalized to 0–255)
+        cv::cuda::GpuMat d_prediction_mask = inferencer.makePrediction(d_undistorted);
+        cv::cuda::GpuMat d_mask8u;
+        d_prediction_mask.convertTo(d_mask8u, CV_8U, 255.0, 0, stream);
 
-        cv::Mat visualization_cpu;
-        d_visualization.download(visualization_cpu, stream);  // Download mask to CPU
-        stream.waitForCompletion();  // Ensure async operations are complete
-
-        cv::Mat colorized_mask_cpu;
-        cv::applyColorMap(visualization_cpu, colorized_mask_cpu, cv::COLORMAP_JET);  // Apply color map
-
-        cv::cuda::GpuMat d_colorized_mask;
-        d_colorized_mask.upload(colorized_mask_cpu);  // Upload colored mask back to GPU
-
+        // Resize for OpenGL rendering
         cv::cuda::GpuMat d_resized_mask;
-        cv::cuda::resize(d_colorized_mask, d_resized_mask,
+        cv::cuda::resize(d_mask8u, d_resized_mask,
                          cv::Size(frame.cols * scale_factor, frame.rows * scale_factor),
-                         0, 0, cv::INTER_LINEAR, stream);  // Resize for display
-        stream.waitForCompletion();  // Synchronize
+                         0, 0, cv::INTER_LINEAR, stream);
 
-        uploadFrameToTexture(d_resized_mask);  // Upload final result to OpenGL
-        renderTexture();  // Render it
+        stream.waitForCompletion();
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(33));  // Frame delay (~30 FPS)
+        uploadFrameToTexture(d_resized_mask);  // This handles grayscale correctly
+        renderTexture();
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(33));
     }
 
-    glfwDestroyWindow(window);  // Clean up window
-    glfwTerminate();  // Terminate GLFW
+    glfwDestroyWindow(window);
+    glfwTerminate();
 }
