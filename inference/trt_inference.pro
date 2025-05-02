@@ -1,16 +1,20 @@
 # Project configuration
 TEMPLATE = app
 TARGET = trt_inference
-CONFIG += console c++14
+CONFIG += console c++17
 CONFIG -= app_bundle
 CONFIG -= qt  # Remove Qt dependency since it's not needed
 
 # Common source files for all architectures
 HEADERS += TensorRTInferencer.hpp \
-           CameraStreamer.hpp
+           CameraStreamer.hpp \
+           LaneAnalyzer.hpp \
+           LaneController.hpp
 
 SOURCES += TensorRTInferencer.cpp \
            CameraStreamer.cpp \
+           LaneAnalyzer.cpp \
+           LaneController.cpp \
            main.cpp  # Always include the Jetson main file for ARM builds
 
 # Common configuration for all builds
@@ -49,6 +53,9 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
     LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu/tegra
     LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu/openblas
     LIBS += -L/usr/local/lib  # <- Add this for GLEW/GLFW libs
+
+    # Eigen libraries
+    INCLUDEPATH += $${JETSON_SYSROOT}/usr/include/eigen3
 
     # TensorRT, CUDA, OpenCV
     LIBS += -lcudart -lnvinfer

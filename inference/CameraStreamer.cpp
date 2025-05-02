@@ -162,19 +162,27 @@ void CameraStreamer::start() {
 
         cv::cuda::GpuMat d_prediction_mask = inferencer.makePrediction(d_undistorted);  // Run model inference
 
-        //this code is for the red mask visualization
-        /* cv::cuda::GpuMat d_visualization;
-        d_prediction_mask.convertTo(d_visualization, CV_8U, 255.0, 0, stream);  // Normalize prediction mask
+        // Convert to 8-bit (0 or 255) in a new GpuMat
+        cv::cuda::GpuMat d_mask_u8;
+        d_prediction_mask.convertTo(d_mask_u8, CV_8U, 255.0);  // Multiply 0/1 float to 0/255
 
-        cv::Mat visualization_cpu;
-        d_visualization.download(visualization_cpu, stream);  // Download mask to CPU
+        cv::Mat binary_mask_cpu;
+        d_mask_u8.download(binary_mask_cpu, stream);
+        cv::threshold(binary_mask_cpu, binary_mask_cpu, 128, 255, cv::THRESH_BINARY);
         stream.waitForCompletion();  // Ensure async operations are complete
 
-        cv::Mat colorized_mask_cpu;
-        cv::applyColorMap(visualization_cpu, colorized_mask_cpu, cv::COLORMAP_JET);  // Apply color map
+        LaneAnalyzer analyzer;
+        //LaneController controller;
 
-        cv::cuda::GpuMat d_colorized_mask;
-        d_colorized_mask.upload(colorized_mask_cpu);  // Upload colored mask back to GPU */
+        LaneMetrics metrics = analyzer.computeMetrics(binary_mask_cpu);
+
+        if (metrics.valid) {
+            std::cout << "[Lane] Offset: " << metrics.lateralOffsetMeters << " m, "
+                      << "Heading: " << metrics.headingAngleDeg << "°, "
+                      << "Position: " << metrics.positionStatus << std::endl;
+        } else {
+            std::cout << "[Lane] No lanes detected!" << std::endl;
+        }
 
         // Convert model output to 8-bit binary mask on GPU
         cv::cuda::GpuMat d_visualization;

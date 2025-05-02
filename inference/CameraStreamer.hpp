@@ -8,6 +8,8 @@
 #include <opencv2/core.hpp>
 #include <opencv2/cudawarping.hpp>
 #include "TensorRTInferencer.hpp"
+#include "LaneAnalyzer.hpp"
+#include "LaneController.hpp"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <cuda_gl_interop.h>
