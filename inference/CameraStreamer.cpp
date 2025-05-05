@@ -172,7 +172,6 @@ void CameraStreamer::start() {
         stream.waitForCompletion();  // Ensure async operations are complete
 
         LaneAnalyzer analyzer;
-        //LaneController controller;
 
         LaneMetrics metrics = analyzer.computeMetrics(binary_mask_cpu);
 

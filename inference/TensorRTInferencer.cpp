@@ -105,19 +105,6 @@ TensorRTInferencer::TensorRTInferencer(const std::string& enginePath) :
     bindings.resize(engine->getNbBindings());  // Resize bindings array to number of bindings
     bindings[inputBindingIndex] = deviceInput;  // Assign device input buffer
     bindings[outputBindingIndex] = deviceOutput;  // Assign device output buffer
-
-/*     status = cudaHostAlloc((void**)&hostInput, inputByteSize, cudaHostAllocDefault);  // Allocate pinned host memory for input
-    if (status != cudaSuccess) {  // Check host input allocation
-        cleanupResources();  // Clean up GPU resources
-        throw std::runtime_error("Failed to allocate pinned host memory for input: " + std::string(cudaGetErrorString(status)));
-    }
-
-    status = cudaHostAlloc((void**)&hostOutput, outputByteSize, cudaHostAllocDefault);  // Allocate pinned host memory for output
-    if (status != cudaSuccess) {  // Check host output allocation
-        cudaFreeHost(hostInput);  // Free previously allocated host input
-        cleanupResources();  // Clean up GPU resources
-        throw std::runtime_error("Failed to allocate pinned host memory for output: " + std::string(cudaGetErrorString(status)));
-    } */
 }
 
 // Clean up allocated GPU resources (device memory, streams)

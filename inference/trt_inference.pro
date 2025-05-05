@@ -9,12 +9,10 @@ CONFIG -= qt  # Remove Qt dependency since it's not needed
 HEADERS += TensorRTInferencer.hpp \
            CameraStreamer.hpp \
            LaneAnalyzer.hpp \
-           LaneController.hpp
 
 SOURCES += TensorRTInferencer.cpp \
            CameraStreamer.cpp \
            LaneAnalyzer.cpp \
-           LaneController.cpp \
            main.cpp  # Always include the Jetson main file for ARM builds
 
 # Common configuration for all builds
