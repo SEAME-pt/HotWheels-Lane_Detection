@@ -1,0 +1,32 @@
+# Carla configuration
+carla:
+  host: localhost
+  port: 2000
+  timeout: 10.0
+
+# Vehicle configuration
+vehicle:
+  type: vehicle.tesla.model3
+  wheelbase: 2.7
+
+# MPC configuration
+mpc:
+  dt: 0.1  # Time step (seconds)
+  horizon: 10  # Prediction horizon
+  wheelbase: 2.7  # Vehicle wheelbase (meters)
+  
+  # Cost function weights
+  w_cte: 1.0  # Cross-track error weight
+  w_etheta: 1.0  # Heading error weight
+  w_vel: 0.5  # Velocity error weight
+  w_steer: 0.5  # Steering input weight
+  w_accel: 0.1  # Acceleration input weight
+  w_steer_rate: 1.0  # Steering rate weight
+  
+  # Control constraints
+  max_steer: 0.5  # Maximum steering angle (radians)
+  max_throttle: 1.0  # Maximum throttle
+  max_brake: 1.0  # Maximum brake
+
+# Control loop frequency
+control_frequency: 0.1  # seconds
