@@ -1,3 +1,19 @@
+# Este arquivo de configuração é utilizado para definir os parâmetros necessários para a execução do sistema de controle autônomo no simulador Carla.
+# Ele contém as seguintes seções:
+#
+# 1. Configuração do Carla:
+#    - Define o host, porta e tempo limite para a conexão com o simulador Carla.
+#
+# 2. Configuração do Veículo:
+#    - Especifica o tipo de veículo e o entre-eixos (wheelbase), que são importantes para o modelo de controle.
+#
+# 3. Configuração do MPC (Model Predictive Control):
+#    - Define parâmetros para o controlador preditivo, como o passo de tempo (dt), horizonte de predição (horizon), e pesos para a função de custo (erros de trajetória, velocidade, etc.).
+#    - Também inclui restrições de controle, como ângulo máximo de direção, aceleração máxima e frenagem máxima.
+#
+# 4. Frequência do Loop de Controle:
+#    - Especifica a frequência com que o loop de controle será executado.
+
 # Carla configuration
 carla:
   host: localhost
