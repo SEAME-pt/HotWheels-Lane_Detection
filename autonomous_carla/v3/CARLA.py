@@ -124,9 +124,9 @@ class KerasLaneDetector:
 # Example usage
 if __name__ == "__main__":
     # Initialize pygame for visualization
-    pygame.init()
-    screen = pygame.display.set_mode((512, 256))
-    pygame.display.set_caption("Lane Detection")
+    # pygame.init()
+    # screen = pygame.display.set_mode((512, 256))
+    # pygame.display.set_caption("Lane Detection")
     
     # Initialize the lane detector
     detector = KerasLaneDetector('output/lane_detector_final.keras')

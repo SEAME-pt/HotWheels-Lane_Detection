@@ -41,13 +41,14 @@ class MPCOptimizer:
         self.w_steer = config.get('w_steer', 1.0)  # Peso do controle de direção
         self.w_accel = config.get('w_accel', 1.0)  # Peso do controle de aceleração
         self.w_steer_rate = config.get('w_steer_rate', 1.0)  # Peso da taxa de variação da direção
+        self.w_lane = config.get('w_lane', 2.0)  # Peso para manter-se dentro das faixas
 
         # Restrições de controle
         self.max_steer = config.get('max_steer', 0.5)  # Ângulo máximo de direção
         self.max_throttle = config.get('max_throttle', 1.0)  # Aceleração máxima
         self.max_brake = config.get('max_brake', 1.0)  # Frenagem máxima
 
-    def solve(self, x0, y0, yaw0, v0, reference):
+    def solve(self, x0, y0, yaw0, v0, reference, lane_info=None):
         """
         Resolve o problema de otimização do MPC.
 
@@ -63,18 +64,21 @@ class MPCOptimizer:
         # Estado inicial
         state = np.array([0.0, 0.0, 0.0, v0])  # x, y, yaw, velocidade no referencial local
 
-        # Chute inicial para os controles (aceleração, direção)
+        # Chute inicial para os controles (aceleração, direção) - começar com aceleração positiva
         u0 = np.zeros(2 * self.horizon)
+        # Inicializar com throttle positivo para garantir movimento
+        for i in range(0, 2 * self.horizon, 2):
+            u0[i] = 0.5  # Throttle inicial de 0.5
 
         # Define os limites para os controles
         bounds = []
         for _ in range(self.horizon):
-            bounds.append((-self.max_throttle, self.max_throttle))  # Limites de aceleração
+            bounds.append((0.0, self.max_throttle))  # Limites de aceleração (sempre positiva)
             bounds.append((-self.max_steer, self.max_steer))  # Limites de direção
 
         # Resolve o problema de otimização
         result = minimize(
-            fun=lambda u: self._cost_function(u, state, reference),
+            fun=lambda u: self._cost_function(u, state, reference, lane_info),
             x0=u0,
             method='SLSQP',
             bounds=bounds,
@@ -87,7 +91,7 @@ class MPCOptimizer:
 
         return throttle, steer
 
-    def _cost_function(self, u, state, reference):
+    def _cost_function(self, u, state, reference, lane_info=None):
         """
         Função de custo para a otimização do MPC.
 
@@ -95,6 +99,7 @@ class MPCOptimizer:
             u (array): Vetor de controles (aceleração, direção).
             state (array): Estado inicial do veículo.
             reference (list): Trajetória de referência.
+            lane_info (tuple): Informações da faixa (lateral_offset, yaw_error).
 
         Returns:
             float: Custo total.
@@ -104,6 +109,30 @@ class MPCOptimizer:
 
         # Reorganiza os controles
         controls = u.reshape(self.horizon, 2)
+        # Adiciona custo de faixa se disponível
+        if lane_info is not None:
+            lateral_offset, yaw_error = lane_info
+        
+            # Penalidade para desvio lateral (aumenta exponencialmente ao se aproximar das bordas)
+            # Aumentamos o peso quadrático para tornar a correção mais agressiva quando o offset aumenta
+            lane_cost = self.w_lane * (lateral_offset ** 2) * 1.5
+            
+            # Adicionamos uma penalidade extra para desvios grandes
+            if abs(lateral_offset) > 0.6:
+                lane_cost *= 2.5  # Penalidade muito maior se estiver próximo às bordas
+            elif abs(lateral_offset) > 0.4:
+                lane_cost *= 1.8  # Penalidade intermediária
+        
+            # Penalidade para erro de orientação em relação à faixa
+            lane_yaw_cost = self.w_lane * 0.8 * (yaw_error ** 2)
+            
+            # Penalidade adicional se a orientação e o offset estiverem no mesmo lado
+            # Isso indica que o carro está se afastando da faixa ao invés de corrigir
+            if lateral_offset * yaw_error > 0:  # Mesmo sinal = se afastando
+                lane_yaw_cost *= 1.5  # Aumentar penalidade para corrigir mais rapidamente
+        
+            cost += lane_cost + lane_yaw_cost
+            print(f"Lane costs - lateral: {lane_cost:.2f}, yaw: {lane_yaw_cost:.2f}, total: {lane_cost + lane_yaw_cost:.2f}")
 
         for i in range(self.horizon):
             # Referência para este passo
@@ -152,8 +181,8 @@ class MPCOptimizer:
         # Modelo de aceleração simples
         v_next = v + throttle * self.dt
 
-        # Garante que a velocidade seja positiva
-        v_next = max(0.0, v_next)
+        # Garante que a velocidade seja positiva e tenha um mínimo
+        v_next = max(5.0, v_next)  # Velocidade mínima de 5.0 m/s (aproximadamente 18 km/h)
 
         # Modelo de bicicleta
         beta = np.arctan(0.5 * np.tan(steer))

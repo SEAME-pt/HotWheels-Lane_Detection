@@ -32,14 +32,15 @@ class MPCPlanner:
         self.dt = config.get('dt', 0.1)  # Passo de tempo
         self.horizon = config.get('horizon', 10)  # Horizonte de previsão
 
-    def plan(self, current_state, waypoints):
+    def plan(self, current_state, waypoints, lane_info=None):
         """
         Gera a trajetória ótima usando MPC.
-
+        
         Args:
             current_state (dict): Estado atual do veículo com x, y, yaw e velocity.
             waypoints (list): Lista de coordenadas (x, y) que o veículo deve seguir.
-
+            lane_info (tuple): Informações da faixa (lateral_offset, yaw_error).
+            
         Returns:
             dict: Controles ótimos contendo throttle (aceleração) e steer (direção).
         """
@@ -48,17 +49,27 @@ class MPCPlanner:
         y0 = current_state['y']
         yaw0 = current_state['yaw']
         v0 = current_state['velocity']
-
+        
+        # Garantir uma velocidade mínima para o planejamento
+        v0 = max(3.0, v0)  # Mínimo de 3 m/s para garantir movimento
+        
         # Prepara a trajetória de referência a partir dos waypoints
         reference = self._prepare_reference(x0, y0, yaw0, waypoints)
-
+        
+        # Log para depuração - exibe os primeiros pontos da referência
+        if len(reference) > 0:
+            print(f"DEBUG MPC - Primeiro ponto ref: {reference[0]}, Último: {reference[-1]}")
+        
         # Resolve o problema de otimização do MPC
-        throttle, steer = self.optimizer.solve(x0, y0, yaw0, v0, reference)
-
+        throttle, steer = self.optimizer.solve(x0, y0, yaw0, v0, reference, lane_info)
+        
+        print(f"DEBUG MPC - Controles calculados: throttle={throttle:.3f}, steer={steer:.3f}")
+        
         return {
             'throttle': throttle,
             'steer': steer
         }
+    
 
     def _prepare_reference(self, x0, y0, yaw0, waypoints):
         """

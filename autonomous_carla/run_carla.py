@@ -47,7 +47,8 @@ def run_carla():
         "-e", f"PULSE_SERVER={env['PULSE_SERVER']}",  # Usa o servidor PulseAudio correto
         "-v", "/run/user/1001/pulse:/run/user/1001/pulse",  # Socket PulseAudio correto
         "carlasim/carla:0.9.15",
-        "/bin/bash", "-c", "./CarlaUE4.sh -quality-level=Low -windowed -ResX=640 -ResY=360"
+        # "/bin/bash", "-c", "./CarlaUE4.sh -quality-level=Low -windowed -ResX=640 -ResY=360"
+        "/bin/bash", "-c", "./CarlaUE4.sh -quality-level=Low"
     ]
     #! Para SSH
     # command = [
