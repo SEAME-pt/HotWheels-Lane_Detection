@@ -56,14 +56,8 @@ class MPCPlanner:
         # Prepara a trajetória de referência a partir dos waypoints
         reference = self._prepare_reference(x0, y0, yaw0, waypoints)
         
-        # Log para depuração - exibe os primeiros pontos da referência
-        if len(reference) > 0:
-            print(f"DEBUG MPC - Primeiro ponto ref: {reference[0]}, Último: {reference[-1]}")
-        
         # Resolve o problema de otimização do MPC
         throttle, steer = self.optimizer.solve(x0, y0, yaw0, v0, reference, lane_info)
-        
-        print(f"DEBUG MPC - Controles calculados: throttle={throttle:.3f}, steer={steer:.3f}")
         
         return {
             'throttle': throttle,

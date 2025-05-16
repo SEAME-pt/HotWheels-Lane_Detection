@@ -31,7 +31,7 @@ class MPCOptimizer:
         """
         self.config = config
         self.dt = config.get('dt', 0.1)
-        self.horizon = config.get('horizon', 10)
+        self.horizon = config.get('horizon', 15)  # Número de passos de previsão
         self.wheelbase = config.get('wheelbase', 2.7)  # Distância entre eixos do veículo
 
         # Pesos para a função de custo
@@ -41,12 +41,13 @@ class MPCOptimizer:
         self.w_steer = config.get('w_steer', 1.0)  # Peso do controle de direção
         self.w_accel = config.get('w_accel', 1.0)  # Peso do controle de aceleração
         self.w_steer_rate = config.get('w_steer_rate', 1.0)  # Peso da taxa de variação da direção
-        self.w_lane = config.get('w_lane', 2.0)  # Peso para manter-se dentro das faixas
+        self.w_lane = config.get('w_lane', 5.0)  # Peso para manter-se dentro das faixas
 
         # Restrições de controle
         self.max_steer = config.get('max_steer', 0.5)  # Ângulo máximo de direção
         self.max_throttle = config.get('max_throttle', 1.0)  # Aceleração máxima
         self.max_brake = config.get('max_brake', 1.0)  # Frenagem máxima
+        self.w_lane_yaw = config.get('w_lane_yaw', 3.0) # Peso para o erro de orientação em relação à faixa
 
     def solve(self, x0, y0, yaw0, v0, reference, lane_info=None):
         """
@@ -110,29 +111,21 @@ class MPCOptimizer:
         # Reorganiza os controles
         controls = u.reshape(self.horizon, 2)
         # Adiciona custo de faixa se disponível
+        # Na função _cost_function
         if lane_info is not None:
             lateral_offset, yaw_error = lane_info
-        
-            # Penalidade para desvio lateral (aumenta exponencialmente ao se aproximar das bordas)
-            # Aumentamos o peso quadrático para tornar a correção mais agressiva quando o offset aumenta
-            lane_cost = self.w_lane * (lateral_offset ** 2) * 1.5
             
-            # Adicionamos uma penalidade extra para desvios grandes
-            if abs(lateral_offset) > 0.6:
-                lane_cost *= 2.5  # Penalidade muito maior se estiver próximo às bordas
-            elif abs(lateral_offset) > 0.4:
-                lane_cost *= 1.8  # Penalidade intermediária
-        
-            # Penalidade para erro de orientação em relação à faixa
-            lane_yaw_cost = self.w_lane * 0.8 * (yaw_error ** 2)
+            # Penalidade exponencial para desvio lateral
+            lane_cost = self.w_lane * np.exp(2.0 * abs(lateral_offset))
             
-            # Penalidade adicional se a orientação e o offset estiverem no mesmo lado
-            # Isso indica que o carro está se afastando da faixa ao invés de corrigir
-            if lateral_offset * yaw_error > 0:  # Mesmo sinal = se afastando
-                lane_yaw_cost *= 1.5  # Aumentar penalidade para corrigir mais rapidamente
-        
+            # Penalidade para erro de orientação
+            lane_yaw_cost = self.w_lane_yaw * (yaw_error ** 2)
+            
+            # Penalidade extra se estiver se afastando da faixa
+            if lateral_offset * yaw_error > 0:
+                lane_yaw_cost *= 2.0
+            
             cost += lane_cost + lane_yaw_cost
-            print(f"Lane costs - lateral: {lane_cost:.2f}, yaw: {lane_yaw_cost:.2f}, total: {lane_cost + lane_yaw_cost:.2f}")
 
         for i in range(self.horizon):
             # Referência para este passo

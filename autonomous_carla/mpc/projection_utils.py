@@ -58,7 +58,7 @@ def convert_image_points_to_world(center_curve, carla_interface):
             y_norm = 1.0 - (y_img / image_h)
             # Distribuição não linear para profundidade (mais pontos próximos)
             # Escalar para profundidade entre 3m e 25m
-            Z = 3.0 + (y_norm * y_norm) * 22.0
+            Z = 2.0 + (y_norm ** 1.5) * 25.0
             
             # Projeção reversa para coordenadas de câmera
             K_inv = np.linalg.inv(K)
@@ -71,10 +71,6 @@ def convert_image_points_to_world(center_curve, carla_interface):
             
             # Adiciona como waypoint (x, y)
             waypoints_world.append((point_world[0], point_world[1]))
-        
-        # Adicionar debug para verificar os waypoints
-        if len(waypoints_world) > 0:
-            print(f"DEBUG - Primeiro waypoint: {waypoints_world[0]}, Último waypoint: {waypoints_world[-1]}")
         
         return waypoints_world
     except Exception as e:

@@ -64,17 +64,19 @@ class CarlaInterface:
         blueprint_library = self.world.get_blueprint_library()
         vehicle_bp = blueprint_library.find('vehicle.tesla.model3')
         
-        # Find a suitable spawn point - escolher um ponto de spawn na estrada
+        # Obtenha todos os spawn points válidos (apenas em faixas de direção)
         spawn_points = self.world.get_map().get_spawn_points()
-        spawn_point = spawn_points[0] if spawn_points else carla.Transform()
-        
-        # Tentar alguns pontos de spawn diferentes se o primeiro não funcionar
-        for sp in spawn_points[:5]:
-            # Verificar se o spawn point está em uma estrada
+        valid_spawn_points = []
+        for sp in spawn_points:
             waypoint = self.world.get_map().get_waypoint(sp.location)
             if waypoint and waypoint.lane_type == carla.LaneType.Driving:
-                spawn_point = sp
-                break
+                valid_spawn_points.append(sp)
+        
+        # Escolha um spawn point aleatório entre os válidos
+        if valid_spawn_points:
+            spawn_point = random.choice(valid_spawn_points)
+        else:
+            spawn_point = carla.Transform()  # fallback
         
         self.vehicle = self.world.spawn_actor(vehicle_bp, spawn_point)
         print(f"Vehicle spawned at {spawn_point.location}")
@@ -84,7 +86,7 @@ class CarlaInterface:
         time.sleep(1.0)
         
         # Aplicar um impulso físico para o carro começar a se mover - reduzido para um início mais suave
-        impulse = carla.Vector3D(x=2000.0, y=0.0, z=0.0)  # Impulso reduzido para movimento mais suave
+        impulse = carla.Vector3D(x=0.0, y=0.0, z=0.0)  # Impulso reduzido para movimento mais suave
         self.vehicle.add_impulse(impulse)
         print("Applied gentler initial impulse to vehicle to start movement")
         
@@ -95,7 +97,7 @@ class CarlaInterface:
         camera_bp.set_attribute('fov', '100')
         
         # Adjust camera position for better visibility
-        camera_transform = carla.Transform(carla.Location(x=1.8, z=1.7), carla.Rotation(pitch=-15))
+        camera_transform = carla.Transform(carla.Location(x=1.5, z=2.4))
         self.camera = self.world.spawn_actor(camera_bp, camera_transform, attach_to=self.vehicle)
 
         if self.camera:
@@ -132,16 +134,17 @@ class CarlaInterface:
             steer = max(-1.0, min(1.0, float(steer)))
             brake = max(0.0, min(1.0, float(brake)))
             
-            # Create control with correct parameter types, ensuring all are native Python types
-            control = carla.VehicleControl()
-            control.throttle = float(throttle_abs)
-            control.steer = float(steer)
-            control.brake = float(brake)
-            control.hand_brake = False
-            control.reverse = bool(reverse)
-            control.manual_gear_shift = False
+            control = carla.VehicleControl(
+                throttle=float(throttle_abs),
+                steer=float(steer),
+                brake=float(brake),
+                hand_brake=False,  # Garantir que o freio de mão está desativado
+                reverse=False,     # Garantir que o carro não está em marcha ré
+                manual_gear_shift=False  # Deixe o CARLA gerenciar as marchas
+            )
             
-            print(f"CARLA Control - throttle: {throttle_abs:.2f}, steer: {steer:.2f}, brake: {brake:.2f}, reverse: {reverse}")
+            if self.config.get('DEBUG', False):
+                print(f"CARLA Control - throttle: {throttle_abs:.2f}, steer: {steer:.2f}, brake: {brake:.2f}, reverse: {reverse}")
             self.vehicle.apply_control(control)
             
     def get_vehicle_state(self):
@@ -164,10 +167,8 @@ class CarlaInterface:
         
         # Calculate velocity magnitude
         v = np.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2)
-        
-        # Print velocity components for debugging
-        print(f"Velocity components: vx={velocity.x:.2f}, vy={velocity.y:.2f}, vz={velocity.z:.2f}, |v|={v:.2f}")
-        
+        if self.config.get('DEBUG', False):
+            print(f"Velocity components: vx={velocity.x:.2f}, vy={velocity.y:.2f}, vz={velocity.z:.2f}, |v|={v:.2f}")
         return {
             'x': x,
             'y': y,
@@ -177,32 +178,37 @@ class CarlaInterface:
     
     def update_spectator(self):
         """
-        Update the spectator's view to follow the vehicle with improved camera settings.
-        Uses smooth camera following with interpolation based on vehicle speed.
+        Update the spectator's view to follow the vehicle with smooth interpolation.
+        Na primeira chamada, posiciona exatamente no dummy para evitar teleporte.
+        Aproxima a câmera do dummy ajustando a posição relativa.
         """
-        if self.vehicle and self.world:
-            # Get vehicle transform and velocity
-            vehicle_transform = self.vehicle.get_transform()
-            vehicle_velocity = self.vehicle.get_velocity()
-            velocity_magnitude = np.sqrt(vehicle_velocity.x**2 + vehicle_velocity.y**2 + vehicle_velocity.z**2)
-            
-            # Adjust camera distance based on vehicle speed (closer when slow, further when fast)
-            base_distance_x = -6.0  # Base distance behind the vehicle
-            base_height_z = 4.0     # Base height above the vehicle
-            
-            # Scale distance slightly with speed, but maintain minimums for visibility
-            distance_x = min(base_distance_x - (velocity_magnitude * 0.5), -3.0)  
-            height_z = max(base_height_z + (velocity_magnitude * 0.2), 3.0)
-            
-            # Create a transform for the spectator that's behind and above the vehicle
-            spectator_transform = carla.Transform(
-                location=vehicle_transform.location + carla.Location(x=distance_x, z=height_z),
-                rotation=carla.Rotation(pitch=-15, yaw=vehicle_transform.rotation.yaw)
-            )
-            
-            # Apply the transform to the spectator
+        if self.dummy and self.world:
             spectator = self.world.get_spectator()
-            spectator.set_transform(spectator_transform)
+            target_transform = self.dummy.get_transform()
+            # Aproxima a câmera do dummy (ex: desloca para trás e para cima)
+            offset = carla.Location(x=-2.0, z=1.5)  # Mais próximo e levemente acima
+            target_location = target_transform.location + offset
+            target_transform = carla.Transform(target_location, target_transform.rotation)
+            if not hasattr(self, '_spectator_initialized'):
+                spectator.set_transform(target_transform)
+                self._spectator_initialized = True
+                return
+            current_transform = spectator.get_transform()
+            lerp_factor = 0.05
+            new_location = carla.Location(
+                x=current_transform.location.x + (target_transform.location.x - current_transform.location.x) * lerp_factor,
+                y=current_transform.location.y + (target_transform.location.y - current_transform.location.y) * lerp_factor,
+                z=current_transform.location.z + (target_transform.location.z - current_transform.location.z) * lerp_factor
+            )
+            def lerp_angle(a, b, t):
+                d = (b - a + 180) % 360 - 180
+                return a + d * t
+            new_rotation = carla.Rotation(
+                pitch=current_transform.rotation.pitch + (target_transform.rotation.pitch - current_transform.rotation.pitch) * lerp_factor,
+                yaw=lerp_angle(current_transform.rotation.yaw, target_transform.rotation.yaw, lerp_factor),
+                roll=current_transform.rotation.roll + (target_transform.rotation.roll - current_transform.rotation.roll) * lerp_factor
+            )
+            spectator.set_transform(carla.Transform(new_location, new_rotation))
 
     def get_waypoints_ahead(self, distance=2.0, count=20):
         """
@@ -258,14 +264,15 @@ class CarlaInterface:
             # Add to our list of waypoints
             waypoints_ahead.append((waypoint.transform.location.x, waypoint.transform.location.y))
         
-        print(f"Generated {len(waypoints_ahead)} CARLA waypoints with speed-adaptive spacing")
-        if len(waypoints_ahead) > 0:
-            first_wp = waypoints_ahead[0]
-            last_wp = waypoints_ahead[-1]
-            first_dist = np.sqrt((first_wp[0] - vehicle_location.x)**2 + (first_wp[1] - vehicle_location.y)**2)
-            total_path = np.sqrt((last_wp[0] - vehicle_location.x)**2 + (last_wp[1] - vehicle_location.y)**2)
-            print(f"First waypoint: {first_dist:.1f}m, Total path: {total_path:.1f}m")
-            
+        print_debug = self.config.get('DEBUG', False)
+        if print_debug:
+            print(f"Generated {len(waypoints_ahead)} CARLA waypoints with speed-adaptive spacing")
+            if len(waypoints_ahead) > 0:
+                first_wp = waypoints_ahead[0]
+                last_wp = waypoints_ahead[-1]
+                first_dist = np.sqrt((first_wp[0] - vehicle_location.x)**2 + (first_wp[1] - vehicle_location.y)**2)
+                total_path = np.sqrt((last_wp[0] - vehicle_location.x)**2 + (last_wp[1] - vehicle_location.y)**2)
+                print(f"First waypoint: {first_dist:.1f}m, Total path: {total_path:.1f}m")
         return waypoints_ahead
 
     def cleanup(self):

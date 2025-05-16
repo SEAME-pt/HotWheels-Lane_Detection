@@ -46,21 +46,24 @@ class KerasLaneDetector:
 		return sharpened
 
 	def preprocess_image(self, input_image):
-		"""Preprocess the image for the Keras model."""
-		# Convert to grayscale if input is color
+		# Aplicar equalização de histograma para melhorar o contraste
 		if len(input_image.shape) == 3 and input_image.shape[2] > 1:
 			input_image = cv2.cvtColor(input_image, cv2.COLOR_BGR2GRAY)
-
-		# Resize to match model input dimensions
+		
+		# Aplicar CLAHE para melhorar o contraste em condições variáveis de iluminação
+		clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+		input_image = clahe.apply(input_image)
+		
+		# Resize para o tamanho esperado pelo modelo
 		input_image = cv2.resize(input_image, (self.input_shape[1], self.input_shape[0]))
-
-		# Normalize to [0, 1] range
+		
+		# Normalização
 		input_image = input_image.astype(np.float32) / 255.0
-
-		# Add batch and channel dimensions
-		input_image = np.expand_dims(input_image, axis=-1)  # Add channel dimension
-		input_image = np.expand_dims(input_image, axis=0)   # Add batch dimension
-
+		
+		# Adicionar dimensões de batch e canal
+		input_image = np.expand_dims(input_image, axis=-1)
+		input_image = np.expand_dims(input_image, axis=0)
+		
 		return input_image
 
 	def predict(self, input_tensor):

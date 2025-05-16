@@ -28,7 +28,7 @@ vehicle:
 # MPC configuration
 mpc:
   dt: 0.1  # Time step (seconds)
-  horizon: 10  # Prediction horizon
+  horizon: 3  # Prediction horizon
   wheelbase: 2.7  # Vehicle wheelbase (meters)
   
   # Cost function weights
