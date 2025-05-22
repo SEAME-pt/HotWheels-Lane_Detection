@@ -114,7 +114,27 @@ class CarlaInterface:
         Retorna a última imagem capturada pela câmera (numpy array RGB).
         """
         return self.last_image
-
+    def enable_autopilot(self, speed=10.0):
+        """
+        Enable autopilot for the vehicle and set a lower speed limit (default 10 km/h).
+        """
+        if self.vehicle:
+            self.vehicle.set_autopilot(True)
+            # Set speed limit via traffic manager
+            tm = self.client.get_trafficmanager()
+            tm.vehicle_percentage_speed_difference(self.vehicle, 100 - (speed / 30.0 * 100))  # 30 km/h is default max
+            print(f"Autopilot enabled for vehicle. Speed limited to {speed} km/h.")
+        else:
+            print("No vehicle to enable autopilot.")
+    def disable_autopilot(self):
+        """
+        Disable autopilot for the vehicle.
+        """
+        if self.vehicle:
+            self.vehicle.set_autopilot(False)
+            print("Autopilot disabled for vehicle.")
+        else:
+            print("No vehicle to disable autopilot.")
 
     def apply_control(self, throttle, steer, brake=0.0):
         """
