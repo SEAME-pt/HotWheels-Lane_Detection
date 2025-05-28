@@ -1,66 +1,67 @@
-"""
-run_carla.py
-
-Este script é responsável por iniciar o simulador CARLA em um contêiner Docker. Ele configura as variáveis de ambiente necessárias e executa o comando Docker para iniciar o simulador.
-
-Funções:
-- run_carla: Configura o ambiente e executa o simulador CARLA em um contêiner Docker.
-
-Dependências:
-- Docker instalado e configurado no sistema.
-- A imagem Docker `carlasim/carla:0.9.15` disponível localmente ou no repositório Docker.
-
-Como usar:
-- Execute este script diretamente para iniciar o simulador CARLA.
-
-"""
-
 import subprocess
-import os
 import time
+import os
+
+def check_carla_running():
+    """Verifica se já existe um container CARLA rodando"""
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "--filter", "ancestor=carlasim/carla:0.9.15", "--format", "{{.ID}}"],
+            capture_output=True, text=True, check=True
+        )
+        return result.stdout.strip() != ""
+    except subprocess.CalledProcessError:
+        return False
+
+def get_stopped_carla_container():
+    """Obtém ID de um container CARLA parado"""
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "-a", "--filter", "ancestor=carlasim/carla:0.9.15", 
+             "--filter", "status=exited", "--format", "{{.ID}}", "-n", "1"],
+            capture_output=True, text=True, check=True
+        )
+        return result.stdout.strip()
+    except subprocess.CalledProcessError:
+        return None
 
 def run_carla():
-    """
-    Configura o ambiente e executa o simulador CARLA em um contêiner Docker.
-
-    O método define variáveis de ambiente necessárias para o funcionamento do CARLA, como DISPLAY, XDG_RUNTIME_DIR e PULSE_SERVER. Em seguida, executa o comando Docker para iniciar o simulador.
-
-    Exceções tratadas:
-    - subprocess.CalledProcessError: Caso ocorra um erro ao executar o comando Docker.
-    - KeyboardInterrupt: Caso o usuário interrompa a execução manualmente.
-
-    """
-    env = os.environ.copy()
-    env["DISPLAY"] = os.getenv("DISPLAY")
-    env["XDG_RUNTIME_DIR"] = f"/run/user/{os.getuid()}"
-    env["PULSE_SERVER"] = "unix:/run/user/1001/pulse/native"
-    command = [
-        "docker", "run", "--rm",
-        "--gpus", "all",
-        "--net=host",
-        "-v", "/tmp/.X11-unix:/tmp/.X11-unix",
-        "-v", "/dev/snd:/dev/snd",  # Passa dispositivos de áudio
-        "-e", f"DISPLAY={env['DISPLAY']}",
-        "-e", f"XDG_RUNTIME_DIR={env['XDG_RUNTIME_DIR']}",
-        "-e", "NVIDIA_DRIVER_CAPABILITIES=all",
-        "-e", f"PULSE_SERVER={env['PULSE_SERVER']}",  # Usa o servidor PulseAudio correto
-        "-v", "/run/user/1001/pulse:/run/user/1001/pulse",  # Socket PulseAudio correto
-        "carlasim/carla:0.9.15",
-        # "/bin/bash", "-c", "./CarlaUE4.sh -quality-level=Low -windowed -ResX=640 -ResY=360"
-        "/bin/bash", "-c", "./CarlaUE4.sh -quality-level=Low"
-        # "/bin/bash", "-c", "./CarlaUE4.sh -carla-server -quality-level=Low -RenderOffScreen"
-    ]
-
-    try:
-        print("Iniciando o CARLA...")
-        subprocess.Popen(command, env=env)  # Passa o ambiente atualizado
-        time.sleep(10)
-        # adiciona um "wait" para manter o terminal aguardando saida por SIGINT
-        subprocess.run(["wait"], shell=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Erro ao executar o CARLA: {e}")
-    except KeyboardInterrupt:
-        print("Execução do CARLA interrompida pelo usuário.")
+    print("Verificando status do CARLA...")
+    
+    # Verificar se já está rodando
+    if check_carla_running():
+        print("CARLA já está rodando!")
+        return
+    
+    # Verificar se existe container parado para reutilizar
+    stopped_container = get_stopped_carla_container()
+    
+    if stopped_container:
+        print(f"Reutilizando container existente: {stopped_container}")
+        subprocess.run(["docker", "start", stopped_container])
+        print("Container CARLA reiniciado!")
+    else:
+        print("Criando novo container CARLA...")
+        # Seu comando docker run existente, mas com --rm para auto-limpeza
+        command = [
+            "docker", "run", "--rm", "-d",  # Adicionar --rm e -d
+            "--privileged",
+            "--gpus", "all",
+            "-e", "DISPLAY=$DISPLAY",
+            "-v", "/tmp/.X11-unix:/tmp/.X11-unix:rw",
+            "-p", "2000-2002:2000-2002",
+            "carlasim/carla:0.9.15",
+            "/bin/bash", "./CarlaUE4.sh", "-world-port=2000", "-resx=800", "-resy=600"
+        ]
+        
+        env = os.environ.copy()
+        subprocess.Popen(command, env=env)
+        print("Novo container CARLA criado!")
+    
+    # Aguardar CARLA inicializar
+    print("Aguardando CARLA inicializar...")
+    time.sleep(15)
 
 if __name__ == "__main__":
     run_carla()
+    print("CARLA está pronto para uso!")

@@ -93,69 +93,42 @@ class MPCOptimizer:
         return throttle, steer
 
     def _cost_function(self, u, state, reference, lane_info=None):
-        """
-        Função de custo para a otimização do MPC.
-
-        Args:
-            u (array): Vetor de controles (aceleração, direção).
-            state (array): Estado inicial do veículo.
-            reference (list): Trajetória de referência.
-            lane_info (tuple): Informações da faixa (lateral_offset, yaw_error).
-
-        Returns:
-            float: Custo total.
-        """
+        """Função de custo corrigida"""
         cost = 0.0
         x, y, yaw, v = state
-
-        # Reorganiza os controles
+        
+        # Reorganizar controles
         controls = u.reshape(self.horizon, 2)
-        # Adiciona custo de faixa se disponível
-        # Na função _cost_function
-        if lane_info is not None:
-            lateral_offset, yaw_error = lane_info
-            
-            # Penalidade exponencial para desvio lateral
-            lane_cost = self.w_lane * np.exp(2.0 * abs(lateral_offset))
-            
-            # Penalidade para erro de orientação
-            lane_yaw_cost = self.w_lane_yaw * (yaw_error ** 2)
-            
-            # Penalidade extra se estiver se afastando da faixa
-            if lateral_offset * yaw_error > 0:
-                lane_yaw_cost *= 2.0
-            
-            cost += lane_cost + lane_yaw_cost
-
+        
+        # Simular o modelo do veículo
+        current_x, current_y, current_yaw, current_v = x, y, yaw, v
+        
         for i in range(self.horizon):
-            # Referência para este passo
-            ref_x, ref_y = reference[min(i, len(reference)-1)]
-
-            # Erro de trajetória
-            cte = np.sqrt((x - ref_x)**2 + (y - ref_y)**2)
-
-            # Erro de orientação
-            ref_yaw = np.arctan2(ref_y - y, ref_x - x)
-            etheta = self._normalize_angle(yaw - ref_yaw)
-
-            # Adiciona ao custo
-            cost += self.w_cte * cte**2
-            cost += self.w_etheta * etheta**2
-
-            # Custos de controle
             throttle, steer = controls[i]
-            cost += self.w_steer * steer**2
-            cost += self.w_accel * throttle**2
-
-            # Custos de taxa de controle
-            if i > 0:
-                prev_throttle, prev_steer = controls[i-1]
-                cost += self.w_steer_rate * (steer - prev_steer)**2
-
-            # Atualiza o estado para o próximo passo
-            x, y, yaw, v = self._update_state(x, y, yaw, v, throttle, steer)
-
+            
+            # Modelo cinemático do veículo
+            dt = 0.1
+            current_v += throttle * dt
+            current_v = max(0, min(current_v, 10))  # Limitar velocidade
+            
+            current_x += current_v * np.cos(current_yaw) * dt
+            current_y += current_v * np.sin(current_yaw) * dt
+            current_yaw += (current_v / 2.5) * np.tan(steer) * dt  # L = 2.5m
+            
+            # Custo de referência (seguir waypoints)
+            if i < len(reference):
+                ref_x, ref_y = reference[i]
+                cost += self.w_cte * ((current_x - ref_x)**2 + (current_y - ref_y)**2)
+            
+            # Custo de velocidade (manter velocidade desejada)
+            desired_speed = 3.0
+            cost += 0.1 * (current_v - desired_speed)**2
+            
+            # Custo de controle (suavizar comandos)
+            cost += 0.01 * (throttle**2 + steer**2)
+        
         return cost
+
 
     def _update_state(self, x, y, yaw, v, throttle, steer):
         """
