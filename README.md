@@ -8,10 +8,10 @@ Being so this repository was created to develop said modules as external depende
 Each one of the models referenced above has it's own README in order to better understand how they work and organize the documentation.
 
 
-> ### [Lane Detection]() 🛣️ ⛙
+> ### [Lane Detection](https://github.com/SEAME-pt/HotWheels-Lane_Detection/blob/main/Lane-Detection.md) 🛣️ ⛙
   
-> ### [Object Detection]() 🚏 🚶‍♂️
+> ### [Object Detection](https://github.com/SEAME-pt/HotWheels-Lane_Detection/blob/main/Object-Detection.md) 🚏 🚶‍♂️
   
-> ### [Motion Control]() 🕹️ 🚗
+> ### [Motion Control](https://github.com/SEAME-pt/HotWheels-Lane_Detection/blob/main/Motion-Control.md) 🕹️ 🚗
 
 ___
