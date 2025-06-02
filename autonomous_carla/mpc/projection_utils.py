@@ -9,45 +9,61 @@ def build_projection_matrix(width, height, fov):
     return K
 
 def convert_image_points_to_world(center_curve, carla_interface):
-    """Conversão corrigida de coordenadas para qualquer resolução de câmera"""
     if center_curve is None:
         return []
-        
     vehicle = carla_interface.vehicle
     if vehicle is None:
         return []
-    
     vehicle_transform = vehicle.get_transform()
     center_x, center_y = center_curve
     waypoints_world = []
 
-    # Obter resolução da câmera da interface
-    img_width = getattr(carla_interface, 'camera_width', 640)
-    img_height = getattr(carla_interface, 'camera_height', 640)
-    center_x_img = img_width // 2
+    # Detectar se é uma curva
+    curvature = calculate_curve_curvature(center_x, center_y)
+    is_curve = abs(curvature) > 0.05
 
-    # Defina a escala correta (ajuste conforme necessário para seu setup)
-    # Exemplo: 8 metros de visão vertical (de cima a baixo da imagem)
-    real_height_m = 8.0
-    escala_m_por_pixel = real_height_m / img_height
+    if is_curve:
+        # Em curvas: usar mais pontos próximos e menos distantes
+        step = max(1, len(center_y) // 15)  # 15 pontos para curvas
+        max_distance = 8.0  # Máximo 8m à frente em curvas
+    else:
+        # Em retas: usar pontos mais espaçados
+        step = max(1, len(center_y) // 10)  # 10 pontos para retas
+        max_distance = 15.0  # Máximo 15m à frente em retas
 
-    for i in range(0, len(center_y), 30):  # Pegar apenas alguns pontos
-        if len(waypoints_world) >= 10:
+    for i in range(0, len(center_y), step):
+        if len(waypoints_world) >= (15 if is_curve else 10):
             break
-            
         x_img, y_img = center_x[i], center_y[i]
-        
-        # Converter para coordenadas relativas ao veículo
-        distance_ahead = (img_height - y_img) * escala_m_por_pixel
-        lateral_offset = (x_img - center_x_img) * escala_m_por_pixel
-        
-        # Coordenadas no mundo
+        distance_ahead = (640 - y_img) * 0.05  # tente aumentar para 0.07 ou 0.1
+        if distance_ahead > max_distance:
+            continue
+        lateral_offset = (x_img - 320) * 0.02  # 2cm por pixel
         yaw = vehicle_transform.rotation.yaw * np.pi / 180
         world_x = vehicle_transform.location.x + distance_ahead * np.cos(yaw) - lateral_offset * np.sin(yaw)
         world_y = vehicle_transform.location.y + distance_ahead * np.sin(yaw) + lateral_offset * np.cos(yaw)
-        
         waypoints_world.append((world_x, world_y))
-    
     return waypoints_world
+
+def calculate_curve_curvature(x_coords, y_coords):
+    """Calcular curvatura da trajetória"""
+    if len(x_coords) < 3:
+        return 0.0
+    
+    # Usar derivadas para calcular curvatura
+    dx = np.gradient(x_coords)
+    dy = np.gradient(y_coords)
+    ddx = np.gradient(dx)
+    ddy = np.gradient(dy)
+    
+    # Curvatura = |dx*ddy - dy*ddx| / (dx² + dy²)^(3/2)
+    numerator = np.abs(dx * ddy - dy * ddx)
+    denominator = np.power(dx**2 + dy**2, 1.5)
+    
+    # Evitar divisão por zero
+    denominator = np.where(denominator == 0, 1e-6, denominator)
+    curvature = numerator / denominator
+    
+    return np.mean(curvature)
 
 

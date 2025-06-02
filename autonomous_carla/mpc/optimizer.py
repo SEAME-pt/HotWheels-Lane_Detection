@@ -93,40 +93,54 @@ class MPCOptimizer:
         return throttle, steer
 
     def _cost_function(self, u, state, reference, lane_info=None):
-        """Função de custo corrigida"""
         cost = 0.0
         x, y, yaw, v = state
-        
-        # Reorganizar controles
-        controls = u.reshape(self.horizon, 2)
-        
-        # Simular o modelo do veículo
+
+        controls = []
+        for i in range(self.horizon):
+            throttle = u[2 * i]
+            steer = u[2 * i + 1]
+            controls.append((throttle, steer))
+
         current_x, current_y, current_yaw, current_v = x, y, yaw, v
-        
+
+        # Definir valores padrão para os pesos
+        w_cte = 5.0
+        w_etheta = 3.0
+        w_velocity = 2.0
+        w_throttle = 0.01
+        w_steer = 0.1
+        target_speed = 4.0
+
+        # Detectar se estamos em uma curva
+        curvature = self._calculate_path_curvature(reference)
+        is_curve = abs(curvature) > 0.1
+
+        # Ajustar pesos baseado na curvatura
+        if is_curve:
+            w_cte = 15.0
+            w_etheta = 10.0
+            w_velocity = 0.5
+            w_throttle = 0.1
+            w_steer = 0.05
+            target_speed = 2.0
+
         for i in range(self.horizon):
             throttle, steer = controls[i]
-            
-            # Modelo cinemático do veículo
             dt = 0.1
             current_v += throttle * dt
-            current_v = max(0, min(current_v, 10))  # Limitar velocidade
-            
+            current_v = max(0, min(current_v, 8))
             current_x += current_v * np.cos(current_yaw) * dt
             current_y += current_v * np.sin(current_yaw) * dt
-            current_yaw += (current_v / 2.5) * np.tan(steer) * dt  # L = 2.5m
-            
-            # Custo de referência (seguir waypoints)
+            current_yaw += (current_v / 2.5) * np.tan(steer) * dt
+
             if i < len(reference):
                 ref_x, ref_y = reference[i]
-                cost += self.w_cte * ((current_x - ref_x)**2 + (current_y - ref_y)**2)
-            
-            # Custo de velocidade (manter velocidade desejada)
-            desired_speed = 3.0
-            cost += 0.1 * (current_v - desired_speed)**2
-            
-            # Custo de controle (suavizar comandos)
-            cost += 0.01 * (throttle**2 + steer**2)
-        
+                cost += w_cte * ((current_x - ref_x)**2 + (current_y - ref_y)**2)
+            cost += w_velocity * (current_v - target_speed)**2
+            cost += w_throttle * (throttle**2)
+            cost += w_steer * (steer**2)
+
         return cost
 
 
@@ -173,3 +187,28 @@ class MPCOptimizer:
         while angle < -np.pi:
             angle += 2 * np.pi
         return angle
+
+    def _calculate_path_curvature(self, reference):
+        """Calcular curvatura do caminho de referência"""
+        if len(reference) < 3:
+            return 0.0
+        
+        # Usar os primeiros 3 pontos para estimar curvatura
+        p1, p2, p3 = reference[0], reference[1], reference[2]
+        
+        # Calcular curvatura usando fórmula de Menger
+        a = np.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
+        b = np.sqrt((p3[0] - p2[0])**2 + (p3[1] - p2[1])**2)
+        c = np.sqrt((p3[0] - p1[0])**2 + (p3[1] - p1[1])**2)
+        
+        if a * b * c == 0:
+            return 0.0
+        
+        # Área do triângulo
+        s = (a + b + c) / 2
+        area = np.sqrt(max(0, s * (s - a) * (s - b) * (s - c)))
+        
+        # Curvatura = 4 * área / (a * b * c)
+        curvature = 4 * area / (a * b * c) if (a * b * c) > 0 else 0.0
+        
+        return curvature

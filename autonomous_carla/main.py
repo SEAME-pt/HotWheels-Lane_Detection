@@ -57,43 +57,43 @@ screen = pygame.display.set_mode((800, 600))
 pygame.display.set_caption("Lane Detection with Polyfit")
 
 def extract_center_curve_with_lanes(binary_mask):
-	"""
-	Usa o polyfit.py para calcular a trajetória central virtual.
-	"""
-	if binary_mask is None:
-		print_debug_info("binary_mask é None")
-		return None
-	
-	try:
-		# Verificar se a máscara tem dados válidos
-		if np.sum(binary_mask) == 0:
-			print_debug_info("Máscara binária está vazia")
-			return None
-		
-		# Usar o algoritmo do polyfit.py
-		lanes = fit_lanes_in_image(binary_mask)
-		print_debug_info(f"Faixas detectadas: {len(lanes) if lanes else 0}")
-		
-		if not lanes:
-			print_debug_info("Nenhuma faixa detectada pelo polyfit")
-			return None
-		
-		# Calcular a linha central virtual
-		result = compute_virtual_centerline(lanes, binary_mask.shape[1], binary_mask.shape[0])
-		
-		if result is not None:
-			x_blend, y_blend, x_c1, x_c2 = result
-			print_debug_info(f"Trajetória central: {len(x_blend)} pontos")
-			return (x_blend, y_blend), lanes
-		else:
-			print_debug_info("compute_virtual_centerline retornou None")
-			return None
-			
-	except Exception as e:
-		print(f"[ERROR] Erro em extract_center_curve_with_lanes: {e}")
-		import traceback
-		traceback.print_exc()
-		return None
+    """Versão com suavização para curvas"""
+    if binary_mask is None:
+        return None
+    
+    try:
+        # Aplicar filtro Gaussiano para suavizar a máscara
+        smoothed_mask = cv2.GaussianBlur(binary_mask, (5, 5), 1.0)
+        
+        # Usar o algoritmo do polyfit.py
+        lanes = fit_lanes_in_image(smoothed_mask)
+        
+        if not lanes:
+            return None
+        
+        # Calcular a linha central virtual
+        result = compute_virtual_centerline(lanes, smoothed_mask.shape[1], smoothed_mask.shape[0])
+        
+        if result is not None:
+            x_blend, y_blend, x_c1, x_c2 = result
+            
+            # Suavizar a trajetória central usando filtro de média móvel
+            window_size = 5
+            if len(x_blend) >= window_size:
+                x_smooth = np.convolve(x_blend, np.ones(window_size)/window_size, mode='same')
+                y_smooth = np.convolve(y_blend, np.ones(window_size)/window_size, mode='same')
+                
+                print_debug_info(f"Trajetória suavizada: {len(x_smooth)} pontos")
+                return (x_smooth, y_smooth), lanes
+            else:
+                return (x_blend, y_blend), lanes
+        
+        return None
+        
+    except Exception as e:
+        print(f"[ERROR] Erro em extract_center_curve_with_lanes: {e}")
+        return None
+
 
 def extract_lane_info(mask, center_curve=None):
     """Extrai informações das faixas usando a trajetória central calculada."""
@@ -207,6 +207,24 @@ def initialize_system(config_path):
 	mpc_planner = MPCPlanner(config.get('mpc', {}))
 	return config,carla_interface, mpc_planner
 
+def calculate_curve_curvature(x_coords, y_coords):
+    """Calcular curvatura da trajetória"""
+    if len(x_coords) < 5:
+        return 0.0
+    dx = np.gradient(x_coords)
+    dy = np.gradient(y_coords)
+    ddx = np.gradient(dx)
+    ddy = np.gradient(dy)
+    numerator = np.abs(dx * ddy - dy * ddx)
+    denominator = np.power(dx**2 + dy**2, 1.5)
+    denominator = np.where(denominator == 0, 1e-6, denominator)
+    curvature = numerator / denominator
+    # Use a média dos 2/3 centrais para evitar bordas ruidosas
+
+    n = len(curvature)
+    return np.mean(curvature[n//6:-n//6])
+
+
 def main():
 	
 	# Add tracking for previous positions to detect when car is stuck
@@ -287,60 +305,31 @@ def main():
 							# Analisar trajetória central
 							if center_curve is not None:
 								center_x, center_y = center_curve
-								print(f"[TEST] === ANÁLISE DA TRAJETÓRIA CENTRAL ===")
-								print(f"[TEST] Pontos na trajetória: {len(center_x)}")
-								print(f"[TEST] Centro X range: [{min(center_x):.1f}, {max(center_x):.1f}]")
-								print(f"[TEST] Centro Y range: [{min(center_y):.1f}, {max(center_y):.1f}]")
 								
-								# Calcular estatísticas da trajetória
-								center_mean_x = np.mean(center_x)
-								center_mean_y = np.mean(center_y)
-								print(f"[TEST] Centro médio: ({center_mean_x:.1f}, {center_mean_y:.1f})")
+								# Calcular curvatura da trajetória
+								curvature = calculate_curve_curvature(center_x, center_y)
+								is_curve = abs(curvature) > 0.01
 								
-								# Verificar direção da trajetória
-								if len(center_x) > 10:
-									start_x, start_y = center_x[0], center_y[0]
-									end_x, end_y = center_x[-1], center_y[-1]
-									direction = np.arctan2(end_y - start_y, end_x - start_x)
-									print(f"[TEST] Direção da trajetória: {np.degrees(direction):.1f}°")
-									
-									# Verificar curvatura
-									mid_idx = len(center_x) // 2
-									mid_x, mid_y = center_x[mid_idx], center_y[mid_idx]
-									
-									# Calcular se é uma linha reta ou curva
-									expected_mid_x = (start_x + end_x) / 2
-									expected_mid_y = (start_y + end_y) / 2
-									curvature = np.sqrt((mid_x - expected_mid_x)**2 + (mid_y - expected_mid_y)**2)
-									print(f"[TEST] Curvatura estimada: {curvature:.1f} pixels")
-									
-									if curvature < 10:
-										print(f"[TEST] Trajetória: RETA")
-									else:
-										print(f"[TEST] Trajetória: CURVA")
-								
-								# Verificar qualidade da trajetória
-								margin = 2  # tolerância para borda
-								valid_points = 0
-								for x, y in zip(center_x, center_y):
-									if -margin <= x < binary_mask_resized.shape[1] + margin and -margin <= y < binary_mask_resized.shape[0] + margin:
-										valid_points += 1
-								quality_percentage = (valid_points / len(center_x)) * 100
-								print(f"[TEST] Qualidade da trajetória: {quality_percentage:.1f}% ({valid_points}/{len(center_x)} pontos válidos)")
-								
-								if quality_percentage > 90:
-									print(f"[TEST] Status: EXCELENTE ✓")
-								elif quality_percentage > 70:
-									print(f"[TEST] Status: BOM ✓")
-								elif quality_percentage > 50:
-									print(f"[TEST] Status: REGULAR ⚠")
+								if is_curve:
+									print_debug_info(f"CURVA detectada - curvatura: {curvature:.3f}")
+									# Parâmetros para curvas
+									max_throttle = 0.25
+									max_steer = 0.4
+									target_speed = 2.0
 								else:
-									print(f"[TEST] Status: RUIM ✗")
+									print_debug_info(f"RETA detectada - curvatura: {curvature:.3f}")
+									# Parâmetros para retas
+									max_throttle = 0.4
+									max_steer = 0.3
+									target_speed = 4.0
+							else:
+								# Valores padrão se não há trajetória
+								max_throttle = 0.3
+								max_steer = 0.3
+								target_speed = 3.0
+								is_curve = False
 							
-							print(f"[TEST] === FIM DA ANÁLISE ===")
-							
-							# Seu código existente continua aqui...
-							# Extrair informações da faixa
+							# Extrair informações da faixa (seu código existente)
 							lateral_offset, yaw_error = extract_lane_info(binary_mask_resized, center_curve)
 							lane_info = (lateral_offset, yaw_error)
 							
@@ -418,19 +407,32 @@ def main():
 			try:
 				# Após calcular o controle MPC
 				control = mpc_planner.plan(current_state, waypoints, lane_info)
-
+				
 				# Debug do MPC
 				print_debug_info(f"MPC output - Throttle: {control.get('throttle', 0):.3f}, Steer: {control.get('steer', 0):.3f}")
-
-				# FORÇAR THROTTLE MÍNIMO se o MPC retornar valor muito baixo
+				
+				# Aplicar controle adaptativo baseado na curvatura
 				throttle_value = control.get('throttle', 0)
-				if abs(throttle_value) < 0.1:  # Se throttle muito baixo
-					throttle_value = 0.3  # Forçar throttle mínimo
-					print_debug_info(f"Forçando throttle mínimo: {throttle_value:.2f}")
-
-				steer_value = np.clip(control.get('steer', 0), -0.3, 0.3)
-
-				print_debug_info(f"Aplicando - Throttle: {throttle_value:.2f}, Steer: {steer_value:.2f}")
+				
+				# Forçar throttle mínimo adaptativo
+				if abs(throttle_value) < 0.1:
+					if 'is_curve' in locals() and is_curve:
+						throttle_value = 0.2  # Throttle menor em curvas
+						print_debug_info(f"Forçando throttle mínimo para CURVA: {throttle_value:.2f}")
+					else:
+						throttle_value = 0.3  # Throttle normal em retas
+						print_debug_info(f"Forçando throttle mínimo para RETA: {throttle_value:.2f}")
+				
+				# Aplicar limites adaptativos
+				if 'max_throttle' in locals():
+					throttle_value = np.clip(throttle_value, 0.0, max_throttle)
+					steer_value = np.clip(control.get('steer', 0), -max_steer, max_steer)
+				else:
+					# Fallback para valores padrão
+					throttle_value = np.clip(throttle_value, 0.0, 0.3)
+					steer_value = np.clip(control.get('steer', 0), -0.3, 0.3)
+				
+				print_debug_info(f"Controle adaptativo - Throttle: {throttle_value:.2f}, Steer: {steer_value:.2f}, Tipo: {'CURVA' if locals().get('is_curve', False) else 'RETA'}")
 
 				carla_interface.apply_control(
 					throttle=throttle_value,
