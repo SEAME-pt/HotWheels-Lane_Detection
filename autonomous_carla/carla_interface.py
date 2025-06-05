@@ -74,11 +74,18 @@ class CarlaInterface:
             print("Synchronous mode configured")
 
     def _configure_map_layers(self):
-        """Configure map layers for light version."""
+        """Configure map layers for light version (robust, idempotent)."""
         try:
-            self.world.unload_map_layer(carla.MapLayer.All)
-            self.world.load_map_layer(carla.MapLayer.Ground)
-            
+            # Tente descarregar todas as camadas, ignore se já estiverem descarregadas
+            try:
+                self.world.unload_map_layer(carla.MapLayer.All)
+            except Exception:
+                pass
+            # Tente carregar apenas o solo
+            try:
+                self.world.load_map_layer(carla.MapLayer.Ground)
+            except Exception:
+                pass
             layers_to_unload = [
                 carla.MapLayer.Decals,
                 carla.MapLayer.Props,
@@ -88,13 +95,12 @@ class CarlaInterface:
                 carla.MapLayer.Particles,
                 carla.MapLayer.Walls,
             ]
-            
             for layer in layers_to_unload:
                 try:
                     self.world.unload_map_layer(layer)
                 except Exception:
                     pass
-            print("Map layers configured for light version")
+            print("Map layers configured for light version (robust)")
         except Exception as e:
             print(f"Erro ao configurar camadas do mapa: {e}")
 

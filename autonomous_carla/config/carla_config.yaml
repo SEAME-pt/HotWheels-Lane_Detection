@@ -27,23 +27,32 @@ vehicle:
 
 # MPC configuration
 mpc:
-  dt: 0.1  # Time step (seconds)
-  horizon: 3  # Prediction horizon
-  wheelbase: 2.7  # Vehicle wheelbase (meters)
+  dt: 0.1
+  horizon: 10  # Increased from 3 to 15
+  wheelbase: 2.7
   
-  # Cost function weights
-  w_cte: 3.5  # Cross-track error weight (aumentado para dar mais importância ao seguimento da trajetória)
-  w_etheta: 2.0  # Heading error weight (aumentado para dar mais importância à orientação)
-  w_vel: 1.0  # Velocity error weight
-  w_steer: 0.2  # Steering input weight (decreased to allow more steering freedom)
-  w_accel: 0.05  # Acceleration input weight (decreased to allow more acceleration)
-  w_steer_rate: 0.5  # Steering rate weight (decreased to allow quicker steering changes)
-  w_lane: 4.0     # Weight for staying in lane (increased to make it primary priority)
+  # Optimized cost function weights
+  w_cte: 10.0        # Increased cross-track error weight
+  w_etheta: 5.0      # Increased heading error weight  
+  w_vel: 1.0         # Keep velocity weight moderate
+  w_steer: 0.1       # Decreased to allow more steering freedom
+  w_accel: 0.05      # Decreased to allow more acceleration
+  w_steer_rate: 0.3  # Moderate steering rate constraint
+  w_lane: 8.0        # Increased lane keeping weight
   
-  # Control constraints
-  max_steer: 0.6  # Maximum steering angle (radians) - increased to allow sharper turns
-  max_throttle: 1.0  # Maximum throttle
-  max_brake: 0.3  # Maximum brake (reduced to prevent excessive braking)
+  # Less conservative control constraints
+  max_steer: 0.52    # ~30 degrees (increased from 0.6)
+  max_throttle: 0.8  # Increased from 1.0
+  max_brake: 0.5     # Increased from 0.3
+  max_iter: 500  # Increase solver iterations
+  steering_limits: [-0.52, 0.52]  # ±30 degrees in radians
+  throttle_limits: [0.0, 0.8]
 
 # Control loop frequency
 control_frequency: 0.1  # seconds
+
+# Suggestion: Lower camera resolution for faster inference
+# In your config/carla_config.yaml, set:
+# camera_width: 320
+# camera_height: 320
+# This will reduce the image size and speed up the model and projection pipeline.

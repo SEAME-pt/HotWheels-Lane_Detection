@@ -1,0 +1,65 @@
+# -------------------------------------------------------------
+# Arquivo de Configuração: carla_config.yaml
+# -------------------------------------------------------------
+# Este arquivo define os parâmetros necessários para a execução do sistema de controle autônomo no simulador Carla.
+# As seções principais são:
+#
+# 1. Configuração do MPC (Model Predictive Control):
+#    - Parâmetros do controlador preditivo, incluindo passo de tempo (dt), horizonte de predição (horizon), entre-eixos (wheelbase),
+#      pesos da função de custo (erros de trajetória, velocidade, etc.) e restrições de controle (ângulo de direção, aceleração, frenagem).
+#    - Parâmetros ajustados para maior desempenho e flexibilidade do controle.
+#
+# 2. Frequência do Loop de Controle:
+#    - Define o intervalo de tempo (em segundos) entre as iterações do loop de controle.
+#
+# 3. Sugestão de Configuração da Câmera:
+#    - Recomendações para reduzir a resolução da câmera, acelerando a inferência do modelo e o pipeline de projeção.
+#
+# Parâmetros detalhados:
+#   mpc:
+#     dt: Passo de tempo do MPC (em segundos).
+#     horizon: Número de passos no horizonte de predição.
+#     wheelbase: Distância entre os eixos do veículo (em metros).
+#     w_cte, w_etheta, w_vel, w_steer, w_accel, w_steer_rate, w_lane: Pesos para diferentes termos da função de custo.
+#     max_steer, max_throttle, max_brake: Restrições máximas de controle.
+#     max_iter: Número máximo de iterações do solver do MPC.
+#     steering_limits, throttle_limits: Limites de atuação para direção e aceleração.
+#   control_frequency: Intervalo de execução do loop de controle (em segundos).
+#   camera_width, camera_height: (Sugestão) Resolução da câmera para otimizar desempenho.
+# -------------------------------------------------------------
+# Exemplo de uso:
+#   Ajuste os parâmetros conforme o veículo, cenário e requisitos de desempenho desejados.
+#   Recomenda-se testar diferentes valores de pesos e restrições para obter o melhor comportamento do veículo no simulador.
+# -------------------------------------------------------------
+
+# MPC configuration
+mpc:
+  dt: 0.1
+  horizon: 10  # Increased from 3 to 15
+  wheelbase: 2.7
+  
+  # Optimized cost function weights
+  w_cte: 10.0        # Increased cross-track error weight
+  w_etheta: 5.0      # Increased heading error weight  
+  w_vel: 1.0         # Keep velocity weight moderate
+  w_steer: 0.1       # Decreased to allow more steering freedom
+  w_accel: 0.05      # Decreased to allow more acceleration
+  w_steer_rate: 0.3  # Moderate steering rate constraint
+  w_lane: 8.0        # Increased lane keeping weight
+  
+  # Less conservative control constraints
+  max_steer: 0.52    # ~30 degrees (increased from 0.6)
+  max_throttle: 0.8  # Increased from 1.0
+  max_brake: 0.5     # Increased from 0.3
+  max_iter: 500  # Increase solver iterations
+  steering_limits: [-0.52, 0.52]  # ±30 degrees in radians
+  throttle_limits: [0.0, 0.8]
+
+# Control loop frequency
+control_frequency: 0.1  # seconds
+
+# Suggestion: Lower camera resolution for faster inference
+# In your config/carla_config.yaml, set:
+# camera_width: 320
+# camera_height: 320
+# This will reduce the image size and speed up the model and projection pipeline.

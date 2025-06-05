@@ -5,6 +5,7 @@ import yaml
 import time
 import numpy as np
 
+CONTROL_RATE = 20  # Hz
 # CONFIGURAÇÃO CRÍTICA PARA GPU - DEVE VIR ANTES DE QUALQUER IMPORT DO TENSORFLOW
 os.environ['XLA_FLAGS'] = '--xla_gpu_strict_conv_algorithm_picker=false'
 os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
@@ -56,44 +57,41 @@ pygame.init()
 screen = pygame.display.set_mode((800, 600))
 pygame.display.set_caption("Lane Detection with Polyfit")
 
-def extract_center_curve_with_lanes(binary_mask):
-    """Versão com suavização para curvas"""
+def extract_center_curve_with_lanes_improved(binary_mask):
     if binary_mask is None:
         return None
     
     try:
-        # Aplicar filtro Gaussiano para suavizar a máscara
-        smoothed_mask = cv2.GaussianBlur(binary_mask, (5, 5), 1.0)
+        # Reduce Gaussian blur - only light smoothing
+        smoothed_mask = cv2.GaussianBlur(binary_mask, (3, 3), 0.5)  # Reduced from (5,5), 1.0
         
-        # Usar o algoritmo do polyfit.py
         lanes = fit_lanes_in_image(smoothed_mask)
-        
         if not lanes:
             return None
         
-        # Calcular a linha central virtual
         result = compute_virtual_centerline(lanes, smoothed_mask.shape[1], smoothed_mask.shape[0])
-        
         if result is not None:
             x_blend, y_blend, x_c1, x_c2 = result
             
-            # Suavizar a trajetória central usando filtro de média móvel
-            window_size = 5
+            # Adaptive smoothing based on curvature
+            curvature = calculate_curve_curvature(x_blend, y_blend)
+            
+            if abs(curvature) > 0.1:  # In curves
+                window_size = 3  # Minimal smoothing
+            else:  # On straights
+                window_size = 5  # More smoothing allowed
+            
             if len(x_blend) >= window_size:
                 x_smooth = np.convolve(x_blend, np.ones(window_size)/window_size, mode='same')
                 y_smooth = np.convolve(y_blend, np.ones(window_size)/window_size, mode='same')
-                
-                print_debug_info(f"Trajetória suavizada: {len(x_smooth)} pontos")
                 return (x_smooth, y_smooth), lanes
             else:
                 return (x_blend, y_blend), lanes
         
         return None
-        
     except Exception as e:
         print(f"[ERROR] Erro em extract_center_curve_with_lanes: {e}")
         return None
-
 
 def extract_lane_info(mask, center_curve=None):
     """Extrai informações das faixas usando a trajetória central calculada."""
@@ -232,7 +230,8 @@ def main():
 	max_position_history = 5
 	is_in_recovery = False
 	recovery_end_time = 0
-	
+	last_control_time = time.time()
+
 	# Initialize Carla interface
 	try:
 		# Load configuration
@@ -243,6 +242,10 @@ def main():
 		
 		# Main control loop
 		while True:
+			now = time.time()
+			if now - last_control_time < 1/CONTROL_RATE:
+				continue
+			last_control_time = now
 			# Get current vehicle state
 			current_state = carla_interface.get_vehicle_state()
 			if not current_state:
@@ -285,7 +288,7 @@ def main():
 					
 					if binary_mask_resized is not None and np.sum(binary_mask_resized) > 0:
 						# Usar polyfit para extrair trajetória
-						result = extract_center_curve_with_lanes(binary_mask_resized)
+						result = extract_center_curve_with_lanes_improved(binary_mask_resized)
 						
 						if result is not None:
 							center_curve, lanes = result

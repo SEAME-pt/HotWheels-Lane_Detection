@@ -79,12 +79,12 @@ class MPCOptimizer:
 
         # Resolve o problema de otimização
         result = minimize(
-            fun=lambda u: self._cost_function(u, state, reference, lane_info),
-            x0=u0,
-            method='SLSQP',
-            bounds=bounds,
-            options={'maxiter': 100, 'disp': False}
-        )
+                lambda u: self._cost_function(u, state, reference, lane_info),
+                u0,
+                method='trust-constr',
+                bounds=bounds,
+                options={'maxiter': 500, 'xtol': 1e-6, 'gtol': 1e-6}
+            )
 
         # Extrai a primeira ação de controle
         throttle = result.x[0]
@@ -95,54 +95,75 @@ class MPCOptimizer:
     def _cost_function(self, u, state, reference, lane_info=None):
         cost = 0.0
         x, y, yaw, v = state
-
+        
+        # Extract controls
         controls = []
         for i in range(self.horizon):
             throttle = u[2 * i]
             steer = u[2 * i + 1]
             controls.append((throttle, steer))
-
+        
         current_x, current_y, current_yaw, current_v = x, y, yaw, v
-
-        # Definir valores padrão para os pesos
-        w_cte = 5.0
-        w_etheta = 3.0
-        w_velocity = 2.0
-        w_throttle = 0.01
-        w_steer = 0.1
-        target_speed = 4.0
-
-        # Detectar se estamos em uma curva
+        
+        # Adaptive weights based on curvature
         curvature = self._calculate_path_curvature(reference)
-        is_curve = abs(curvature) > 0.1
-
-        # Ajustar pesos baseado na curvatura
+        is_curve = abs(curvature) > 0.05
+        
         if is_curve:
+            # In curves: prioritize path following over speed
             w_cte = 15.0
-            w_etheta = 10.0
-            w_velocity = 0.5
+            w_etheta = 8.0  
+            w_velocity = 0.3
+            w_throttle = 0.05
+            w_steer = 0.02
+            target_speed = max(2.0, 6.0 - abs(curvature) * 20)  # Speed based on curvature
+        else:
+            # On straights: balance path following and speed
+            w_cte = 8.0
+            w_etheta = 4.0
+            w_velocity = 1.5
             w_throttle = 0.1
-            w_steer = 0.05
-            target_speed = 2.0
-
+            w_steer = 0.1
+            target_speed = 6.0
+        
+        # Simulate forward and accumulate costs
         for i in range(self.horizon):
             throttle, steer = controls[i]
-            dt = 0.1
-            current_v += throttle * dt
-            current_v = max(0, min(current_v, 8))
-            current_x += current_v * np.cos(current_yaw) * dt
-            current_y += current_v * np.sin(current_yaw) * dt
-            current_yaw += (current_v / 2.5) * np.tan(steer) * dt
-
+            
+            # Update state
+            current_v += throttle * self.dt
+            current_v = max(0.5, min(current_v, 10.0))  # Reasonable speed limits
+            
+            current_x += current_v * np.cos(current_yaw) * self.dt
+            current_y += current_v * np.sin(current_yaw) * self.dt
+            current_yaw += (current_v / self.wheelbase) * np.tan(steer) * self.dt
+            
+            # Cross-track error cost
             if i < len(reference):
                 ref_x, ref_y = reference[i]
-                cost += w_cte * ((current_x - ref_x)**2 + (current_y - ref_y)**2)
-            cost += w_velocity * (current_v - target_speed)**2
-            cost += w_throttle * (throttle**2)
-            cost += w_steer * (steer**2)
-
+                cte = (current_x - ref_x)**2 + (current_y - ref_y)**2
+                cost += w_cte * cte
+                
+                # Heading error cost
+                desired_heading = np.arctan2(ref_y - current_y, ref_x - current_x)
+                heading_error = self._normalize_angle(current_yaw - desired_heading)
+                cost += w_etheta * heading_error**2
+            
+            # Speed tracking cost
+            speed_error = current_v - target_speed
+            cost += w_velocity * speed_error**2
+            
+            # Control effort costs
+            cost += w_throttle * throttle**2
+            cost += w_steer * steer**2
+            
+            # Steering rate cost (penalize rapid steering changes)
+            if i > 0:
+                prev_steer = controls[i-1][1]
+                steer_rate = (steer - prev_steer) / self.dt
+                cost += 0.5 * steer_rate**2
+        
         return cost
-
 
     def _update_state(self, x, y, yaw, v, throttle, steer):
         """

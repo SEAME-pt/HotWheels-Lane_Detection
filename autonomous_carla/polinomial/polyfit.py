@@ -134,6 +134,11 @@ def select_relevant_lanes(lanes, img_width, img_height, filename=None):
 
 
 def compute_virtual_centerline(lanes, img_width, img_height, lane_width_px=300):
+    """
+    Compute a robust centerline as the average between left/right lanes if both are present.
+    If only one lane is present, offset by lane_width_px/2 toward the missing side.
+    Always blend toward the car center at the bottom for stability.
+    """
     apply_blending = True
     left_lane, right_lane = select_relevant_lanes(lanes, img_width, img_height)
     car_x = img_width // 2  # Car's horizontal position
@@ -150,45 +155,33 @@ def compute_virtual_centerline(lanes, img_width, img_height, lane_width_px=300):
         # Interpolate with extrapolation for extension
         x_left_interp = np.interp(y_common, y_left, x_left, left=x_left[0], right=x_left[-1])
         x_right_interp = np.interp(y_common, y_right, x_right, left=x_right[0], right=x_right[-1])
-        x_c1 = (x_left_interp + x_right_interp) / 2  # Original centerline
-
+        x_c1 = (x_left_interp + x_right_interp) / 2  # True centerline
         x_c2 = np.full_like(y_common, car_x)  # Car-centered horizontal line
 
         if not apply_blending:
-            print("⚠️ Centerline: no blending applied.")
             return x_c1, y_common, x_c1, x_c2
 
         # Blending: full c2 at bottom, full c1 at top
         w = (y_common[0] - y_common) / (y_common[0] - y_common[-1])
         x_blend = w * x_c1 + (1 - w) * x_c2
-
         return x_blend, y_common, x_c1, x_c2
 
     elif left_lane or right_lane:
         # --- Offset Method ---
         lane = left_lane if left_lane else right_lane
         x_lane, y_lane = lane['curve']
-
         direction = 1 if left_lane else -1
         x_c1 = x_lane + direction * lane_width_px / 2  # Offset original curve
-
         y_min = np.min(y_lane)
         y_start = img_height - 1
         y_common = np.linspace(y_start, y_min, 300)  # from bottom to top
-
         x_c1_interp = np.interp(y_common, y_lane, x_c1, left=x_c1[0], right=x_c1[-1])
         x_c2 = np.full_like(y_common, car_x)
-
         if not apply_blending:
-            print("⚠️ Centerline: no blending applied.")
             return x_c1_interp, y_common, x_c1_interp, x_c2
-
-        # Blending: full c2 at bottom, full c1 at top
         w = (y_common[0] - y_common) / (y_common[0] - y_common[-1])
         x_blend = w * x_c1_interp + (1 - w) * x_c2
-
         return x_blend, y_common, x_c1_interp, x_c2
-
     else:
         return None
 

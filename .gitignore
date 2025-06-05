@@ -1,2 +1,4 @@
 **/__pycache__
 *.keras
+.vscode/
+**/*.txt
