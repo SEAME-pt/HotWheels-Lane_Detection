@@ -2,6 +2,7 @@
 # define MPCOPTIMIZER_HPP
 
 # include "MPCConfig.hpp"
+# include "CommonTypes.hpp"
 # include <cmath>
 # include <filesystem>
 # include <nlopt.hpp>
@@ -9,18 +10,6 @@
 # include <stdexcept>
 # include <string>
 # include <vector>
-
-struct LaneInfo {
-    double left_boundary;
-    double right_boundary;
-    double center_line;
-};
-
-
-struct Point2D {
-    double x, y;
-    Point2D(double x = 0.0, double y = 0.0) : x(x), y(y) {}
-};
 
 class MPCOptimizer{
 

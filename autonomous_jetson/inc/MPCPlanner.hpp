@@ -4,24 +4,6 @@
 #include <vector>
 #include <Eigen/Dense>
 #include "MPCOptimizer.hpp"
-#include "MPCConfig.hpp"
-
-struct VehicleState {
-    double x;
-    double y;
-    double yaw;
-    double velocity;
-};
-
-struct VehicleTransform {
-    double x, y;      // Posição
-    double yaw;       // Orientação em radianos
-};
-
-struct ControlCommand {
-    double throttle;
-    double steer;
-};
 
 class MPCPlanner{
 
