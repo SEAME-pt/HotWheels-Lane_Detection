@@ -21,6 +21,7 @@ class MPCOptimizer{
 
 	public:
 		MPCOptimizer(void);
+		MPCOptimizer(const MPCConfig& config);
 		MPCOptimizer(const MPCOptimizer &orign);
 		MPCOptimizer &operator=(const MPCOptimizer &orign);
 		~MPCOptimizer(void);

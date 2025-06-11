@@ -8,6 +8,8 @@
 #include "MPCPlanner.hpp"
 #include "Polyfitter.hpp"
 
+bool DEBUG = true;
+
 // Placeholder para a classe de controle do carro (substituir por CarControls)
 class CarControls {
 public:
@@ -42,6 +44,7 @@ public:
 
 // Função de debug
 void print_debug_info(const std::string& text) {
+    if (!DEBUG) return; // Ignorar se DEBUG estiver desativado
     auto now = std::chrono::system_clock::now();
     std::time_t now_c = std::chrono::system_clock::to_time_t(now);
     std::cout << "[DEBUG] " << std::ctime(&now_c) << " - " << text << std::endl;
@@ -60,7 +63,7 @@ std::pair<std::vector<double>, std::vector<double>> extract_center_curve_with_la
 
 // Placeholder para a função de extração de informações da faixa
 LaneInfo extract_lane_info(const cv::Mat& mask, const std::pair<std::vector<double>, std::vector<double>>& center_curve) {
-    if (center_curve.first.empty()) return LaneInfo();
+    if (center_curve.first.empty()) return LaneInfo(0.0, 0.0);
     // Simulação: calcula desvio lateral simples
     int img_width = mask.cols;
     int car_center_x = img_width / 2;
@@ -84,16 +87,60 @@ LaneInfo extract_lane_info(const cv::Mat& mask, const std::pair<std::vector<doub
 }
 
 // Placeholder para a função de cálculo de curvatura
-double calculate_curve_curvature(const std::vector<double>& x_coords, const std::vector<double>& y_coords) {
-    if (x_coords.size() < 5) return 0.0;
-    // Simulação: calcula curvatura simples (pode ser substituída pela sua função)
-    return 0.0;
+// Função para calcular o gradiente numérico (equivalente ao np.gradient)
+std::vector<double> gradient(const std::vector<double>& arr) {
+    int n = arr.size();
+    std::vector<double> grad(n);
+    if (n <= 1) return grad;
+    // Pontos internos: diferença central
+    for (int i = 1; i < n - 1; ++i)
+        grad[i] = (arr[i+1] - arr[i-1]) / 2.0;
+    // Pontos das bordas: diferença à frente ou atrás
+    if (n > 1) {
+        grad[0] = arr[1] - arr[0];
+        grad[n-1] = arr[n-1] - arr[n-2];
+    }
+    return grad;
+}
+
+// Função para calcular a curvatura da trajetória
+double calculate_curve_curvature(const std::vector<double>& x_coords,
+                                 const std::vector<double>& y_coords) {
+    if (x_coords.size() < 5 || y_coords.size() < 5)
+        return 0.0;
+
+    std::vector<double> dx = gradient(x_coords);
+    std::vector<double> dy = gradient(y_coords);
+    std::vector<double> ddx = gradient(dx);
+    std::vector<double> ddy = gradient(dy);
+
+    std::vector<double> numerator(x_coords.size());
+    std::vector<double> denominator(x_coords.size());
+    std::vector<double> curvature(x_coords.size());
+
+    for (size_t i = 0; i < x_coords.size(); ++i) {
+        numerator[i] = std::abs(dx[i] * ddy[i] - dy[i] * ddx[i]);
+        denominator[i] = std::pow(dx[i]*dx[i] + dy[i]*dy[i], 1.5);
+        // Substitui zeros por 1e-6
+        if (denominator[i] == 0.0) denominator[i] = 1e-6;
+        curvature[i] = numerator[i] / denominator[i];
+    }
+
+    // Calcula a média dos 2/3 centrais para evitar bordas ruidosas
+    int n = static_cast<int>(curvature.size());
+    int start = n / 6;
+    int end = n - (n / 6);
+    if (end <= start) return 0.0;
+
+    double sum = std::accumulate(curvature.begin() + start, curvature.begin() + end, 0.0);
+    return sum / (end - start);
 }
 
 // Placeholder para a função de conversão de pontos da imagem para o mundo
 std::vector<Point2D> convert_image_points_to_world(
     const std::pair<std::vector<double>, std::vector<double>>& center_curve,
     CarControls& car_controls) {
+    (void)car_controls;
     // Simulação: retorna waypoints simples à frente do carro
     std::vector<Point2D> waypoints;
     for (size_t i = 0; i < center_curve.first.size(); ++i) {
@@ -114,6 +161,7 @@ std::vector<Point2D> get_waypoints_ahead(double distance, int count, const Vehic
 
 // Placeholder para a função de obtenção do estado do veículo
 VehicleState get_vehicle_state(CarControls& car_controls) {
+    (void)car_controls;
     // Simulação: retorna um estado simples
     static double x = 0.0, y = 0.0, yaw = 0.0, velocity = 1.0;
     x += 0.1;
@@ -125,6 +173,7 @@ VehicleState get_vehicle_state(CarControls& car_controls) {
 
 // Placeholder para a função de obtenção da imagem da câmera
 cv::Mat get_camera_image(CarControls& car_controls) {
+    (void)car_controls;
     // Simulação: retorna uma imagem preta com uma linha central
     cv::Mat img(640, 640, CV_8UC1, cv::Scalar(0));
     cv::line(img, cv::Point(0, img.rows-1), cv::Point(img.cols/2, img.rows/2), cv::Scalar(255), 2);
@@ -137,7 +186,6 @@ int main() {
         // Configurações
         const double CONTROL_RATE = 20.0; // Hz
         const double CONTROL_PERIOD = 1.0 / CONTROL_RATE; // s
-        bool DEBUG = true;
 
         // Inicialização dos sistemas
         CarControls car_controls;
@@ -157,6 +205,9 @@ int main() {
         // Impulso inicial
         car_controls.applyControl(0.3, 0.0, 0.0);
         std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+
+        double throttle_value = 0.0;
+        double steer_value = 0.0;
 
         // Loop principal de controle
         while (true) {
@@ -184,7 +235,6 @@ int main() {
             cv::Mat image = get_camera_image(car_controls);
             LaneInfo lane_info(0.0, 0.0);
             std::vector<Point2D> waypoints;
-            bool waypoints_from_lanes = false;
 
             if (!image.empty()) {
                 try {
@@ -197,7 +247,6 @@ int main() {
                             // Converter para waypoints do mundo
                             waypoints = convert_image_points_to_world(center_curve, car_controls);
                             if (waypoints.size() > 5) {
-                                waypoints_from_lanes = true;
                                 print_debug_info("Usando " + std::to_string(waypoints.size()) + " waypoints da trajetória central");
                             } else {
                                 // Fallback: waypoints simples à frente
@@ -239,7 +288,7 @@ int main() {
                     waypoints = get_waypoints_ahead(2.0, 3, current_state);
                 }
             }
-
+			
             // Gerar comandos de controle
             try {
                 // Converter waypoints para o formato esperado pelo MPCPlanner
@@ -249,12 +298,13 @@ int main() {
                 }
                 ControlCommand control = mpc_planner.plan(current_state, global_waypoints, &lane_info);
 
+                throttle_value = control.throttle;
+                steer_value = control.steer;
+
                 print_debug_info("MPC output - Throttle: " + std::to_string(control.throttle) +
                                 ", Steer: " + std::to_string(control.steer));
 
                 // Aplicar controle adaptativo baseado na curvatura
-                double throttle_value = control.throttle;
-                double steer_value = control.steer;
                 bool is_curve = false; // Simulação: pode ser calculado conforme sua lógica
 
                 // Forçar throttle mínimo adaptativo

@@ -12,7 +12,6 @@
 
 namespace fs = std::filesystem;
 
-Point2D::Point2D(double x, double y) : x(x), y(y) {}
 CenterlineResult::CenterlineResult() : valid(false) {}
 Polyfitter::Polyfitter() {}
 Polyfitter::~Polyfitter() {}
@@ -102,7 +101,7 @@ std::pair<std::vector<int>, std::vector<int>> Polyfitter::clusterLanePoints(
 
 std::pair<std::vector<double>, std::vector<double>> Polyfitter::slidingWindowCentroids(
 	const std::vector<double>& x, const std::vector<double>& y, 
-	const cv::Size& imgShape, bool smooth = false) {
+	const cv::Size& imgShape, bool smooth) {
 	
 	int h = imgShape.height / NUM_WINDOWS;
 	std::vector<double> cx, cy;
@@ -224,6 +223,7 @@ std::vector<double> Polyfitter::polyval(const std::vector<double>& coeffs, const
 
 std::vector<double> Polyfitter::fitLaneCurve(const std::vector<double>& y, const std::vector<double>& x, 
 								int imgWidth, const std::vector<double>& yPlot) {
+    (void)imgWidth;
 	if (isStraightLine(y, x)) {
 		auto coeffs = polyfit(y, x, 1);
 		return polyval(coeffs, yPlot);
@@ -491,7 +491,7 @@ CenterlineResult Polyfitter::computeVirtualCenterline(std::vector<Lane>& lanes, 
 	return result;
 }
 
-void Polyfitter::displayImagesWithPolyfit(const std::vector<std::pair<std::string, cv::Mat>>& images, int cols = 4) {
+void Polyfitter::displayImagesWithPolyfit(const std::vector<std::pair<std::string, cv::Mat>>& images, int cols) {
 	if (images.empty()) return;
 	
 	int numImages = images.size();

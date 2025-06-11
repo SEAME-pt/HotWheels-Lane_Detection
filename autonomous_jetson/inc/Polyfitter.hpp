@@ -1,10 +1,17 @@
 #ifndef POLYFITTER_HPP
 # define POLYFITTER_HPP
 
-// #include <opencv2/opencv.hpp>
 # include <vector>
 # include <string>
 # include <utility>
+# include <opencv2/opencv.hpp>
+// # include <opencv2/cudawarping.hpp>
+// # include <opencv2/cudaimgproc.hpp>
+# include <opencv2/highgui.hpp>
+# include <opencv2/core/cuda.hpp>
+# include <opencv2/imgproc/imgproc.hpp>
+# include <cuda_runtime.h>
+// # include <NvInfer.h>
 # include "CommonTypes.hpp"
 
 struct Lane {
@@ -47,6 +54,7 @@ public:
     std::vector<double> linspace(double start, double end, int num);
     std::vector<double> interp(const std::vector<double>& xNew, const std::vector<double>& x, const std::vector<double>& y, double leftVal, double rightVal);
     CenterlineResult computeVirtualCenterline(std::vector<Lane>& lanes, int imgWidth, int imgHeight);
+    void displayImagesWithPolyfit(const std::vector<std::pair<std::string, cv::Mat>>& images, int cols = 4);
 };
 
 #endif // POLYFITTER_HPP
