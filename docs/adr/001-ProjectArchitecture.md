@@ -15,7 +15,5 @@ Each module requires the usage and implementation of a new dataset and algorithm
 **Object detection**: YOLOv5(algorithm) and COCO(dataset)  
   
 **Road segmentation**: DeepLabV3(algorithm) and Cityscapes(dataset)  
-  
-## Consequences
-We believe that this strucuture is very similar to the ones currently used in the automotive industry and will best mimic a real-life application.  
-It also allows for a dynamic solution and greater adaptability for different environments and scenarios. 
+
+___
