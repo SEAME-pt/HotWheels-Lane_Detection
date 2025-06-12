@@ -2,3 +2,5 @@
 *.keras
 .vscode/
 **/*.txt
+eigen-3.4.0*
+nlopt-2.7.1*
