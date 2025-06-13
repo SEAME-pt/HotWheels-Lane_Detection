@@ -22,7 +22,6 @@ MPCOptimizer::~MPCOptimizer(void) {
 }
 
 static double costWrapper(unsigned n, const double* x, double* grad, void* data) {
-    (void)grad;
     MPCOptimizer* self = static_cast<MPCOptimizer*>(data);
     // Convertendo x para std::vector<double>
     std::vector<double> u(x, x + n);
@@ -33,7 +32,6 @@ static double costWrapper(unsigned n, const double* x, double* grad, void* data)
 std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0, double v0,
                                              const std::vector<Point2D>& reference,
                                              const LaneInfo* lane_info) {
-    (void)x0; (void)y0; (void)yaw0; (void)reference; (void)lane_info;
 	// This function should implement the MPC algorithm to compute the optimal control inputs
 	// based on the current state and reference trajectory.
 	std::vector<double> state = {0.0, 0.0, 0.0, v0}; // x, y, yaw, velocity
@@ -116,7 +114,6 @@ double MPCOptimizer::_costFunction(const std::vector<double>& u,
                                  const std::vector<double>& state,
                                  const std::vector<Point2D>& reference,
                                  const LaneInfo* lane_info) const {
-    (void)lane_info;
     double cost = 0.0;
     double x = state[0], y = state[1], yaw = state[2], v = state[3];
 

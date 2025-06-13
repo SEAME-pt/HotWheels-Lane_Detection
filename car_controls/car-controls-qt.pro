@@ -117,3 +117,6 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
 	QMAKE_LFLAGS += -Wl,-rpath-link,$${JETSON_SYSROOT}/usr/local/lib
 	QMAKE_LFLAGS += -Wl,-rpath-link,$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu/tegra
 }
+
+# Adicionando flags de compilação para warnings e erros
+QMAKE_CXXFLAGS += -Wall -Werror -Wextra -pedantic

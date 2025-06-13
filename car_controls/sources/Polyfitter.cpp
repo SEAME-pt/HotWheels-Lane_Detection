@@ -223,7 +223,6 @@ std::vector<double> Polyfitter::polyval(const std::vector<double>& coeffs, const
 
 std::vector<double> Polyfitter::fitLaneCurve(const std::vector<double>& y, const std::vector<double>& x, 
 								int imgWidth, const std::vector<double>& yPlot) {
-    (void)imgWidth;
 	if (isStraightLine(y, x)) {
 		auto coeffs = polyfit(y, x, 1);
 		return polyval(coeffs, yPlot);
