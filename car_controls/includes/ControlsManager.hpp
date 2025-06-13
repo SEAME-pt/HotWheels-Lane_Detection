@@ -15,16 +15,21 @@
 #ifndef CONTROLSMANAGER_HPP
 #define CONTROLSMANAGER_HPP
 
+#include "../ZeroMQ/Publisher.hpp"
+#include "../ZeroMQ/Subscriber.hpp"
+#include "CommonTypes.hpp"
 #include "EngineController.hpp"
 #include "JoysticksController.hpp"
-#include "inference/CameraStreamer.hpp"
-#include "../../ZeroMQ/Subscriber.hpp"
-#include "../../ZeroMQ/Publisher.hpp"
 #include "MPCPlanner.hpp"
-#include "CommonTypes.hpp"
+#include "Polyfitter.hpp"
+#include "inference/CameraStreamer.hpp"
 #include <QObject>
-#include <QThread>
 #include <QProcess>
+#include <QThread>
+#include <vector>
+#include <string>
+#include <sstream>
+#include <atomic>
 
 /*!
  * @brief The ControlsManager class.
@@ -34,29 +39,31 @@ class ControlsManager : public QObject {
 	Q_OBJECT
 
 private:
-    MPCPlanner			*m_mpcPlanner;
 	EngineController	m_engineController;
 	JoysticksController	*m_manualController;
 	DrivingMode 		m_currentMode;
 
 	Subscriber 			*m_subscriberJoystickObject;
+	
+	QThread *m_manualControllerThread;
+	QThread *m_joystickControlThread;
+	QThread *m_subscriberJoystickThread;
+	QThread *m_cameraStreamerThread;
+	
+	std::atomic<bool> 	m_running;
 	//Subscriber *m_subscriberInferenceThreadObject;
 	//Subscriber *m_subscriberODThreadObject;
 
-	CameraStreamer 		*m_cameraStreamerObject;
 	//YOLOv5TRT *m_yoloObject;
-
+	
 	//std::shared_ptr<IInferencer> inferencer;
-
-	std::atomic<bool> 	m_running;
+	MPCPlanner			*m_mpcPlanner;
+	Polyfitter* 		m_polyfitter;
     std::atomic<bool> 	m_autonomousMode;
-
 	QThread *m_autonomousControlThread;
-	QThread *m_manualControllerThread;
-	QThread *m_joystickControlThread;
+	
+	CameraStreamer 		*m_cameraStreamerObject;
 
-	QThread *m_subscriberJoystickThread;
-	QThread *m_cameraStreamerThread;
 
 public:
 	explicit ControlsManager(int argc, char **argv, QObject *parent = nullptr);
@@ -68,10 +75,16 @@ public:
 	void startAutonomousControl();
     void stopAutonomousControl();
     void autonomousControlLoop();
+    // Exibe a imagem da câmera com as lanes e centerline desenhadas
+    void showVisionDebug();
 
+private:
 	VehicleState getCurrentVehicleState();
-	std::vector<Point2D> getWaypointsFromVision();
-	bool checkEmergencyObstacles();
+    std::vector<Point2D> getWaypointsFromVision();
+    LaneInfo getLaneInfoFromVision();
+    bool checkEmergencyObstacles();
+    std::string serializeMask(const cv::Mat& mask);
+    cv::Mat deserializeMask(const std::string& data);
 };
 
 #endif // CONTROLSMANAGER_HPP

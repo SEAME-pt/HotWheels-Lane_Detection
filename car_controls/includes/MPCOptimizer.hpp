@@ -4,12 +4,14 @@
 # include "MPCConfig.hpp"
 # include "CommonTypes.hpp"
 # include <cmath>
-# include <filesystem>
 # include <nlopt.hpp>
 # include <numeric>
 # include <stdexcept>
 # include <string>
 # include <vector>
+# include <experimental/filesystem>
+
+namespace fs = std::experimental::filesystem;
 
 class MPCOptimizer{
 

@@ -9,8 +9,8 @@
 #include <opencv2/cudawarping.hpp>
 
 #include "TensorRTInferencer.hpp"
-#include "../../../ZeroMQ/Subscriber.hpp"
-#include "../../../ZeroMQ/Publisher.hpp"
+#include "../../ZeroMQ/Subscriber.hpp"
+#include "../../ZeroMQ/Publisher.hpp"
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>

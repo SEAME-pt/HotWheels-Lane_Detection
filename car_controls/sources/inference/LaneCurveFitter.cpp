@@ -4,7 +4,7 @@
 #include <map>
 #include <set>
 
-LaneCurveFitter::LaneCurveFitter(float eps, int minSamples, int windows, int laneWidthPx)
+LaneCurveFitter::LaneCurveFitter(float eps, size_t minSamples, int windows, int laneWidthPx)
 	: dbscanEps(eps), dbscanMinSamples(minSamples), numWindows(windows), laneWidthPx(laneWidthPx) {}
 
 std::vector<cv::Point> LaneCurveFitter::extractLanePoints(const cv::Mat& binaryMask) {

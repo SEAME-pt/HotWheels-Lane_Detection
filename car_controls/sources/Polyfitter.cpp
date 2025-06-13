@@ -5,12 +5,12 @@
 #include <cmath>
 #include <numeric>
 #include <iostream>
-#include <filesystem>
 #include <map>
 #include <mlpack/methods/dbscan/dbscan.hpp>
 #include <mlpack/core.hpp>
+#include <experimental/filesystem>
 
-namespace fs = std::filesystem;
+namespace fs = std::experimental::filesystem;
 
 CenterlineResult::CenterlineResult() : valid(false) {}
 Polyfitter::Polyfitter() {}
@@ -27,7 +27,7 @@ std::vector<std::pair<std::string, cv::Mat>> Polyfitter::loadImagesFromFolder(co
 	
 	std::vector<std::string> filenames;
 	for (const auto& entry : fs::directory_iterator(folderPath)) {
-		if (entry.is_regular_file()) {
+		if (fs::is_regular_file(entry.path())) {
 			std::string filename = entry.path().filename().string();
 			std::string ext = entry.path().extension().string();
 			std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);

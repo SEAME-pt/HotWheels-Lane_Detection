@@ -55,6 +55,7 @@ public:
     std::vector<double> interp(const std::vector<double>& xNew, const std::vector<double>& x, const std::vector<double>& y, double leftVal, double rightVal);
     CenterlineResult computeVirtualCenterline(std::vector<Lane>& lanes, int imgWidth, int imgHeight);
     void displayImagesWithPolyfit(const std::vector<std::pair<std::string, cv::Mat>>& images, int cols = 4);
+
 };
 
 #endif // POLYFITTER_HPP

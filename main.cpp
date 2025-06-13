@@ -51,7 +51,7 @@ void print_debug_info(const std::string& text) {
 }
 
 // Placeholder para a função de extração de trajetória central
-std::pair<std::vector<double>, std::vector<double>> extract_center_curve_with_lanes_improved(const cv::Mat& binary_mask) {
+std::pair<std::vector<double>, std::vector<double>> extractCenterCurveWithLanes(const cv::Mat& binary_mask) {
     // Simulação: retorna uma trajetória central simples
     std::vector<double> x, y;
     for (int i = 0; i < 10; ++i) {
@@ -261,7 +261,7 @@ int main() {
                 try {
                     cv::Mat binary_mask = detector.predict(image);
                     if (!binary_mask.empty() && cv::countNonZero(binary_mask) > 0) {
-                        auto center_curve = extract_center_curve_with_lanes_improved(binary_mask);
+                        auto center_curve = extractCenterCurveWithLanes(binary_mask);
                         if (!center_curve.first.empty()) {
                             // Extrair informações da faixa
                             lane_info = extract_lane_info(binary_mask, center_curve);

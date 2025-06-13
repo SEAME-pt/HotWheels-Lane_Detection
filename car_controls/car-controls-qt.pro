@@ -6,12 +6,14 @@ CONFIG += c++17 cmdline
 INCLUDEPATH += \
 	$$PWD/includes \
 	$$PWD/includes/inference
+# Eigen (header-only)
+INCLUDEPATH += /usr/include/eigen3
 
 
 # Application Sources
 SOURCES += \
-	../../ZeroMQ/Publisher.cpp \
-	../../ZeroMQ/Subscriber.cpp \
+	../ZeroMQ/Publisher.cpp \
+	../ZeroMQ/Subscriber.cpp \
 	sources/inference/CameraStreamer.cpp \
 	sources/inference/TensorRTInferencer.cpp \
 	sources/inference/LanePostProcessor.cpp \
@@ -24,9 +26,14 @@ SOURCES += \
 	sources/PeripheralController.cpp \
 	sources/main.cpp
 
+SOURCES += \
+    sources/MPCOptimizer.cpp \
+    sources/MPCPlanner.cpp \
+    sources/Polyfitter.cpp
+
 HEADERS += \
-	../../ZeroMQ/Publisher.hpp \
-	../../ZeroMQ/Subscriber.hpp \
+	../ZeroMQ/Publisher.hpp \
+	../ZeroMQ/Subscriber.hpp \
 	includes/inference/CameraStreamer.hpp \
 	includes/inference/TensorRTInferencer.hpp \
 	includes/inference/IInferencer.hpp \
@@ -41,8 +48,18 @@ HEADERS += \
 	includes/IPeripheralController.hpp \
 	includes/enums.hpp
 
+HEADERS += \
+    includes/CommonTypes.hpp \
+    includes/MPCConfig.hpp \
+    includes/MPCOptimizer.hpp \
+    includes/MPCPlanner.hpp \
+    includes/Polyfitter.hpp
+
 # Common Libraries
 LIBS += -lSDL2 -lrt -lzmq
+# Dependências adicionais
+LIBS += -lnlopt -lmlpack
+LIBS += -lboost_system -lstdc++fs
 
 # Conditionally add paths for cross-compilation
 contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
@@ -51,7 +68,7 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
 
 	message("Building for ARM architecture")
 
-	JETSON_SYSROOT = /home/seame/qtjetson/sysroot
+	JETSON_SYSROOT = /home/michel/qtjetson/sysroot
 
 	# CUDA includes
 	INCLUDEPATH += $${JETSON_SYSROOT}/usr/local/cuda-10.2/targets/aarch64-linux/include

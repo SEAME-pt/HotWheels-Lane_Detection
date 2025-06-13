@@ -113,6 +113,7 @@ TensorRTInferencer::TensorRTInferencer(const std::string& enginePath) :
 
 	initUndistortMaps();  // Initialize undistortion maps for camera calibration
 	cudaStream = cv::cuda::Stream();  // CUDA stream for asynchronous operations
+	
 }
 
 // Clean up allocated GPU resources (device memory, streams)
@@ -329,6 +330,15 @@ void TensorRTInferencer::doInference(const cv::Mat& frame) {
 						cv::Size(frame.cols * 0.5, frame.rows * 0.5),
 						0, 0, cv::INTER_LINEAR, cudaStream);  // Resize for display
 	cudaStream.waitForCompletion();  // Synchronize
+	
+	// std::string serialized_mask = serializeMask(binary_mask_cpu);
+	// Publisher::instance(5556)->publish("binary_mask", serialized_mask);
 
 	Publisher::instance(5556)->publishInferenceFrame("inference_frame", d_resized_mask); //Publish frame to ZeroMQ publisher
+}
+
+std::string TensorRTInferencer::serializeMask(const cv::Mat& mask) {
+    std::vector<uchar> buffer;
+    cv::imencode(".png", mask, buffer);
+    return std::string(buffer.begin(), buffer.end());
 }

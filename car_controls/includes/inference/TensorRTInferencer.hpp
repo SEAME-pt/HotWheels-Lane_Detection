@@ -15,8 +15,8 @@
 #include "LanePostProcessor.hpp"
 #include "LaneCurveFitter.hpp"
 
-#include "../../../ZeroMQ/Subscriber.hpp"
-#include "../../../ZeroMQ/Publisher.hpp"
+#include "../../ZeroMQ/Subscriber.hpp"
+#include "../../ZeroMQ/Publisher.hpp"
 
 class TensorRTInferencer : public IInferencer {
 private:
@@ -63,6 +63,8 @@ private:
 
 	std::vector<char> readEngineFile(const std::string& enginePath);
 	void cleanupResources();
+
+	std::string serializeMask(const cv::Mat& mask);
 
 public:
 	TensorRTInferencer(const std::string& enginePath);

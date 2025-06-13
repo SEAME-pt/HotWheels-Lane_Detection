@@ -17,7 +17,7 @@ public:
 		std::vector<cv::Point2f> c2;
 	};
 
-	LaneCurveFitter(float dbscanEps = 5.0f, int dbscanMinSamples = 20, int numWindows = 20, int laneWidthPx = 300);
+	LaneCurveFitter(float dbscanEps = 5.0f, size_t dbscanMinSamples = 20, int numWindows = 20, int laneWidthPx = 300);
 
 	std::vector<LaneCurve> fitLanes(const cv::Mat& binaryMask);
 	std::optional<CenterlineResult> computeVirtualCenterline(const std::vector<LaneCurve>& lanes, int imgWidth, int imgHeight);

@@ -11,8 +11,8 @@
 #include <NvInfer.h>
 #include <chrono>
 #include "LabelManager.hpp"
-#include "../../../ZeroMQ/Subscriber.hpp"
-#include "../../../ZeroMQ/Publisher.hpp"
+#include "../../ZeroMQ/Subscriber.hpp"
+#include "../../ZeroMQ/Publisher.hpp"
 
 using namespace nvinfer1;
 

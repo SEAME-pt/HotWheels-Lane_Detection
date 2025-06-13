@@ -24,8 +24,8 @@ SOURCES += \
     $$TESTS_PATH/unit/test_CameraStreamer.cpp \
     $$TESTS_PATH/unit/test_LabelManager.cpp \
     $$TESTS_PATH/unit/test_YOLOv5TRT.cpp \
-    ../../ZeroMQ/Publisher.cpp \
-    ../../ZeroMQ/Subscriber.cpp \
+    ../ZeroMQ/Publisher.cpp \
+    ../ZeroMQ/Subscriber.cpp \
     sources/PeripheralController.cpp \
     sources/inference/CameraStreamer.cpp \
     sources/inference/TensorRTInferencer.cpp \
@@ -37,8 +37,8 @@ SOURCES += \
 HEADERS += \
     $$TESTS_PATH/mocks/MockPeripheralController.hpp \
     $$TESTS_PATH/mocks/MockInferencer.hpp \
-    ../../ZeroMQ/Publisher.hpp \
-    ../../ZeroMQ/Subscriber.hpp \
+    ../ZeroMQ/Publisher.hpp \
+    ../ZeroMQ/Subscriber.hpp \
     includes/inference/CameraStreamer.hpp \
     includes/inference/TensorRTInferencer.hpp \
     includes/inference/LanePostProcessor.hpp \

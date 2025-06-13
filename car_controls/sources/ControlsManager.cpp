@@ -40,8 +40,10 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
 	  m_subscriberJoystickObject(nullptr), m_manualControllerThread(nullptr),
 	  m_joystickControlThread(nullptr), m_subscriberJoystickThread(nullptr),
 	  m_cameraStreamerThread(nullptr), m_running(true),
-	  m_mpcPlanner(nullptr), m_autonomousMode(false), m_autonomousControlThread(nullptr)
+	  m_mpcPlanner(nullptr), m_polyfitter(nullptr), 
+	  m_autonomousMode(false), m_autonomousControlThread(nullptr)
 {
+	qDebug() << "[ControlsManager] Inicializado no modo MANUAL";
 
 	// Initialize the joystick controller with callbacks
 	m_manualController = new JoysticksController(
@@ -127,6 +129,7 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
 			}
 		}
 	});
+	m_polyfitter = new Polyfitter();
 	m_subscriberJoystickThread->start();
 }
 
@@ -189,6 +192,9 @@ ControlsManager::~ControlsManager()
 
 	delete m_subscriberJoystickObject;
 	m_subscriberJoystickObject = nullptr;
+
+	delete m_polyfitter;
+    m_polyfitter = nullptr;
 }
 
 /*!
@@ -201,7 +207,23 @@ void ControlsManager::setMode(DrivingMode mode)
 	if (m_currentMode == mode)
 		return;
 
+    DrivingMode previous_mode = m_currentMode;
 	m_currentMode = mode;
+
+	if (mode == DrivingMode::Automatic) {
+        qDebug() << "Switching to AUTONOMOUS mode";
+        std::cout << "Starting autonomous control..." << std::endl;
+        startAutonomousControl();
+    } else {
+        qDebug() << "Switching to MANUAL mode";
+        stopAutonomousControl();
+        
+        // Parada suave se vinha do automático
+        if (previous_mode == DrivingMode::Automatic) {
+            m_engineController.set_speed(0);
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+    }
 }
 
 void ControlsManager::startAutonomousControl() {
@@ -216,70 +238,16 @@ void ControlsManager::startAutonomousControl() {
     m_autonomousControlThread->start();
 }
 
-void ControlsManager::autonomousControlLoop() {
-    const double CONTROL_RATE = 20.0; // Hz
-    const double CONTROL_PERIOD = 1.0 / CONTROL_RATE;
-    
-    auto last_control_time = std::chrono::steady_clock::now();
-    
-    while (m_autonomousMode && m_running) {
-        auto now = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration<double>(now - last_control_time).count();
-        
-        if (elapsed < CONTROL_PERIOD) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            continue;
-        }
-        
-        last_control_time = now;
-        
-        try {
-            // 1. Obter dados de percepção via ZeroMQ
-            VehicleState current_state = getCurrentVehicleState();
-            std::vector<Point2D> waypoints = getWaypointsFromVision();
-            LaneInfo lane_info = getLaneInfoFromVision();
-            
-            // 2. Verificar obstáculos críticos
-            if (checkEmergencyObstacles()) {
-                m_engineController.set_speed(0);
-                continue;
-            }
-            
-            // 3. Calcular controle MPC
-            ControlCommand control = m_mpcPlanner->plan(current_state, waypoints, &lane_info);
-            
-            // 4. Aplicar controles com limites de segurança
-            int throttle_pct = static_cast<int>(std::clamp(control.throttle * 100, 0.0, 50.0));
-            int steer_angle = static_cast<int>(std::clamp(control.steer * 45, -45.0, 45.0));
-            
-            m_engineController.set_speed(throttle_pct);
-            m_engineController.set_steering(steer_angle);
-            
-        } catch (const std::exception& e) {
-            qDebug() << "Autonomous control error:" << e.what();
-            m_engineController.set_speed(0);
-        }
-    }
-}
-
-/*!
- * @brief Stops the autonomous control mode safely.
- * @details This function safely stops the autonomous control thread and 
- * cleans up associated resources. It sets the autonomous mode flag to false,
- * waits for the thread to finish, and applies emergency braking.
- */
 void ControlsManager::stopAutonomousControl() {
-    if (!m_autonomousMode) return; // Already stopped
+    if (!m_autonomousMode) return;
     
     qDebug() << "Stopping autonomous control...";
     
-    // Set flag to stop the autonomous loop
     m_autonomousMode = false;
     
-    // Wait for autonomous thread to finish
     if (m_autonomousControlThread) {
         m_autonomousControlThread->quit();
-        if (!m_autonomousControlThread->wait(2000)) { // Wait up to 2 seconds
+        if (!m_autonomousControlThread->wait(2000)) {
             qDebug() << "Warning: Autonomous thread did not finish gracefully";
             m_autonomousControlThread->terminate();
             m_autonomousControlThread->wait(1000);
@@ -288,61 +256,140 @@ void ControlsManager::stopAutonomousControl() {
         m_autonomousControlThread = nullptr;
     }
     
-    // Clean up MPC planner
     if (m_mpcPlanner) {
         delete m_mpcPlanner;
         m_mpcPlanner = nullptr;
     }
     
-    // Apply emergency stop
     m_engineController.set_speed(0);
     m_engineController.set_steering(0);
     
     qDebug() << "Autonomous control stopped successfully";
 }
 
+void ControlsManager::autonomousControlLoop() {
+    const double CONTROL_RATE = 20.0; // Hz
+    const double CONTROL_PERIOD = 1.0 / CONTROL_RATE;
+    auto last_control_time = std::chrono::steady_clock::now();
+    while (m_autonomousMode && m_running) {
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration<double>(now - last_control_time).count();
+        if (elapsed < CONTROL_PERIOD) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            continue;
+        }
+        last_control_time = now;
+        std::cout << "Running autonomous control loop..." << std::endl;
+        try {
+            // Mostra feedback visual da visão
+            showVisionDebug();
+            // 1. Obter dados de percepção
+            VehicleState current_state = getCurrentVehicleState();
+            std::vector<Point2D> waypoints = getWaypointsFromVision();
+            LaneInfo lane_info = getLaneInfoFromVision();
+            // 2. Verificar obstáculos críticos
+            if (checkEmergencyObstacles()) {
+                m_engineController.set_speed(0);
+                continue;
+            }
+            // 3. Calcular controle MPC
+            ControlCommand control = m_mpcPlanner->plan(current_state, waypoints, &lane_info);
+            // 4. Aplicar controles com limites de segurança
+            int throttle_pct = static_cast<int>(std::clamp(control.throttle * 100, 0.0, 50.0));
+            int steer_angle = static_cast<int>(std::clamp(control.steer * 45, -45.0, 45.0));
+            std::cout << "Throttle: " << throttle_pct << "%, Steering: " << steer_angle << " degrees" << std::endl;
+            m_engineController.set_speed(throttle_pct);
+            m_engineController.set_steering(steer_angle);
+        } catch (const std::exception& e) {
+            qDebug() << "Autonomous control error:" << e.what();
+            m_engineController.set_speed(0);
+        }
+    }
+}
+
 // Adicionar ao ControlsManager
 VehicleState ControlsManager::getCurrentVehicleState() {
-    // Implementar odometria baseada nos encoders dos motores
     static VehicleState state{0.0, 0.0, 0.0, 0.0};
     
-    // Atualizar baseado no histórico de comandos
-    // Usar IMU se disponível
+    // Implementação básica - pode ser melhorada com odometria real
+    static auto last_time = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    double dt = std::chrono::duration<double>(now - last_time).count();
+    last_time = now;
+    
+    // Simular movimento baseado nos controles aplicados
+    state.x += state.velocity * std::cos(state.yaw) * dt;
+    state.y += state.velocity * std::sin(state.yaw) * dt;
+    state.velocity = 2.0; // Velocidade simulada
+    
     return state;
 }
 
 std::vector<Point2D> ControlsManager::getWaypointsFromVision() {
     std::vector<Point2D> waypoints;
-    
-    // Subscriber para dados de segmentação
+
     Subscriber vision_sub;
     vision_sub.connect("tcp://localhost:5556");
-    
+
     try {
-        // Receber dados da linha central processada
-        std::string lane_data = vision_sub.receive("centerline_waypoints");
-        
-        // Parse dos waypoints (formato: "x1,y1;x2,y2;...")
-        std::istringstream ss(lane_data);
-        std::string point;
-        
-        while (std::getline(ss, point, ';')) {
-            size_t comma = point.find(',');
-            if (comma != std::string::npos) {
-                double x = std::stod(point.substr(0, comma));
-                double y = std::stod(point.substr(comma + 1));
-                waypoints.emplace_back(x, y);
+        zmq::message_t topic_msg;
+        zmq::message_t data_msg;
+        vision_sub.getSocket().recv(&topic_msg);
+        vision_sub.getSocket().recv(&data_msg);
+
+        std::string topic(static_cast<char*>(topic_msg.data()), topic_msg.size());
+        if (topic == "binary_mask") {
+            std::string mask_data(static_cast<char*>(data_msg.data()), data_msg.size());
+            cv::Mat binary_mask = deserializeMask(mask_data);
+
+            // 1. Extraia as faixas
+            auto lanes = m_polyfitter->fitLanesInImage(binary_mask);
+
+            // 2. Calcule a centerline virtual
+            CenterlineResult result = m_polyfitter->computeVirtualCenterline(lanes, binary_mask.cols, binary_mask.rows);
+
+            // 3. Use result.blend como waypoints
+            if (result.valid) {
+                waypoints = result.blend;
             }
         }
-        
     } catch (...) {
         // Fallback: waypoints retos à frente
         for (int i = 1; i <= 10; ++i) {
             waypoints.emplace_back(i * 2.0, 0.0);
         }
     }
-    
+
     return waypoints;
+}
+
+
+LaneInfo ControlsManager::getLaneInfoFromVision() {
+    Subscriber vision_sub;
+    vision_sub.connect("tcp://localhost:5556");
+    
+    try {
+        zmq::message_t topic_msg;
+        zmq::message_t data_msg;
+        vision_sub.getSocket().recv(&topic_msg);
+        vision_sub.getSocket().recv(&data_msg);
+
+        std::string topic(static_cast<char*>(topic_msg.data()), topic_msg.size());
+        if (topic == "binary_mask") {
+            std::string mask_data(static_cast<char*>(data_msg.data()), data_msg.size());
+            cv::Mat binary_mask = deserializeMask(mask_data);
+            // Use Polyfitter's fitLanesInImage and computeVirtualCenterline
+            auto lanes = m_polyfitter->fitLanesInImage(binary_mask);
+            auto centerline = m_polyfitter->computeVirtualCenterline(lanes, binary_mask.cols, binary_mask.rows);
+            // You may want to extract LaneInfo from the centerline or lanes if needed
+            // For now, just return a default LaneInfo if not implemented
+            // TODO: Implement a method to extract LaneInfo from lanes/centerline if needed
+            return LaneInfo(0.0, 0.0);
+        }
+    } catch (...) {
+        return LaneInfo(0.0, 0.0);
+    }
+    return LaneInfo(0.0, 0.0); // fallback
 }
 
 bool ControlsManager::checkEmergencyObstacles() {
@@ -350,9 +397,78 @@ bool ControlsManager::checkEmergencyObstacles() {
     obstacle_sub.connect("tcp://localhost:5557");
     
     try {
-        std::string obstacle_data = obstacle_sub.receive("emergency_stop");
-        return (obstacle_data == "true");
+        zmq::message_t topic_msg;
+        zmq::message_t data_msg;
+        obstacle_sub.getSocket().recv(&topic_msg); // CORRIGIDO: obstacle_sub
+        obstacle_sub.getSocket().recv(&data_msg);
+        
+        std::string topic(static_cast<char*>(topic_msg.data()), topic_msg.size());
+        if (topic == "emergency_stop") {
+            std::string obstacle_data(static_cast<char*>(data_msg.data()), data_msg.size());
+            return (obstacle_data == "true");
+        }
     } catch (...) {
         return false;
     }
+    return false; // Garante retorno em todos os paths
 }
+
+std::string ControlsManager::serializeMask(const cv::Mat& mask) {
+    std::vector<uchar> buffer;
+    cv::imencode(".png", mask, buffer);
+    return std::string(buffer.begin(), buffer.end());
+}
+
+cv::Mat ControlsManager::deserializeMask(const std::string& data) {
+    std::vector<uchar> buffer(data.begin(), data.end());
+    return cv::imdecode(buffer, cv::IMREAD_GRAYSCALE);
+}
+
+void ControlsManager::showVisionDebug() {
+    Subscriber vision_sub;
+    vision_sub.connect("tcp://localhost:5556");
+    try {
+        zmq::message_t topic_msg, data_msg;
+        vision_sub.getSocket().recv(&topic_msg);
+        vision_sub.getSocket().recv(&data_msg);
+
+        std::string topic(static_cast<char*>(topic_msg.data()), topic_msg.size());
+        if (topic == "binary_mask") {
+            std::string mask_data(static_cast<char*>(data_msg.data()), data_msg.size());
+            cv::Mat binary_mask = deserializeMask(mask_data);
+
+            // Visualização da máscara
+            cv::Mat vis;
+            cv::cvtColor(binary_mask, vis, cv::COLOR_GRAY2BGR);
+
+            // Extraia lanes e centerline
+            auto lanes = m_polyfitter->fitLanesInImage(binary_mask);
+            for (const auto& lane : lanes) {
+                for (size_t i = 1; i < lane.curve.size(); ++i) {
+                    cv::line(vis, cv::Point(lane.curve[i-1].x, lane.curve[i-1].y),
+                             cv::Point(lane.curve[i].x, lane.curve[i].y),
+                             cv::Scalar(0, 255, 0), 2);
+                }
+            }
+            auto centerline = m_polyfitter->computeVirtualCenterline(lanes, binary_mask.cols, binary_mask.rows);
+            if (centerline.valid) {
+                for (size_t i = 1; i < centerline.blend.size(); ++i) {
+                    cv::line(vis, cv::Point(centerline.blend[i-1].x, centerline.blend[i-1].y),
+                             cv::Point(centerline.blend[i].x, centerline.blend[i].y),
+                             cv::Scalar(0, 128, 255), 2);
+                }
+            }
+
+            // Opcional: desenhar waypoints do MPC (se disponíveis)
+            // for (const auto& pt : mpc_waypoints) {
+            //     cv::circle(vis, cv::Point(pt.x, pt.y), 3, cv::Scalar(255,0,0), -1);
+            // }
+
+            cv::imshow("Lane Detection Debug", vis);
+            cv::waitKey(1);
+        }
+    } catch (...) {
+        // Ignore errors
+    }
+}
+

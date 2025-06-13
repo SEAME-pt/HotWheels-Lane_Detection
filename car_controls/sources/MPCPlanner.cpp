@@ -21,34 +21,41 @@ MPCPlanner::~MPCPlanner(void) {
 MPCPlanner::MPCPlanner(const MPCConfig& config, const MPCOptimizer& optimizer)
 	: _config(config), _optimizer(optimizer) {}
 
-ControlCommand MPCPlanner::plan(const VehicleState& current_state,
-							  const std::vector<Eigen::Vector2d>& global_waypoints,
-							  const LaneInfo* lane_info) {
-	// Validação básica
-	if (global_waypoints.empty()) {
-		throw std::invalid_argument("Waypoints list cannot be empty");
-	}
-
-	// Prepara referência no frame local
-	std::vector<Point2D> local_ref = _prepareReference(current_state, global_waypoints);
-
-	// Chama o otimizador
-	auto [throttle, steer] = _optimizer.solve(
-		current_state.x,
-		current_state.y,
-		current_state.yaw,
-		std::max(3.0, current_state.velocity), // Garante velocidade mínima
-		local_ref,
-		lane_info
-	);
-
-	return {throttle, steer};
+ControlCommand MPCPlanner::plan(const VehicleState& current_state, 
+                               const std::vector<Point2D>& global_waypoints, 
+                               const LaneInfo* lane_info) {
+    if (global_waypoints.empty()) {
+        throw std::invalid_argument("Waypoints list cannot be empty");
+    }
+    // Convert Point2D to Eigen::Vector2d
+    std::vector<Eigen::Vector2d> global_waypoints_eigen;
+    global_waypoints_eigen.reserve(global_waypoints.size());
+    for (const auto& pt : global_waypoints) {
+        global_waypoints_eigen.emplace_back(pt.x, pt.y);
+    }
+    // Get local reference in Eigen format
+    std::vector<Eigen::Vector2d> local_ref_eigen = _prepareReference(current_state, global_waypoints_eigen);
+    // Convert local_ref_eigen to std::vector<Point2D>
+    std::vector<Point2D> local_ref;
+    local_ref.reserve(local_ref_eigen.size());
+    for (const auto& pt : local_ref_eigen) {
+        local_ref.emplace_back(pt.x(), pt.y());
+    }
+    auto [throttle, steer] = _optimizer.solve(
+        current_state.x,
+        current_state.y,
+        current_state.yaw,
+        std::max(3.0, current_state.velocity),
+        local_ref,
+        lane_info
+    );
+    return ControlCommand{throttle, steer};
 }
 
-std::vector<Point2D> MPCPlanner::_prepareReference(const VehicleState& state,
+std::vector<Eigen::Vector2d> MPCPlanner::_prepareReference(const VehicleState& state,
 			const std::vector<Eigen::Vector2d>& global_waypoints) const {
 	
-	std::vector<Point2D> local_points;
+	std::vector<Eigen::Vector2d> local_points;
 	const double cos_yaw = cos(-state.yaw);
 	const double sin_yaw = sin(-state.yaw);
 
