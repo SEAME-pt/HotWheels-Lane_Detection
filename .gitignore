@@ -7,3 +7,5 @@ nlopt-2.7.1*
 **/build/
 **/.*
 **.o
+!**/.gitignore
+!**/.deepsource.toml
