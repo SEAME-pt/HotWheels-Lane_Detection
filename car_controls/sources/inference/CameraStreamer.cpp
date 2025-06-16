@@ -3,10 +3,10 @@
 
 // Constructor: initializes camera capture, inference reference, and settings
 CameraStreamer::CameraStreamer(double scale)
-	: scale_factor(scale), m_publisherFrameObject(nullptr), m_running(true) {
+	: scale_factor(scale), m_running(true), m_publisherFrameObject(nullptr) {
 
-	segmentationInferencer = std::make_shared<TensorRTInferencer>("/home/hotweels/dev/model_loader/models/model.engine");
-	yoloInferencer = std::make_shared<YOLOv5TRT>("/home/hotweels/cam_calib/models/yolov5m_updated.engine", "/home/hotweels/cam_calib/models/labels.txt");
+	// Criar inferenciador ONNX para segmentação (modelo de exemplo)
+	segmentationInferencer = std::make_shared<ONNXInferencer>("/home/hotweels/dev/model_loader/models/model.onnx");
 
 	// Define GStreamer pipeline for CSI camera
 	std::string pipeline = "nvarguscamerasrc sensor-mode=4 ! "
@@ -41,12 +41,12 @@ CameraStreamer::~CameraStreamer() {
 		cap.release(); // Release camera
 	}
 
-	cudaDeviceSynchronize();  // Ensure all CUDA operations are complete
-
-	if (cuda_resource) {
-		cudaGraphicsUnregisterResource(cuda_resource);  // Unregister CUDA graphics resource
-		cuda_resource = nullptr;
-	}
+	// CUDA operations removed for compatibility
+	// cudaDeviceSynchronize();
+	// if (cuda_resource) {
+	//     cudaGraphicsUnregisterResource(cuda_resource);
+	//     cuda_resource = nullptr;
+	// }
 
 	delete m_publisherFrameObject;
 	m_publisherFrameObject = nullptr;
@@ -76,7 +76,9 @@ void CameraStreamer::detectionWorker() {
 	while (m_running) {
 		cv::Mat frame;
 		if (detectionBuffer.getFrame(frame)) {
-			yoloInferencer->process_image(frame);
+			// TODO: Implementar detecção YOLO com ONNX
+			// yoloInferencer->process_image(frame);
+			std::cout << "[CameraStreamer] Detecção YOLO temporariamente desabilitada" << std::endl;
 		} else {
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 		}
@@ -99,7 +101,7 @@ void CameraStreamer::captureLoop() {
 	cv::Mat frame;
 
 	while (m_running) {
-		auto frame_start = std::chrono::high_resolution_clock::now();
+		// auto frame_start = std::chrono::high_resolution_clock::now();  // Para medição de performance se necessário
 
 		for (int i = 0; i < framesToSkip; ++i) {
 			cap.grab();  // Grab frames without decoding
@@ -131,11 +133,12 @@ void CameraStreamer::stop() {
 	m_running = false;
 
 	// Wait for any CUDA operations to finish
-	try {
-		cudaDeviceSynchronize();
-	} catch (const std::exception& e) {
-		std::cerr << "CUDA sync error in stop(): " << e.what() << std::endl;
-	}
+	// CUDA operations removed for compatibility
+	// try {
+	//     cudaDeviceSynchronize();
+	// } catch (const std::exception& e) {
+	//     std::cerr << "CUDA sync error in stop(): " << e.what() << std::endl;
+	// }
 	std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
 	std::cout << "[CameraStreamer] Shutdown complete." << std::endl;

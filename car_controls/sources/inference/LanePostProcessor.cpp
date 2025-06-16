@@ -1,5 +1,5 @@
 #include "../../includes/inference/LanePostProcessor.hpp"
-#include <opencv2/cudaarithm.hpp>
+// #include <opencv2/cudaarithm.hpp>  // Not available in this OpenCV build
 #include <cmath>
 #include <numeric>
 
@@ -11,11 +11,14 @@ LanePostProcessor::LanePostProcessor(int minArea, int minLength, float angleThre
 
 cv::cuda::GpuMat LanePostProcessor::process(const cv::cuda::GpuMat& rawMaskGpu) {
 	cv::cuda::GpuMat binaryMaskGpu;
-	cv::cuda::threshold(rawMaskGpu, binaryMaskGpu, 0.5, 255.0, cv::THRESH_BINARY);
-	binaryMaskGpu.convertTo(binaryMaskGpu, CV_8U);
+	// Use CPU threshold since CUDA threshold is not available in this OpenCV build
+	cv::Mat rawMaskCpu, binaryMaskCpu;
+	rawMaskGpu.download(rawMaskCpu);
+	cv::threshold(rawMaskCpu, binaryMaskCpu, 0.5, 255.0, cv::THRESH_BINARY);
+	binaryMaskCpu.convertTo(binaryMaskCpu, CV_8U);
+	binaryMaskGpu.upload(binaryMaskCpu);
 
-	cv::Mat binaryMask;
-	binaryMaskGpu.download(binaryMask); // CPU copy for contour analysis
+	cv::Mat binaryMask = binaryMaskCpu; // Use the CPU version directly
 
 	std::vector<LaneInfo> initialLanes = extractLaneInfo(binaryMask, false, true);
 

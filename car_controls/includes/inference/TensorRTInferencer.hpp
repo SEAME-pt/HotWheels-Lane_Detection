@@ -4,12 +4,12 @@
 #include <vector>
 
 #include <opencv2/opencv.hpp>
-#include <opencv2/cudaimgproc.hpp>
-#include <opencv2/cudawarping.hpp>
+// #include <opencv2/cudaimgproc.hpp>  // Not available in this OpenCV build
+// #include <opencv2/cudawarping.hpp>  // Not available in this OpenCV build
 
-#include <NvInfer.h>
-#include <cuda_runtime_api.h>
-#include <cuda_fp16.h>
+// #include <NvInfer.h>            // Not available without TensorRT SDK
+// #include <cuda_runtime_api.h>   // Not available without CUDA SDK
+// #include <cuda_fp16.h>          // Not available without CUDA SDK
 
 #include "IInferencer.hpp"
 #include "LanePostProcessor.hpp"

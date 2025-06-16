@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <Eigen/Dense>
+#include <cstddef>
 #include "MPCOptimizer.hpp"
 
 class MPCPlanner{

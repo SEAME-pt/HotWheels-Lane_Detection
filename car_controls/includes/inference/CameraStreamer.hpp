@@ -6,22 +6,22 @@
 #include <chrono>
 #include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>
-#include <opencv2/cudawarping.hpp>
+// #include <opencv2/cudawarping.hpp>  // Not available in this OpenCV build
 
-#include "TensorRTInferencer.hpp"
+#include "ONNXInferencer.hpp"
 #include "../../ZeroMQ/Subscriber.hpp"
 #include "../../ZeroMQ/Publisher.hpp"
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
-#include <cuda_gl_interop.h>
+// #include <cuda_gl_interop.h>  // Not available without CUDA
 
 #include <condition_variable>
 #include <mutex>
 #include <queue>
 
 #include "IInferencer.hpp"
-#include "../objectDetection/YOLOv5TRT.hpp"
+// #include "objectDetection/YOLOv5TRT.hpp"  // Temporarily disabled due to TensorRT dependency
 
 class FrameBufferSegmentation {
 public:
@@ -79,14 +79,14 @@ private:
 	cv::VideoCapture cap;
 	double scale_factor;
 
-	cudaGraphicsResource* cuda_resource;
+	// cudaGraphicsResource* cuda_resource;  // Removed for compatibility
 
 	bool m_running;
 
 	Publisher *m_publisherFrameObject;
 
-	std::shared_ptr<TensorRTInferencer> segmentationInferencer;
-	std::shared_ptr<YOLOv5TRT> yoloInferencer;
+	std::shared_ptr<ONNXInferencer> segmentationInferencer;
+	// std::shared_ptr<YOLOv5TRT> yoloInferencer;  // TODO: Implementar versão ONNX
 
 	FrameBufferSegmentation segmentationBuffer;
 	FrameBufferDetection detectionBuffer;

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <opencv2/opencv.hpp>
-#include <opencv2/cudaimgproc.hpp>
+// #include <opencv2/cudaimgproc.hpp>  // Not available in this OpenCV build
 #include <vector>
 
 class LanePostProcessor {
