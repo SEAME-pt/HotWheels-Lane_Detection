@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "name": "linux-clang-x64",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/car_controls/includes/**",
+                "${workspaceFolder}/ZeroMQ/**",
+                "/usr/include/opencv4",
+                "/usr/include/x86_64-linux-gnu/qt5/QtCore",
+                "/usr/include/x86_64-linux-gnu/qt5",
+                "/usr/include/eigen3"
+            ],
+            "compilerPath": "/usr/bin/cc",
+            "cStandard": "${default}",
+            "cppStandard": "${default}",
+            "intelliSenseMode": "linux-clang-x64",
+            "compilerArgs": [
+                ""
+            ]
+        }
+    ],
+    "version": 4
+}
