@@ -1,4 +1,4 @@
-#include "../../includes/objectDetection/YOLOv5TRT.hpp"
+#include "YOLOv5TRT.hpp"
 
 std::string YOLOv5TRT::lastClassName = "";
 std::chrono::steady_clock::time_point YOLOv5TRT::lastNotificationTime = std::chrono::steady_clock::now();

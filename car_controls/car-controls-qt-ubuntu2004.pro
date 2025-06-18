@@ -5,15 +5,20 @@ CONFIG += c++17 cmdline
 # Include Paths (explicit inheritance from root)
 INCLUDEPATH += \
 	$$PWD/includes \
-	$$PWD/includes/inference
+	$$PWD/includes/inference \
+	$$PWD/includes/objectDetection \
 
+INCLUDEPATH += $$PWD/../ZeroMQ
 
 # Application Sources
 SOURCES += \
-	../../ZeroMQ/Publisher.cpp \
-	../../ZeroMQ/Subscriber.cpp \
+	../ZeroMQ/Publisher.cpp \
+	../ZeroMQ/Subscriber.cpp \
 	sources/inference/CameraStreamer.cpp \
+	# sources/inference/ONNXInferencer.cpp \
 	sources/inference/TensorRTInferencer.cpp \
+	sources/inference/KerasInferencer.cpp \
+	sources/inference/InferenceManager.cpp \
 	sources/inference/LanePostProcessor.cpp \
 	sources/inference/LaneCurveFitter.cpp \
 	sources/objectDetection/LabelManager.cpp \
@@ -24,11 +29,19 @@ SOURCES += \
 	sources/PeripheralController.cpp \
 	sources/main.cpp
 
+SOURCES += \
+    sources/MPCOptimizer.cpp \
+    sources/MPCPlanner.cpp \
+    sources/Polyfitter.cpp
+
 HEADERS += \
-	../../ZeroMQ/Publisher.hpp \
-	../../ZeroMQ/Subscriber.hpp \
+	../ZeroMQ/Publisher.hpp \
+	../ZeroMQ/Subscriber.hpp \
 	includes/inference/CameraStreamer.hpp \
 	includes/inference/TensorRTInferencer.hpp \
+	# includes/inference/ONNXInferencer.hpp \
+	includes/inference/KerasInferencer.hpp \
+	includes/inference/InferenceManager.hpp \
 	includes/inference/IInferencer.hpp \
 	includes/inference/LanePostProcessor.hpp \
 	includes/inference/LaneCurveFitter.hpp \
@@ -41,8 +54,18 @@ HEADERS += \
 	includes/IPeripheralController.hpp \
 	includes/enums.hpp
 
+HEADERS += \
+    includes/CommonTypes.hpp \
+    includes/MPCConfig.hpp \
+    includes/MPCOptimizer.hpp \
+    includes/MPCPlanner.hpp \
+    includes/Polyfitter.hpp
+
 # Common Libraries
 LIBS += -lSDL2 -lrt -lzmq
+# Dependências adicionais
+LIBS += -lnlopt -lmlpack
+LIBS += -lboost_system -lstdc++fs
 
 # Conditionally add paths for cross-compilation
 contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
@@ -84,7 +107,7 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
 	# TensorRT, CUDA, OpenCV
 	LIBS += -lcudart -lnvinfer
 	LIBS += -lopencv_core -lopencv_imgproc -lopencv_imgcodecs -lopencv_videoio -lopencv_highgui -lopencv_calib3d
-	LIBS += -lopencv_cudaarithm -lopencv_cudawarping -lopencv_cudaimgproc -lopencv_cudacodec
+	LIBS += -lopencv_cudaarithm -lopencv_cudawarping -lopencv_cudaimgproc -lopencv_cudacodec -lopencv_dnn
 	LIBS += -lcublasLt -llapack -lblas
 	LIBS += -lnvmedia -lnvdla_compiler
 
@@ -98,3 +121,4 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
 	QMAKE_LFLAGS += -Wl,-rpath-link,/usr/local/lib
 	QMAKE_LFLAGS += -Wl,-rpath-link,/usr/lib/aarch64-linux-gnu/tegra
 }
+# QMAKE_CXXFLAGS += -Wall -Werror -Wextra -pedantic

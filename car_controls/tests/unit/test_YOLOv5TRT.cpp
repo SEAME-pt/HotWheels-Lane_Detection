@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "../../includes/objectDetection/YOLOv5TRT.hpp"
+#include "YOLOv5TRT.hpp"
 
 class YOLOv5TRT_Testable : public YOLOv5TRT {
 public:

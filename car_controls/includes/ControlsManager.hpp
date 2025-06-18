@@ -17,9 +17,12 @@
 
 #include "EngineController.hpp"
 #include "JoysticksController.hpp"
-#include "inference/CameraStreamer.hpp"
-#include "ZeroMQ/Subscriber.hpp"
-#include "ZeroMQ/Publisher.hpp"
+#include "MPCPlanner.hpp"
+#include "Polyfitter.hpp"
+#include <atomic>
+#include "CameraStreamer.hpp"
+#include "Subscriber.hpp"
+#include "Publisher.hpp"
 #include <QObject>
 #include <QThread>
 #include <QProcess>
@@ -40,12 +43,12 @@ private:
 	CameraStreamer *m_cameraStreamerObject;
 
 	std::atomic<bool> m_running;
+	QThread *m_cameraStreamerThread;
 
 	QThread *m_manualControllerThread;
 	QThread *m_joystickControlThread;
 
 	QThread *m_subscriberJoystickThread;
-	QThread *m_cameraStreamerThread;
 	MPCPlanner *m_mpcPlanner;
 	Polyfitter *m_polyfitter;
 	std::atomic<bool> m_autonomousMode;

@@ -52,7 +52,7 @@ std::vector<int> LaneCurveFitter::dbscanCluster(const std::vector<cv::Point>& po
 				neighbors.push_back(j);
 		}
 
-		if (neighbors.size() < dbscanMinSamples)
+		if (neighbors.size() < static_cast<size_t>(dbscanMinSamples))
 			continue;
 
 		labels[i] = clusterId;
@@ -72,7 +72,7 @@ std::vector<int> LaneCurveFitter::dbscanCluster(const std::vector<cv::Point>& po
 						currentNeighbors.push_back(j);
 				}
 
-				if (currentNeighbors.size() >= dbscanMinSamples) {
+				if (currentNeighbors.size() >= static_cast<size_t>(dbscanMinSamples)) {
 					seeds.insert(currentNeighbors.begin(), currentNeighbors.end());
 				}
 			}

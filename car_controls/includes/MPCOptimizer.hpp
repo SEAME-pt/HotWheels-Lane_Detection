@@ -20,6 +20,7 @@ private:
   std::vector<double> _current_state;
   std::vector<Point2D> _current_reference;
   const LaneInfo *_current_lane_info;
+  std::vector<double> _current_poly_coeffs; // Add this line
 
 public:
   MPCOptimizer(void);

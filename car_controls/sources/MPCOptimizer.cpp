@@ -1,4 +1,5 @@
 #include "MPCOptimizer.hpp"
+#include "Polyfitter.hpp"
 
 MPCOptimizer::MPCOptimizer(void) {
   MPCConfig mpc_config;
@@ -34,37 +35,20 @@ static double costWrapper(unsigned n, const double *x, double *grad,
 std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0, double v0,
                                              const std::vector<Point2D>& reference,
                                              const LaneInfo* lane_info) {
-    // Calcular polinômio da trajetória de referência
-    std::vector<double> ref_x, ref_y;
-    for (const auto& pt : reference) {
-        ref_x.push_back(pt.x);
-        ref_y.push_back(pt.y);
-    }
-    // Ajuste polinomial y = f(x)
-    std::vector<double> poly_coeffs;
-    if (ref_x.size() >= 2) {
-        // Use Polyfitter ou implemente polyfit aqui
-        // poly_coeffs = Polyfitter::polyfit(ref_x, ref_y, 2);
-        // Para simplificação, suponha polyfit já disponível
-    }
+    // Calcular polinômio da trajetória de referência usando Polyfitter
+    Polyfitter polyfitter;
+    std::vector<double> poly_coeffs = polyfitter.getPolynomialCoeffs(reference);
 
     // Calcular cte e epsi iniciais
-    double f0 = 0.0, psides0 = 0.0;
+    double cte0 = 0.0, epsi0 = 0.0;
     if (!poly_coeffs.empty()) {
-        f0 = 0.0;
-        for (size_t i = 0; i < poly_coeffs.size(); ++i)
-            f0 += poly_coeffs[i] * std::pow(x0, poly_coeffs.size() - 1 - i);
-        double df0 = 0.0;
-        for (size_t i = 0; i < poly_coeffs.size() - 1; ++i)
-            df0 += (poly_coeffs.size() - 1 - i) * poly_coeffs[i] * std::pow(x0, poly_coeffs.size() - 2 - i);
-        psides0 = std::atan(df0);
+        cte0 = polyfitter.calculateCTE(poly_coeffs, x0, y0);
+        epsi0 = polyfitter.calculateEPSI(poly_coeffs, x0, yaw0);
     }
-    double cte0 = f0 - y0;
-    double epsi0 = yaw0 - psides0;
 
     // Tratar latência
-    double latency = 0.1; // 100ms típico
-    double steer0 = 0.0, throttle0 = 0.0; // Use último comando se disponível
+    double latency = 0.1;
+    double steer0 = 0.0, throttle0 = 0.0;
     std::vector<double> state_with_latency = _predictStateWithLatency(x0, y0, yaw0, v0, throttle0, steer0, latency);
     // Adicionar cte e epsi ao estado
     state_with_latency.push_back(cte0);
@@ -73,6 +57,7 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
     _current_state = state_with_latency;
     _current_reference = reference;
     _current_lane_info = lane_info;
+    _current_poly_coeffs = poly_coeffs; // Store coefficients
     
     // Configuração do otimizador (melhor para MPC)
     nlopt::opt optimizer(nlopt::LD_SLSQP, 2 * MPCConfig::horizon); // SLSQP é melhor para MPC
@@ -168,8 +153,8 @@ double MPCOptimizer::_costFunction(const std::vector<double>& u,
     // Estado inicial
     double x = state[0], y = state[1], yaw = state[2], v = state[3], cte = state[4], epsi = state[5];
 
-  double curvature = _calculatePathCurvature(reference);
-  bool is_curve = std::abs(curvature) > 0.05;
+    double curvature = _calculatePathCurvature(reference);
+    bool is_curve = std::abs(curvature) > 0.05;
 
     // Seleção de pesos baseada na curvatura
     double w_cte, w_etheta, w_velocity, w_throttle, w_steer, target_speed;
@@ -193,8 +178,8 @@ double MPCOptimizer::_costFunction(const std::vector<double>& u,
     for (int t = 0; t < MPCConfig::horizon; ++t) {
         double throttle = u[2*t];
         double steer = u[2*t+1];
-        // Modelo 6 estados
-        _kinematicModel(x, y, yaw, v, cte, epsi, throttle, steer, poly_coeffs);
+        // Modelo 6 estados usando coeficientes armazenados
+        _kinematicModel(x, y, yaw, v, cte, epsi, throttle, steer, _current_poly_coeffs);
         // Penalizar cte e epsi explicitamente
         cost += w_cte * cte * cte;
         cost += w_etheta * epsi * epsi;
@@ -286,10 +271,14 @@ std::vector<double> MPCOptimizer::_predictStateWithLatency(double x0, double y0,
                                                           double throttle, double steer, double latency) const {
     // Prever estado futuro considerando latência
     double x = x0, y = y0, yaw = yaw0, v = v0;
+    double cte = 0.0, epsi = 0.0; // Para compatibilidade com novo modelo
     double steps = latency / MPCConfig::dt;
     
+    // Use coeficientes vazios para predição de latência (simplificação)
+    std::vector<double> empty_coeffs;
+    
     for (int i = 0; i < (int)steps; ++i) {
-        _kinematicModel(x, y, yaw, v, throttle, steer);
+        _kinematicModel(x, y, yaw, v, cte, epsi, throttle, steer, empty_coeffs);
     }
     
     return {x, y, yaw, v};

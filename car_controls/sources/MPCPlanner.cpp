@@ -1,4 +1,5 @@
 #include "MPCPlanner.hpp"
+#include "Polyfitter.hpp"
 
 MPCPlanner::MPCPlanner(void) {}
 
@@ -43,28 +44,15 @@ ControlCommand MPCPlanner::plan(const VehicleState &current_state,
   // Garantir velocidade mínima para estabilidade
   double current_velocity = std::max(0.5, current_state.velocity);
   
-  // Calcular polinômio da referência local
-  std::vector<double> ref_x, ref_y;
-  for (const auto& pt : local_ref) {
-    ref_x.push_back(pt.x);
-    ref_y.push_back(pt.y);
-  }
-  std::vector<double> poly_coeffs;
-  if (ref_x.size() >= 2) {
-    // poly_coeffs = Polyfitter::polyfit(ref_x, ref_y, 2);
-    // Suponha polyfit disponível
-  }
-  double f0 = 0.0, psides0 = 0.0;
+  // Calcular polinômio da referência local usando Polyfitter
+  Polyfitter polyfitter;
+  std::vector<double> poly_coeffs = polyfitter.getPolynomialCoeffs(local_ref);
+  
+  double cte0 = 0.0, epsi0 = 0.0;
   if (!poly_coeffs.empty()) {
-    for (size_t i = 0; i < poly_coeffs.size(); ++i)
-      f0 += poly_coeffs[i] * std::pow(0.0, poly_coeffs.size() - 1 - i);
-    double df0 = 0.0;
-    for (size_t i = 0; i < poly_coeffs.size() - 1; ++i)
-      df0 += (poly_coeffs.size() - 1 - i) * poly_coeffs[i] * std::pow(0.0, poly_coeffs.size() - 2 - i);
-    psides0 = std::atan(df0);
+    cte0 = polyfitter.calculateCTE(poly_coeffs, 0.0, 0.0);
+    epsi0 = polyfitter.calculateEPSI(poly_coeffs, 0.0, current_state.yaw);
   }
-  double cte0 = f0 - 0.0;
-  double epsi0 = current_state.yaw - psides0;
 
   // Tratar latência
   double latency = 0.1;
