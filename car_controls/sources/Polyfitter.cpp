@@ -166,7 +166,7 @@ bool Polyfitter::hasSignFlip(const std::vector<double> &curve) {
 }
 
 bool Polyfitter::isStraightLine(const std::vector<double> &y,
-                                const std::vector<double> &x) {
+                                const std::vector<double> &x) const {
   if (x.size() < 4)
     return false;
 
@@ -190,7 +190,7 @@ bool Polyfitter::isStraightLine(const std::vector<double> &y,
 
 std::vector<double> Polyfitter::polyfit(const std::vector<double> &x,
                                         const std::vector<double> &y,
-                                        int degree) {
+                                        int degree) const {
   int n = x.size();
   int m = degree + 1;
 
@@ -623,4 +623,109 @@ void Polyfitter::displayImagesWithPolyfit(
   cv::imshow("Lane Detection Results", canvas);
   cv::waitKey(0);
   cv::destroyAllWindows();
+}
+
+double Polyfitter::calculateCTE(const std::vector<double>& polyCoeffs, double x, double y) const {
+  if (polyCoeffs.empty()) return 0.0;
+  
+  // Avaliar polinômio no ponto x para obter y_ref
+  double y_ref = 0.0;
+  int degree = polyCoeffs.size() - 1;
+  
+  for (int i = 0; i <= degree; i++) {
+    y_ref += polyCoeffs[i] * std::pow(x, degree - i);
+  }
+  
+  // CTE = y_atual - y_referencia
+  return y - y_ref;
+}
+
+double Polyfitter::calculateEPSI(const std::vector<double>& polyCoeffs, double x, double psi) const {
+  if (polyCoeffs.size() < 2) return 0.0;
+  
+  // Calcular derivada do polinômio para obter psi_des
+  double psi_des = 0.0;
+  int degree = polyCoeffs.size() - 1;
+  
+  // Derivada: d/dx[a*x^n + b*x^(n-1) + ... ] = n*a*x^(n-1) + (n-1)*b*x^(n-2) + ...
+  for (int i = 0; i < degree; i++) {
+    int power = degree - i - 1;
+    if (power >= 0) {
+      psi_des += (degree - i) * polyCoeffs[i] * std::pow(x, power);
+    }
+  }
+  
+  // psi_des = arctan(derivada)
+  psi_des = std::atan(psi_des);
+  
+  // EPSI = psi_atual - psi_desejado
+  return psi - psi_des;
+}
+
+std::vector<double> Polyfitter::getPolynomialCoeffs(const std::vector<Point2D>& trajectory) const {
+  if (trajectory.size() < 2) return {};
+  
+  std::vector<double> x, y;
+  for (const auto& point : trajectory) {
+    x.push_back(point.x);
+    y.push_back(point.y);
+  }
+  
+  // Determinar se é linha reta ou curva
+  if (isStraightLine(y, x)) {
+    return polyfit(x, y, 1);  // Linha reta
+  } else {
+    return polyfit(x, y, 2);  // Curva quadrática
+  }
+}
+
+std::vector<Point2D>
+Polyfitter::convertImagePointsToWorld(const std::vector<int> &center_x,
+                                      const std::vector<int> &center_y,
+                                      const VehicleTransform &vehicle_transform,
+                                      int img_width, int img_height) const {
+  std::vector<Point2D> waypoints_world;
+  if (center_y.empty())
+    return waypoints_world;
+
+  int center_x_img = img_width / 2;
+  double real_height_m = 8.0;  // Ajuste conforme sua câmera
+  double escala_m_por_pixel = real_height_m / img_height;
+
+  // Encontrar ponto de partida (mais próximo do veículo)
+  int start_idx = 0;
+  int max_y = center_y[0];
+  for (size_t i = 1; i < center_y.size(); ++i) {
+    if (center_y[i] > max_y) {
+      max_y = center_y[i];
+      start_idx = i;
+    }
+  }
+
+  // Converter pontos de imagem para coordenadas mundo
+  int N = std::min(10, (int)center_y.size()); // Limitar a 10 pontos
+  for (int i = 0; i < N; ++i) {
+    int idx = start_idx - i;
+    if (idx < 0) break;
+
+    int x_img = center_x[idx];
+    int y_img = center_y[idx];
+
+    // Converter para coordenadas locais do veículo (sistema NED)
+    double distance_ahead = (img_height - y_img) * escala_m_por_pixel;
+    double lateral_offset = (x_img - center_x_img) * escala_m_por_pixel;
+
+    // Transformar para coordenadas globais
+    double cos_yaw = std::cos(vehicle_transform.yaw);
+    double sin_yaw = std::sin(vehicle_transform.yaw);
+
+    double world_x = vehicle_transform.x + distance_ahead * cos_yaw - 
+                     lateral_offset * sin_yaw;
+    double world_y = vehicle_transform.y + distance_ahead * sin_yaw + 
+                     lateral_offset * cos_yaw;
+
+    waypoints_world.emplace_back(world_x, world_y);
+  }
+
+  return waypoints_world;
 }

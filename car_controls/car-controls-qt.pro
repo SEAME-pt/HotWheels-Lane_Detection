@@ -75,6 +75,8 @@ LIBS += -lboost_system -lstdc++fs
 # OpenCV libraries for host build (x86_64)
 LIBS += -lopencv_core -lopencv_imgproc -lopencv_imgcodecs -lopencv_videoio -lopencv_highgui
 LIBS += -lopencv_dnn -lopencv_calib3d -lopencv_features2d -lopencv_flann
+# CUDA OpenCV modules (only if available)
+LIBS += -lopencv_cudaimgproc -lopencv_cudaarithm -lopencv_cudawarping -lopencv_cudev
 
 # Conditionally add paths for cross-compilation
 contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
@@ -114,11 +116,6 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
 
 	# Eigen libraries
 	INCLUDEPATH += $${JETSON_SYSROOT}/usr/include/eigen3
-
-	# C++ standard library headers (using system cross-compiler)
-	INCLUDEPATH += /usr/aarch64-linux-gnu/include/c++/11
-	INCLUDEPATH += /usr/aarch64-linux-gnu/include/c++/11/aarch64-linux-gnu
-	INCLUDEPATH += /usr/lib/gcc-cross/aarch64-linux-gnu/11/include
 
 	# TensorRT, CUDA, OpenCV
 	LIBS += -lcudart -lnvinfer

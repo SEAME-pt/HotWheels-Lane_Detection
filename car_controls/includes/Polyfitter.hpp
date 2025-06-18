@@ -51,9 +51,9 @@ public:
                          bool smooth = false);
   bool hasSignFlip(const std::vector<double> &curve);
   bool isStraightLine(const std::vector<double> &y,
-                      const std::vector<double> &x);
+                      const std::vector<double> &x) const;
   std::vector<double> polyfit(const std::vector<double> &x,
-                              const std::vector<double> &y, int degree);
+                              const std::vector<double> &y, int degree) const;
   std::vector<double> polyval(const std::vector<double> &coeffs,
                               const std::vector<double> &x);
   std::vector<double> fitLaneCurve(const std::vector<double> &y,
@@ -71,6 +71,15 @@ public:
                                             int imgWidth, int imgHeight);
   void displayImagesWithPolyfit(
       const std::vector<std::pair<std::string, cv::Mat>> &images, int cols = 4);
+
+  // Adicionar métodos para calcular CTE e EPSI
+  double calculateCTE(const std::vector<double>& polyCoeffs, double x, double y) const;
+  double calculateEPSI(const std::vector<double>& polyCoeffs, double x, double psi) const;
+  std::vector<double> getPolynomialCoeffs(const std::vector<Point2D>& trajectory) const;
+  std::vector<Point2D> convertImagePointsToWorld(const std::vector<int> &center_x,
+                                                  const std::vector<int> &center_y,
+                                                  const VehicleTransform &vehicle_transform,
+                                                  int img_width, int img_height) const;
 };
 
 #endif // POLYFITTER_HPP

@@ -16,6 +16,9 @@ private:
   MPCConfig _config;
   MPCOptimizer _optimizer;
 
+  // Adicionar método para mapear comandos para hardware
+  ControlCommand _mapCommandsToHardware(double throttle, double steer) const;
+
 public:
   MPCPlanner(void);
   MPCPlanner(const MPCPlanner &orign);
