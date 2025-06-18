@@ -77,11 +77,11 @@ private:
   float nms_thresh = 0.45f;
   int num_classes;
 
-	void loadEngine(const std::string& enginePath);
-	void allocateBuffers();
-	std::vector<float> infer(const cv::Mat& image);
+  void loadEngine(const std::string &enginePath);
+  void allocateBuffers();
+  std::vector<float> infer(const cv::Mat &image);
 
-	void setClassName(const std::string& class_name);
+  void setClassName(const std::string &class_name);
 
   static std::string lastClassName;
   static std::chrono::steady_clock::time_point lastNotificationTime;

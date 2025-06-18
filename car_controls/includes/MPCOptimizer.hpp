@@ -51,13 +51,16 @@ public:
   void _kinematicModel(double &x, double &y, double &yaw, double &v,
                        double throttle, double steer) const;
 
-		double _normalizeAngle(double angle) const;
-		double _calculatePathCurvature(const std::vector<Point2D>& reference) const;
-		double _calculateCurveCurvature(const std::vector<double>& x_coords, const std::vector<double>& y_coords) const;
+  double _normalizeAngle(double angle) const;
+  double _calculatePathCurvature(const std::vector<Point2D> &reference) const;
+  double _calculateCurveCurvature(const std::vector<double> &x_coords,
+                                  const std::vector<double> &y_coords) const;
 
-		// Adicionar método para tratar latência
-		std::vector<double> _predictStateWithLatency(double x0, double y0, double yaw0, double v0, 
-													double throttle, double steer, double latency) const;
+  // Adicionar método para tratar latência
+  std::vector<double> _predictStateWithLatency(double x0, double y0,
+                                               double yaw0, double v0,
+                                               double throttle, double steer,
+                                               double latency) const;
 };
 
 #endif /* !MPCOPTIMIZER */

@@ -470,10 +470,10 @@ void ControlsManager::showVisionDebug() {
       //     cv::circle(vis, cv::Point(pt.x, pt.y), 3, cv::Scalar(255,0,0), -1);
       // }
 
-            cv::imshow("Lane Detection Debug", vis);
-            cv::waitKey(1);
-        }
-    } catch (...) {
-            std::cerr << "Exceção desconhecida capturada!" << std::endl;
+      cv::imshow("Lane Detection Debug", vis);
+      cv::waitKey(1);
     }
+  } catch (...) {
+    std::cerr << "Exceção desconhecida capturada!" << std::endl;
+  }
 }

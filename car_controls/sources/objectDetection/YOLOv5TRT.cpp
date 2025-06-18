@@ -1,16 +1,18 @@
 #include "objectDetection/YOLOv5TRT.hpp"
 
 // Variável estática de classe para armazenar o tempo da última notificação
-std::chrono::steady_clock::time_point YOLOv5TRT::lastNotificationTime = std::chrono::steady_clock::now();
+std::chrono::steady_clock::time_point YOLOv5TRT::lastNotificationTime =
+    std::chrono::steady_clock::now();
 
-YOLOv5TRT::YOLOv5TRT(const std::string& enginePath, const std::string& labelPath)
-	: labelManager(labelPath) {
-	// Correção: verificar valores de retorno do system()
-	lastClassName = "";
-	int result1 = system("sudo nvpmodel -m 0");
-	if (result1 != 0) {
-		std::cerr << "[AVISO] Falha ao configurar nvpmodel" << std::endl;
-	}
+YOLOv5TRT::YOLOv5TRT(const std::string &enginePath,
+                     const std::string &labelPath)
+    : labelManager(labelPath) {
+  // Correção: verificar valores de retorno do system()
+  lastClassName = "";
+  int result1 = system("sudo nvpmodel -m 0");
+  if (result1 != 0) {
+    std::cerr << "[AVISO] Falha ao configurar nvpmodel" << std::endl;
+  }
 
   int result2 = system("sudo jetson_clocks");
   if (result2 != 0) {
