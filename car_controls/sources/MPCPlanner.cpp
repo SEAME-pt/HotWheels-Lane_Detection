@@ -43,9 +43,40 @@ ControlCommand MPCPlanner::plan(const VehicleState &current_state,
   // Garantir velocidade mínima para estabilidade
   double current_velocity = std::max(0.5, current_state.velocity);
   
+  // Calcular polinômio da referência local
+  std::vector<double> ref_x, ref_y;
+  for (const auto& pt : local_ref) {
+    ref_x.push_back(pt.x);
+    ref_y.push_back(pt.y);
+  }
+  std::vector<double> poly_coeffs;
+  if (ref_x.size() >= 2) {
+    // poly_coeffs = Polyfitter::polyfit(ref_x, ref_y, 2);
+    // Suponha polyfit disponível
+  }
+  double f0 = 0.0, psides0 = 0.0;
+  if (!poly_coeffs.empty()) {
+    for (size_t i = 0; i < poly_coeffs.size(); ++i)
+      f0 += poly_coeffs[i] * std::pow(0.0, poly_coeffs.size() - 1 - i);
+    double df0 = 0.0;
+    for (size_t i = 0; i < poly_coeffs.size() - 1; ++i)
+      df0 += (poly_coeffs.size() - 1 - i) * poly_coeffs[i] * std::pow(0.0, poly_coeffs.size() - 2 - i);
+    psides0 = std::atan(df0);
+  }
+  double cte0 = f0 - 0.0;
+  double epsi0 = current_state.yaw - psides0;
+
+  // Tratar latência
+  double latency = 0.1;
+  double steer0 = 0.0, throttle0 = 0.0;
+  std::vector<double> state_with_latency = _optimizer._predictStateWithLatency(
+      0.0, 0.0, current_state.yaw, current_velocity, throttle0, steer0, latency);
+  state_with_latency.push_back(cte0);
+  state_with_latency.push_back(epsi0);
+
   auto [throttle, steer] = _optimizer.solve(
-      current_state.x, current_state.y, current_state.yaw,
-      current_velocity, local_ref, lane_info);
+      state_with_latency[0], state_with_latency[1], state_with_latency[2],
+      state_with_latency[3], local_ref, lane_info);
   
   return _mapCommandsToHardware(throttle, steer);
 }

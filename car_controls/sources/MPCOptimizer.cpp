@@ -34,8 +34,43 @@ static double costWrapper(unsigned n, const double *x, double *grad,
 std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0, double v0,
                                              const std::vector<Point2D>& reference,
                                              const LaneInfo* lane_info) {
-    // Armazenar estado e referência atuais
-    _current_state = {x0, y0, yaw0, v0};
+    // Calcular polinômio da trajetória de referência
+    std::vector<double> ref_x, ref_y;
+    for (const auto& pt : reference) {
+        ref_x.push_back(pt.x);
+        ref_y.push_back(pt.y);
+    }
+    // Ajuste polinomial y = f(x)
+    std::vector<double> poly_coeffs;
+    if (ref_x.size() >= 2) {
+        // Use Polyfitter ou implemente polyfit aqui
+        // poly_coeffs = Polyfitter::polyfit(ref_x, ref_y, 2);
+        // Para simplificação, suponha polyfit já disponível
+    }
+
+    // Calcular cte e epsi iniciais
+    double f0 = 0.0, psides0 = 0.0;
+    if (!poly_coeffs.empty()) {
+        f0 = 0.0;
+        for (size_t i = 0; i < poly_coeffs.size(); ++i)
+            f0 += poly_coeffs[i] * std::pow(x0, poly_coeffs.size() - 1 - i);
+        double df0 = 0.0;
+        for (size_t i = 0; i < poly_coeffs.size() - 1; ++i)
+            df0 += (poly_coeffs.size() - 1 - i) * poly_coeffs[i] * std::pow(x0, poly_coeffs.size() - 2 - i);
+        psides0 = std::atan(df0);
+    }
+    double cte0 = f0 - y0;
+    double epsi0 = yaw0 - psides0;
+
+    // Tratar latência
+    double latency = 0.1; // 100ms típico
+    double steer0 = 0.0, throttle0 = 0.0; // Use último comando se disponível
+    std::vector<double> state_with_latency = _predictStateWithLatency(x0, y0, yaw0, v0, throttle0, steer0, latency);
+    // Adicionar cte e epsi ao estado
+    state_with_latency.push_back(cte0);
+    state_with_latency.push_back(epsi0);
+
+    _current_state = state_with_latency;
     _current_reference = reference;
     _current_lane_info = lane_info;
     
@@ -130,7 +165,8 @@ double MPCOptimizer::_costFunction(const std::vector<double>& u,
                                  const LaneInfo* lane_info) const {
     (void)lane_info;
     double cost = 0.0;
-    double x = state[0], y = state[1], yaw = state[2], v = state[3];
+    // Estado inicial
+    double x = state[0], y = state[1], yaw = state[2], v = state[3], cte = state[4], epsi = state[5];
 
   double curvature = _calculatePathCurvature(reference);
   bool is_curve = std::abs(curvature) > 0.05;
@@ -157,22 +193,11 @@ double MPCOptimizer::_costFunction(const std::vector<double>& u,
     for (int t = 0; t < MPCConfig::horizon; ++t) {
         double throttle = u[2*t];
         double steer = u[2*t+1];
-        
-        // Aplicar modelo cinemático
-        _kinematicModel(x, y, yaw, v, throttle, steer);
-        
-        // 1. Cross Track Error (CTE)
-        if (t < (int)reference.size()) {
-            double dx = x - reference[t].x;
-            double dy = y - reference[t].y;
-            double cte = std::sqrt(dx*dx + dy*dy);
-            cost += w_cte * cte * cte;
-            
-            // 2. Heading Error (epsi)
-            double desired_heading = std::atan2(reference[t].y - y, reference[t].x - x);
-            double epsi = _normalizeAngle(yaw - desired_heading);
-            cost += w_etheta * epsi * epsi;
-        }
+        // Modelo 6 estados
+        _kinematicModel(x, y, yaw, v, cte, epsi, throttle, steer, poly_coeffs);
+        // Penalizar cte e epsi explicitamente
+        cost += w_cte * cte * cte;
+        cost += w_etheta * epsi * epsi;
         
         // 3. Velocity Error
         double v_error = v - target_speed;
@@ -197,19 +222,28 @@ double MPCOptimizer::_costFunction(const std::vector<double>& u,
     return cost;
 }
 
-
+// Atualize o modelo cinemático para 6 estados
 void MPCOptimizer::_kinematicModel(double& x, double& y, double& yaw, double& v,
-                                 double throttle, double steer) const {
-    // Bicycle model padrão (como no repositório mpc-controller)
+                                   double& cte, double& epsi,
+                                   double throttle, double steer,
+                                   const std::vector<double>& poly_coeffs) const {
+    double f = 0.0, psides = 0.0;
+    if (!poly_coeffs.empty()) {
+        for (size_t i = 0; i < poly_coeffs.size(); ++i)
+            f += poly_coeffs[i] * std::pow(x, poly_coeffs.size() - 1 - i);
+        double df = 0.0;
+        for (size_t i = 0; i < poly_coeffs.size() - 1; ++i)
+            df += (poly_coeffs.size() - 1 - i) * poly_coeffs[i] * std::pow(x, poly_coeffs.size() - 2 - i);
+        psides = std::atan(df);
+    }
     x += v * std::cos(yaw) * MPCConfig::dt;
     y += v * std::sin(yaw) * MPCConfig::dt;
     yaw += (v / MPCConfig::wheelbase) * std::tan(steer) * MPCConfig::dt;
     v += throttle * MPCConfig::dt;
-    
-    // Normalizar ângulo
+    cte = f - y + v * std::sin(epsi) * MPCConfig::dt;
+    epsi = yaw - psides + (v / MPCConfig::wheelbase) * std::tan(steer) * MPCConfig::dt;
     yaw = _normalizeAngle(yaw);
-    
-    // Limitar velocidade
+    epsi = _normalizeAngle(epsi);
     v = std::max(0.0, std::min(v, 10.0));
 }
 
