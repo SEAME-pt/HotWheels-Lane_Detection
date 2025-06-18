@@ -6,7 +6,7 @@ struct MPCConfig {
     // Parâmetros do MPC
     static constexpr double dt = 0.1;
     static constexpr int horizon = 10;
-    static constexpr double wheelbase = 2.7;
+    static constexpr double wheelbase = 0.15; // Ajuste para o valor real do seu robô (em metros)
 
     // Pesos padrão (para retas)
     static constexpr double w_cte_straight = 8.0;

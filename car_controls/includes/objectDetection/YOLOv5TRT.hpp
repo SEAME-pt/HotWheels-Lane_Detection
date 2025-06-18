@@ -80,6 +80,8 @@ private:
 	void allocateBuffers();
 	std::vector<float> infer(const cv::Mat& image);
 
+	void setClassName(const std::string& class_name);
+
 	static std::string lastClassName;
 	static std::chrono::steady_clock::time_point lastNotificationTime;
 

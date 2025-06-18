@@ -468,7 +468,7 @@ void ControlsManager::showVisionDebug() {
             cv::waitKey(1);
         }
     } catch (...) {
-        // Ignore errors
+            std::cerr << "Exceção desconhecida capturada!" << std::endl;
     }
 }
 

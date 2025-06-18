@@ -8,7 +8,7 @@
 #include "MPCPlanner.hpp"
 #include "Polyfitter.hpp"
 
-bool DEBUG = true;
+constexpr bool DEBUG = true;
 
 // Placeholder para a classe de controle do carro (substituir por CarControls)
 class CarControls {
