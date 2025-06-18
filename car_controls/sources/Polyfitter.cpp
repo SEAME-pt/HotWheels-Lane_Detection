@@ -625,57 +625,64 @@ void Polyfitter::displayImagesWithPolyfit(
   cv::destroyAllWindows();
 }
 
-double Polyfitter::calculateCTE(const std::vector<double>& polyCoeffs, double x, double y) const {
-  if (polyCoeffs.empty()) return 0.0;
-  
+double Polyfitter::calculateCTE(const std::vector<double> &polyCoeffs, double x,
+                                double y) const {
+  if (polyCoeffs.empty())
+    return 0.0;
+
   // Avaliar polinômio no ponto x para obter y_ref
   double y_ref = 0.0;
   int degree = polyCoeffs.size() - 1;
-  
+
   for (int i = 0; i <= degree; i++) {
     y_ref += polyCoeffs[i] * std::pow(x, degree - i);
   }
-  
+
   // CTE = y_atual - y_referencia
   return y - y_ref;
 }
 
-double Polyfitter::calculateEPSI(const std::vector<double>& polyCoeffs, double x, double psi) const {
-  if (polyCoeffs.size() < 2) return 0.0;
-  
+double Polyfitter::calculateEPSI(const std::vector<double> &polyCoeffs,
+                                 double x, double psi) const {
+  if (polyCoeffs.size() < 2)
+    return 0.0;
+
   // Calcular derivada do polinômio para obter psi_des
   double psi_des = 0.0;
   int degree = polyCoeffs.size() - 1;
-  
-  // Derivada: d/dx[a*x^n + b*x^(n-1) + ... ] = n*a*x^(n-1) + (n-1)*b*x^(n-2) + ...
+
+  // Derivada: d/dx[a*x^n + b*x^(n-1) + ... ] = n*a*x^(n-1) + (n-1)*b*x^(n-2) +
+  // ...
   for (int i = 0; i < degree; i++) {
     int power = degree - i - 1;
     if (power >= 0) {
       psi_des += (degree - i) * polyCoeffs[i] * std::pow(x, power);
     }
   }
-  
+
   // psi_des = arctan(derivada)
   psi_des = std::atan(psi_des);
-  
+
   // EPSI = psi_atual - psi_desejado
   return psi - psi_des;
 }
 
-std::vector<double> Polyfitter::getPolynomialCoeffs(const std::vector<Point2D>& trajectory) const {
-  if (trajectory.size() < 2) return {};
-  
+std::vector<double>
+Polyfitter::getPolynomialCoeffs(const std::vector<Point2D> &trajectory) const {
+  if (trajectory.size() < 2)
+    return {};
+
   std::vector<double> x, y;
-  for (const auto& point : trajectory) {
+  for (const auto &point : trajectory) {
     x.push_back(point.x);
     y.push_back(point.y);
   }
-  
+
   // Determinar se é linha reta ou curva
   if (isStraightLine(y, x)) {
-    return polyfit(x, y, 1);  // Linha reta
+    return polyfit(x, y, 1); // Linha reta
   } else {
-    return polyfit(x, y, 2);  // Curva quadrática
+    return polyfit(x, y, 2); // Curva quadrática
   }
 }
 
@@ -689,7 +696,7 @@ Polyfitter::convertImagePointsToWorld(const std::vector<int> &center_x,
     return waypoints_world;
 
   int center_x_img = img_width / 2;
-  double real_height_m = 8.0;  // Ajuste conforme sua câmera
+  double real_height_m = 8.0; // Ajuste conforme sua câmera
   double escala_m_por_pixel = real_height_m / img_height;
 
   // Encontrar ponto de partida (mais próximo do veículo)
@@ -706,7 +713,8 @@ Polyfitter::convertImagePointsToWorld(const std::vector<int> &center_x,
   int N = std::min(10, (int)center_y.size()); // Limitar a 10 pontos
   for (int i = 0; i < N; ++i) {
     int idx = start_idx - i;
-    if (idx < 0) break;
+    if (idx < 0)
+      break;
 
     int x_img = center_x[idx];
     int y_img = center_y[idx];
@@ -719,9 +727,9 @@ Polyfitter::convertImagePointsToWorld(const std::vector<int> &center_x,
     double cos_yaw = std::cos(vehicle_transform.yaw);
     double sin_yaw = std::sin(vehicle_transform.yaw);
 
-    double world_x = vehicle_transform.x + distance_ahead * cos_yaw - 
+    double world_x = vehicle_transform.x + distance_ahead * cos_yaw -
                      lateral_offset * sin_yaw;
-    double world_y = vehicle_transform.y + distance_ahead * sin_yaw + 
+    double world_y = vehicle_transform.y + distance_ahead * sin_yaw +
                      lateral_offset * cos_yaw;
 
     waypoints_world.emplace_back(world_x, world_y);

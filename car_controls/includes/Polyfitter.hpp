@@ -73,13 +73,17 @@ public:
       const std::vector<std::pair<std::string, cv::Mat>> &images, int cols = 4);
 
   // Adicionar métodos para calcular CTE e EPSI
-  double calculateCTE(const std::vector<double>& polyCoeffs, double x, double y) const;
-  double calculateEPSI(const std::vector<double>& polyCoeffs, double x, double psi) const;
-  std::vector<double> getPolynomialCoeffs(const std::vector<Point2D>& trajectory) const;
-  std::vector<Point2D> convertImagePointsToWorld(const std::vector<int> &center_x,
-                                                  const std::vector<int> &center_y,
-                                                  const VehicleTransform &vehicle_transform,
-                                                  int img_width, int img_height) const;
+  double calculateCTE(const std::vector<double> &polyCoeffs, double x,
+                      double y) const;
+  double calculateEPSI(const std::vector<double> &polyCoeffs, double x,
+                       double psi) const;
+  std::vector<double>
+  getPolynomialCoeffs(const std::vector<Point2D> &trajectory) const;
+  std::vector<Point2D>
+  convertImagePointsToWorld(const std::vector<int> &center_x,
+                            const std::vector<int> &center_y,
+                            const VehicleTransform &vehicle_transform,
+                            int img_width, int img_height) const;
 };
 
 #endif // POLYFITTER_HPP

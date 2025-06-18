@@ -25,11 +25,17 @@ public:
   MPCPlanner &operator=(const MPCPlanner &orign);
   ~MPCPlanner(void);
 
-		MPCPlanner(const MPCConfig& config, const MPCOptimizer& optimizer);
-    
-		ControlCommand plan(const VehicleState& current_state, const std::vector<Point2D>& global_waypoints, const LaneInfo* lane_info = NULL);
-		
-		std::vector<Point2D> convertImagePointsToWorld(const std::vector<int>& center_x, const std::vector<int>& center_y, const VehicleTransform& vehicle_transform, int img_width, int img_height) const;
+  MPCPlanner(const MPCConfig &config, const MPCOptimizer &optimizer);
+
+  ControlCommand plan(const VehicleState &current_state,
+                      const std::vector<Point2D> &global_waypoints,
+                      const LaneInfo *lane_info = NULL);
+
+  std::vector<Point2D>
+  convertImagePointsToWorld(const std::vector<int> &center_x,
+                            const std::vector<int> &center_y,
+                            const VehicleTransform &vehicle_transform,
+                            int img_width, int img_height) const;
 };
 
 #endif /* !MPCPlanner */

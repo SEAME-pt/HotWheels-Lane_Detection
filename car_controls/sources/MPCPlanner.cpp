@@ -21,56 +21,58 @@ ControlCommand MPCPlanner::plan(const VehicleState &current_state,
   if (global_waypoints.empty()) {
     throw std::invalid_argument("Waypoints list cannot be empty");
   }
-  
+
   // Convert Point2D to Eigen::Vector2d
   std::vector<Eigen::Vector2d> global_waypoints_eigen;
   global_waypoints_eigen.reserve(global_waypoints.size());
   for (const auto &pt : global_waypoints) {
     global_waypoints_eigen.emplace_back(pt.x, pt.y);
   }
-  
+
   // Get local reference in Eigen format
   std::vector<Eigen::Vector2d> local_ref_eigen =
       _prepareReference(current_state, global_waypoints_eigen);
-      
+
   // Convert local_ref_eigen to std::vector<Point2D>
   std::vector<Point2D> local_ref;
   local_ref.reserve(local_ref_eigen.size());
   for (const auto &pt : local_ref_eigen) {
     local_ref.emplace_back(pt.x(), pt.y());
   }
-  
+
   // Garantir velocidade mínima para estabilidade
   double current_velocity = std::max(0.5, current_state.velocity);
-  
-  auto [throttle, steer] = _optimizer.solve(
-      current_state.x, current_state.y, current_state.yaw,
-      current_velocity, local_ref, lane_info);
-  
+
+  auto [throttle, steer] =
+      _optimizer.solve(current_state.x, current_state.y, current_state.yaw,
+                       current_velocity, local_ref, lane_info);
+
   return _mapCommandsToHardware(throttle, steer);
 }
 
-ControlCommand MPCPlanner::_mapCommandsToHardware(double throttle, double steer) const {
+ControlCommand MPCPlanner::_mapCommandsToHardware(double throttle,
+                                                  double steer) const {
   // Mapear throttle para o range do seu hardware
   // Exemplo: converter de [-1, 1] para [1000, 2000] PWM se necessário
   double mapped_throttle = throttle;
-  
+
   // Aplicar curva de resposta não-linear se necessário
   if (throttle > 0) {
-    mapped_throttle = std::min(1.0, throttle * 1.2);  // Aumentar sensibilidade
+    mapped_throttle = std::min(1.0, throttle * 1.2); // Aumentar sensibilidade
   }
-  
+
   // Mapear steering com possível offset de calibração
   double mapped_steer = steer;
-  
+
   // Aplicar deadzone e limitação
   if (std::abs(mapped_steer) < 0.03) {
     mapped_steer = 0.0;
   }
-  
-  mapped_steer = std::max(MPCConfig::steering_limits[0], 
-                         std::min(MPCConfig::steering_limits[1], mapped_steer));
-  
+
+  mapped_steer =
+      std::max(MPCConfig::steering_limits[0],
+               std::min(MPCConfig::steering_limits[1], mapped_steer));
+
   return ControlCommand{mapped_throttle, mapped_steer};
 }
 
@@ -79,7 +81,7 @@ std::vector<Eigen::Vector2d> MPCPlanner::_prepareReference(
     const std::vector<Eigen::Vector2d> &global_waypoints) const {
 
   std::vector<Eigen::Vector2d> local_points;
-  const double cos_yaw = cos(-state.yaw);  // Negativo para transformação inversa
+  const double cos_yaw = cos(-state.yaw); // Negativo para transformação inversa
   const double sin_yaw = sin(-state.yaw);
 
   for (const auto &wp : global_waypoints) {
@@ -105,7 +107,7 @@ std::vector<Eigen::Vector2d> MPCPlanner::_prepareReference(
   if (local_points.size() < 3) {
     local_points.clear();
     for (int i = 1; i <= _config.horizon; ++i) {
-      local_points.emplace_back(i * 2.0, 0.0);  // Pontos a cada 2m à frente
+      local_points.emplace_back(i * 2.0, 0.0); // Pontos a cada 2m à frente
     }
   }
 
