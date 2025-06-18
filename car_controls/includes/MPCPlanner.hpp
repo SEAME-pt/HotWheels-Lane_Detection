@@ -1,30 +1,38 @@
 #ifndef MPCPLANNER_HPP
-# define MPCPLANNER_HPP
+#define MPCPLANNER_HPP
 
-#include <vector>
+#include "MPCOptimizer.hpp"
 #include <Eigen/Dense>
 #include <cstddef>
-#include "MPCOptimizer.hpp"
+#include <vector>
 
-class MPCPlanner{
+class MPCPlanner {
 
-	private:
-		std::vector<Eigen::Vector2d> _prepareReference(const VehicleState& state, const std::vector<Eigen::Vector2d>& global_waypoints) const;
-    
-		MPCConfig _config;
-		MPCOptimizer _optimizer;
+private:
+  std::vector<Eigen::Vector2d>
+  _prepareReference(const VehicleState &state,
+                    const std::vector<Eigen::Vector2d> &global_waypoints) const;
 
-	public:
-		MPCPlanner(void);
-		MPCPlanner(const MPCPlanner &orign);
-		MPCPlanner &operator=(const MPCPlanner &orign);
-		~MPCPlanner(void);
+  MPCConfig _config;
+  MPCOptimizer _optimizer;
 
-		MPCPlanner(const MPCConfig& config, const MPCOptimizer& optimizer);
-    
-		ControlCommand plan(const VehicleState& current_state, const std::vector<Point2D>& global_waypoints, const LaneInfo* lane_info = nullptr);
-		
-		std::vector<Point2D> convertImagePointsToWorld(const std::vector<int>& center_x, const std::vector<int>& center_y, const VehicleTransform& vehicle_transform, int img_width, int img_height) const;
+public:
+  MPCPlanner(void);
+  MPCPlanner(const MPCPlanner &orign);
+  MPCPlanner &operator=(const MPCPlanner &orign);
+  ~MPCPlanner(void);
+
+  MPCPlanner(const MPCConfig &config, const MPCOptimizer &optimizer);
+
+  ControlCommand plan(const VehicleState &current_state,
+                      const std::vector<Point2D> &global_waypoints,
+                      const LaneInfo *lane_info = nullptr);
+
+  std::vector<Point2D>
+  convertImagePointsToWorld(const std::vector<int> &center_x,
+                            const std::vector<int> &center_y,
+                            const VehicleTransform &vehicle_transform,
+                            int img_width, int img_height) const;
 };
 
 #endif /* !MPCPlanner */
