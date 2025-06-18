@@ -1,8 +1,8 @@
 // test_TensorRTInferencer.cpp
 
-#include <gtest/gtest.h>
-#include "../mocks/MockInferencer.hpp"
 #include "../includes/inference/CameraStreamer.hpp"
+#include "../mocks/MockInferencer.hpp"
+#include <gtest/gtest.h>
 
 /* TEST(CameraStreamerTest, ConstructorInitializesCamera) {
     auto inferencer = std::make_shared<MockInferencer>();
@@ -33,5 +33,3 @@ TEST(CameraStreamerTest, StartCallsInference) {
     streamer.start();  // this will run for ~1s
     stopper.join();
 } */
-
-

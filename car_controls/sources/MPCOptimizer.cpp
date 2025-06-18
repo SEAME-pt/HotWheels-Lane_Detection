@@ -1,33 +1,34 @@
 #include "MPCOptimizer.hpp"
 
 MPCOptimizer::MPCOptimizer(void) {
-	MPCConfig mpc_config;
-    _mpc = mpc_config;
+  MPCConfig mpc_config;
+  _mpc = mpc_config;
 }
 
-MPCOptimizer::MPCOptimizer(const MPCConfig& config) : _mpc(config), _current_state(), _current_reference(), _current_lane_info(nullptr) {}
+MPCOptimizer::MPCOptimizer(const MPCConfig &config)
+    : _mpc(config), _current_state(), _current_reference(),
+      _current_lane_info(nullptr) {}
 
-MPCOptimizer::MPCOptimizer(const MPCOptimizer &origin) {
-	*this = origin;
-}
+MPCOptimizer::MPCOptimizer(const MPCOptimizer &origin) { *this = origin; }
 
 MPCOptimizer &MPCOptimizer::operator=(const MPCOptimizer &origin) {
-	if (this != &origin)
-		*this = origin;
-	return *this;
+  if (this != &origin)
+    *this = origin;
+  return *this;
 }
 
-MPCOptimizer::~MPCOptimizer(void) {
-	
-}
+MPCOptimizer::~MPCOptimizer(void) {}
 
-static double costWrapper(unsigned n, const double* x, double* grad, void* data) {
-    (void)grad; // Suppress unused parameter warning
-    MPCOptimizer* self = static_cast<MPCOptimizer*>(data);
-    // Convertendo x para std::vector<double>
-    std::vector<double> u(x, x + n);
-    // Chamando a função de custo da classe
-    return self->_costFunction(u, self->getCurrentState(), self->getCurrentReference(), self->getCurrentLaneInfo());
+static double costWrapper(unsigned n, const double *x, double *grad,
+                          void *data) {
+  (void)grad; // Suppress unused parameter warning
+  MPCOptimizer *self = static_cast<MPCOptimizer *>(data);
+  // Convertendo x para std::vector<double>
+  std::vector<double> u(x, x + n);
+  // Chamando a função de custo da classe
+  return self->_costFunction(u, self->getCurrentState(),
+                             self->getCurrentReference(),
+                             self->getCurrentLaneInfo());
 }
 
 std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0, double v0,
@@ -81,43 +82,46 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
         return {0.2, 0.0};
     }
 
-    return {u0[0], u0[1]}; // Retorna primeiro par de controles
+  return {u0[0], u0[1]}; // Retorna primeiro par de controles
 }
 
 double MPCOptimizer::_normalizeAngle(double angle) const {
-    while (angle > M_PI) angle -= 2.0 * M_PI;
-    while (angle < -M_PI) angle += 2.0 * M_PI;
-    return angle;
+  while (angle > M_PI)
+    angle -= 2.0 * M_PI;
+  while (angle < -M_PI)
+    angle += 2.0 * M_PI;
+  return angle;
 }
 
-double MPCOptimizer::_calculatePathCurvature(const std::vector<Point2D>& reference) const {
-    if (reference.size() < 3) {
-        return 0.0;
-    }
-    
-    // Usar os primeiros 3 pontos
-    const Point2D& p1 = reference[0];
-    const Point2D& p2 = reference[1];
-    const Point2D& p3 = reference[2];
-    
-    // Calcular distâncias entre pontos
-    double a = std::sqrt(std::pow(p2.x - p1.x, 2) + std::pow(p2.y - p1.y, 2));
-    double b = std::sqrt(std::pow(p3.x - p2.x, 2) + std::pow(p3.y - p2.y, 2));
-    double c = std::sqrt(std::pow(p3.x - p1.x, 2) + std::pow(p3.y - p1.y, 2));
-    
-    if (a * b * c == 0.0) {
-        return 0.0;
-    }
-    
-    // Semi-perímetro
-    double s = (a + b + c) / 2.0;
-    // Área do triângulo (fórmula de Heron)
-    double area = std::sqrt(std::max(0.0, s * (s - a) * (s - b) * (s - c)));
-    
-    // Curvatura = 4 * área / (a * b * c)
-    double curvature = (a * b * c > 0.0) ? 4.0 * area / (a * b * c) : 0.0;
-    
-    return curvature;
+double MPCOptimizer::_calculatePathCurvature(
+    const std::vector<Point2D> &reference) const {
+  if (reference.size() < 3) {
+    return 0.0;
+  }
+
+  // Usar os primeiros 3 pontos
+  const Point2D &p1 = reference[0];
+  const Point2D &p2 = reference[1];
+  const Point2D &p3 = reference[2];
+
+  // Calcular distâncias entre pontos
+  double a = std::sqrt(std::pow(p2.x - p1.x, 2) + std::pow(p2.y - p1.y, 2));
+  double b = std::sqrt(std::pow(p3.x - p2.x, 2) + std::pow(p3.y - p2.y, 2));
+  double c = std::sqrt(std::pow(p3.x - p1.x, 2) + std::pow(p3.y - p1.y, 2));
+
+  if (a * b * c == 0.0) {
+    return 0.0;
+  }
+
+  // Semi-perímetro
+  double s = (a + b + c) / 2.0;
+  // Área do triângulo (fórmula de Heron)
+  double area = std::sqrt(std::max(0.0, s * (s - a) * (s - b) * (s - c)));
+
+  // Curvatura = 4 * área / (a * b * c)
+  double curvature = (a * b * c > 0.0) ? 4.0 * area / (a * b * c) : 0.0;
+
+  return curvature;
 }
 
 double MPCOptimizer::_costFunction(const std::vector<double>& u, 
@@ -128,8 +132,8 @@ double MPCOptimizer::_costFunction(const std::vector<double>& u,
     double cost = 0.0;
     double x = state[0], y = state[1], yaw = state[2], v = state[3];
 
-    double curvature = _calculatePathCurvature(reference);
-    bool is_curve = std::abs(curvature) > 0.05;
+  double curvature = _calculatePathCurvature(reference);
+  bool is_curve = std::abs(curvature) > 0.05;
 
     // Seleção de pesos baseada na curvatura
     double w_cte, w_etheta, w_velocity, w_throttle, w_steer, target_speed;

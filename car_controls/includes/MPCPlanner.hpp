@@ -1,24 +1,26 @@
 #ifndef MPCPLANNER_HPP
-# define MPCPLANNER_HPP
+#define MPCPLANNER_HPP
 
-#include <vector>
+#include "MPCOptimizer.hpp"
 #include <Eigen/Dense>
 #include <cstddef>
-#include "MPCOptimizer.hpp"
+#include <vector>
 
-class MPCPlanner{
+class MPCPlanner {
 
-	private:
-		std::vector<Eigen::Vector2d> _prepareReference(const VehicleState& state, const std::vector<Eigen::Vector2d>& global_waypoints) const;
-    
-		MPCConfig _config;
-		MPCOptimizer _optimizer;
+private:
+  std::vector<Eigen::Vector2d>
+  _prepareReference(const VehicleState &state,
+                    const std::vector<Eigen::Vector2d> &global_waypoints) const;
 
-	public:
-		MPCPlanner(void);
-		MPCPlanner(const MPCPlanner &orign);
-		MPCPlanner &operator=(const MPCPlanner &orign);
-		~MPCPlanner(void);
+  MPCConfig _config;
+  MPCOptimizer _optimizer;
+
+public:
+  MPCPlanner(void);
+  MPCPlanner(const MPCPlanner &orign);
+  MPCPlanner &operator=(const MPCPlanner &orign);
+  ~MPCPlanner(void);
 
 		MPCPlanner(const MPCConfig& config, const MPCOptimizer& optimizer);
     
