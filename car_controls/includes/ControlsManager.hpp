@@ -16,14 +16,13 @@
 #ifndef CONTROLSMANAGER_HPP
 #define CONTROLSMANAGER_HPP
 
+#include "CameraStreamer.hpp"
 #include "EngineController.hpp"
 #include "JoysticksController.hpp"
 #include "MPCPlanner.hpp"
 #include "Polyfitter.hpp"
-#include <atomic>
-#include "CameraStreamer.hpp"
-#include "Subscriber.hpp"
 #include "Publisher.hpp"
+#include "Subscriber.hpp"
 #include <QObject>
 #include <QProcess>
 #include <QThread>
@@ -44,17 +43,17 @@ private:
   Subscriber *m_subscriberJoystickObject;
   CameraStreamer *m_cameraStreamerObject;
 
-	std::atomic<bool> m_running;
-	QThread *m_cameraStreamerThread;
+  std::atomic<bool> m_running;
+  QThread *m_cameraStreamerThread;
 
   QThread *m_manualControllerThread;
   QThread *m_joystickControlThread;
 
-	QThread *m_subscriberJoystickThread;
-	MPCPlanner *m_mpcPlanner;
-	Polyfitter *m_polyfitter;
-	std::atomic<bool> m_autonomousMode;
-	QThread *m_autonomousControlThread;
+  QThread *m_subscriberJoystickThread;
+  MPCPlanner *m_mpcPlanner;
+  Polyfitter *m_polyfitter;
+  std::atomic<bool> m_autonomousMode;
+  QThread *m_autonomousControlThread;
 
 public:
   explicit ControlsManager(int argc, char **argv, QObject *parent = nullptr);
