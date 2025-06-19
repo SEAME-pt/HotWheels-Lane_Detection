@@ -1,5 +1,4 @@
 # Makefile for autonomous_jetson
-# Compila todos os arquivos .cpp em src/ e gera o executável main
 
 CXX = c++
 CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -g -fopenmp
@@ -13,120 +12,128 @@ CUDA_LIB = $(CUDA_PATH)/lib64
 CUDA_AVAILABLE = $(shell test -d $(CUDA_INCLUDE) && echo "yes" || echo "no")
 
 # Qt5 paths
-QT5_CFLAGS = $(shell pkg-config --cflags Qt5Core Qt5Gui 2>/dev/null || echo "")
-QT5_LIBS = $(shell pkg-config --libs Qt5Core Qt5Gui 2>/dev/null || echo "")
+QT5_CFLAGS = $(shell pkg-config --cflags Qt5Core Qt5Gui Qt5Widgets 2>/dev/null || echo "")
+QT5_LIBS = $(shell pkg-config --libs Qt5Core Qt5Gui Qt5Widgets 2>/dev/null || echo "")
 
 # Include paths
 INCLUDE_PATHS = -I. \
+				-IZeroMQ \
                 -Icar_controls/includes \
                 -Icar_controls/includes/inference \
                 -Icar_controls/includes/objectDetection \
                 -I/usr/include/eigen3 \
                 -I/usr/include/opencv4
 
-# Add CUDA include if available
+# Check if OpenCV has CUDA support
+OPENCV_CUDA_AVAILABLE = $(shell pkg-config --exists opencv4 && pkg-config --cflags opencv4 | grep -q cuda && echo "yes" || echo "no")
+
 ifeq ($(CUDA_AVAILABLE), yes)
     INCLUDE_PATHS += -I$(CUDA_INCLUDE)
     CUDA_LIBS = -L$(CUDA_LIB) -lcudart
     CXXFLAGS += -DCUDA_AVAILABLE
     $(info CUDA found - enabling CUDA support)
+    
+    ifeq ($(OPENCV_CUDA_AVAILABLE), yes)
+        CXXFLAGS += -DOPENCV_CUDA_AVAILABLE
+        $(info OpenCV with CUDA support found)
+    else
+        $(info OpenCV without CUDA support - CUDA OpenCV features disabled)
+    endif
 else
-    CUDA_LIBS = 
+    CUDA_LIBS =
     $(info CUDA not found - compiling without CUDA support)
 endif
 
 # Source files
-CAR_CONTROLS_SRC = car_controls/sources/MPCOptimizer.cpp \
-                   car_controls/sources/MPCPlanner.cpp \
-                   car_controls/sources/Polyfitter.cpp
-
-# Additional sources for full car control (with Qt)
-CAR_CONTROLS_FULL_SRC = $(CAR_CONTROLS_SRC) \
-                        car_controls/sources/EngineController.cpp \
-                        car_controls/sources/JoysticksController.cpp \
-                        car_controls/sources/PeripheralController.cpp
-
-# Source files for integrated main
 INTEGRATED_SRC = car_controls/sources/MPCOptimizer.cpp \
                  car_controls/sources/MPCPlanner.cpp \
                  car_controls/sources/Polyfitter.cpp \
                  car_controls/sources/ControlsManager.cpp \
                  car_controls/sources/EngineController.cpp \
                  car_controls/sources/JoysticksController.cpp \
-                 car_controls/sources/PeripheralController.cpp
+                 car_controls/sources/PeripheralController.cpp \
+                 car_controls/sources/inference/CameraStreamer.cpp \
+                 ZeroMQ/Publisher.cpp \
+                 ZeroMQ/Subscriber.cpp
 
-# Add ZeroMQ and other dependencies that ControlsManager needs
-INTEGRATED_SRC += car_controls/../ZeroMQ/Publisher.cpp \
-                  car_controls/../ZeroMQ/Subscriber.cpp \
-                  car_controls/sources/inference/CameraStreamer.cpp
+ifneq ($(wildcard car_controls/sources/objectDetection/*.cpp),)
+    INTEGRATED_SRC += $(wildcard car_controls/sources/objectDetection/*.cpp)
+endif
 
-# Object files
-CAR_CONTROLS_OBJ = $(CAR_CONTROLS_SRC:.cpp=.o)
-CAR_CONTROLS_FULL_OBJ = $(CAR_CONTROLS_FULL_SRC:.cpp=.o)
 INTEGRATED_OBJ = $(INTEGRATED_SRC:.cpp=.o)
 
-# Libraries - order matters for linking!
+# MOC files for Qt classes
+MOC_FILES = \
+    car_controls/sources/ControlsManager.moc \
+    car_controls/sources/EngineController.moc \
+    car_controls/sources/JoysticksController.moc
+
+# Libraries
 OPENCV_LIBS = $(shell pkg-config --libs opencv4 || pkg-config --libs opencv)
 MLPACK_LIBS = -lmlpack -larmadillo -llapack -lblas
 FILESYSTEM_LIBS = -lstdc++fs
-BASIC_LIBS = -lnlopt -pthread $(CUDA_LIBS) $(MLPACK_LIBS) $(FILESYSTEM_LIBS)
+ZMQ_LIBS = -lzmq
+
+ifeq ($(CUDA_AVAILABLE), yes)
+    ifneq ($(wildcard /usr/local/lib/libnvinfer.so),)
+        TENSORRT_LIBS = -lnvinfer -lnvinfer_plugin -lnvonnxparser
+        $(info TensorRT found - enabling TensorRT support)
+    else
+        TENSORRT_LIBS =
+        $(info TensorRT not found - some features may be limited)
+    endif
+else
+    TENSORRT_LIBS =
+endif
+
+BASIC_LIBS = -lnlopt -pthread $(CUDA_LIBS) $(MLPACK_LIBS) $(FILESYSTEM_LIBS) $(ZMQ_LIBS) $(TENSORRT_LIBS)
 SDL_LIBS = -lSDL2
 
 # Targets
 TARGET_BASIC = main
-TARGET_VISUAL = mpc_test
-TARGET_SIMPLE = mpc_simple_test
-TARGET_REAL = mpc_real_test
 
 all: $(TARGET_BASIC)
 
-# MOC processing for Qt (needed for signals/slots)
+# MOC processing for Qt classes
+car_controls/sources/%.moc: car_controls/includes/%.hpp
+	$(shell pkg-config --variable=host_bins Qt5Core)/moc $< -o $@
+
 main.moc: main.cpp
 	$(shell pkg-config --variable=host_bins Qt5Core)/moc main.cpp -o main.moc
 
-# Basic main target
-$(TARGET_BASIC): main.o $(INTEGRATED_OBJ) main.moc
+# Main target with explicit MOC dependencies
+$(TARGET_BASIC): main.o $(INTEGRATED_OBJ) main.moc $(MOC_FILES)
 	$(CXX) $(CXXFLAGS) $(QT5_CFLAGS) main.o $(INTEGRATED_OBJ) -o $@ $(BASIC_LIBS) $(OPENCV_LIBS) $(QT5_LIBS) $(SDL_LIBS)
 
-# Visual test target (with full car control - requires Qt)
-$(TARGET_VISUAL): mpc_test_main.o $(CAR_CONTROLS_FULL_OBJ)
-	$(CXX) $(CXXFLAGS) $(QT5_CFLAGS) $^ -o $@ $(BASIC_LIBS) $(OPENCV_LIBS) $(QT5_LIBS) $(SDL_LIBS)
-
-# Simple visual test (without car control - no Qt needed)
-$(TARGET_SIMPLE): mpc_simple_test.o $(CAR_CONTROLS_OBJ)
-	$(CXX) $(CXXFLAGS) $^ -o $@ $(BASIC_LIBS) $(OPENCV_LIBS)
-
-# Real car control test (with SDL joystick - no Qt needed)
-$(TARGET_REAL): mpc_real_test.o $(CAR_CONTROLS_OBJ)
-	$(CXX) $(CXXFLAGS) $^ -o $@ $(BASIC_LIBS) $(OPENCV_LIBS) $(SDL_LIBS)
-
-# Object file rules
+# Compilation rules
 main.o: main.cpp main.moc
 	$(CXX) $(CXXFLAGS) $(QT5_CFLAGS) $(INCLUDE_PATHS) -c main.cpp -o $@
 
-mpc_test_main.o: mpc_test_main.cpp
+car_controls/sources/ControlsManager.o: car_controls/sources/ControlsManager.cpp car_controls/sources/ControlsManager.moc
 	$(CXX) $(CXXFLAGS) $(QT5_CFLAGS) $(INCLUDE_PATHS) -c $< -o $@
 
-mpc_simple_test.o: mpc_simple_test.cpp
-	$(CXX) $(CXXFLAGS) $(INCLUDE_PATHS) -c $< -o $@
+car_controls/sources/EngineController.o: car_controls/sources/EngineController.cpp car_controls/sources/EngineController.moc
+	$(CXX) $(CXXFLAGS) $(QT5_CFLAGS) $(INCLUDE_PATHS) -c $< -o $@
 
-mpc_real_test.o: mpc_real_test.cpp
+car_controls/sources/JoysticksController.o: car_controls/sources/JoysticksController.cpp car_controls/sources/JoysticksController.moc
+	$(CXX) $(CXXFLAGS) $(QT5_CFLAGS) $(INCLUDE_PATHS) -c $< -o $@
+
+car_controls/sources/inference/%.o: car_controls/sources/inference/%.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDE_PATHS) -c $< -o $@
 
 car_controls/sources/%.o: car_controls/sources/%.cpp
 	$(CXX) $(CXXFLAGS) $(QT5_CFLAGS) $(INCLUDE_PATHS) -c $< -o $@
 
-# Special targets
-visual: $(TARGET_VISUAL)
-simple: $(TARGET_SIMPLE)
-real: $(TARGET_REAL)
+ZeroMQ/%.o: ZeroMQ/%.cpp
+	$(CXX) $(CXXFLAGS) $(INCLUDE_PATHS) -c $< -o $@
 
+# Clean
 clean:
-	rm -f $(INTEGRATED_OBJ) main.o main.moc $(TARGET_BASIC) $(TARGET_VISUAL) $(TARGET_SIMPLE) $(TARGET_REAL)
+	rm -f $(INTEGRATED_OBJ) main.o main.moc $(MOC_FILES) $(TARGET_BASIC)
 
 install-deps:
 	sudo apt update
-	sudo apt install -y libopencv-dev libeigen3-dev libnlopt-dev libmlpack-dev libarmadillo-dev libsdl2-dev qtbase5-dev
+	sudo apt install -y libopencv-dev libeigen3-dev libnlopt-dev libmlpack-dev libarmadillo-dev libsdl2-dev qtbase5-dev qtbase5-dev-tools libzmq3-dev
 
 # Check CUDA installation
 check-cuda:
@@ -140,11 +147,23 @@ check-cuda:
 		echo "You may need to install CUDA or adjust CUDA_PATH"; \
 	fi
 
+# Check Qt5 installation
+check-qt:
+	@echo "=== Checking Qt5 Installation ==="
+	@pkg-config --exists Qt5Core && echo "Qt5Core: OK" || echo "Qt5Core: NOT FOUND"
+	@pkg-config --exists Qt5Gui && echo "Qt5Gui: OK" || echo "Qt5Gui: NOT FOUND"
+	@pkg-config --exists Qt5Widgets && echo "Qt5Widgets: OK" || echo "Qt5Widgets: NOT FOUND"
+	@echo "Qt5 MOC path: $(shell pkg-config --variable=host_bins Qt5Core 2>/dev/null || echo 'NOT FOUND')"
+	@echo "Qt5 CFLAGS: $(QT5_CFLAGS)"
+	@echo "Qt5 LIBS: $(QT5_LIBS)"
+
 # Check library availability
 check-libs:
 	@echo "=== Checking Library Availability ==="
 	@echo "OpenCV:"
 	@pkg-config --exists opencv4 && echo "  opencv4: OK" || (pkg-config --exists opencv && echo "  opencv: OK" || echo "  opencv: NOT FOUND")
+	@echo "OpenCV CUDA support:"
+	@pkg-config --exists opencv4 && pkg-config --cflags opencv4 | grep -q cuda && echo "  OpenCV CUDA: OK" || echo "  OpenCV CUDA: NOT FOUND"
 	@echo "MLPack:"
 	@pkg-config --exists mlpack && echo "  mlpack: OK" || echo "  mlpack: NOT FOUND (using -lmlpack)"
 	@echo "Armadillo:"
@@ -160,14 +179,27 @@ debug-compile:
 	@echo "CXX: $(CXX)"
 	@echo "CXXFLAGS: $(CXXFLAGS)"
 	@echo "INCLUDE_PATHS: $(INCLUDE_PATHS)"
+	@echo "QT5_CFLAGS: $(QT5_CFLAGS)"
 	@echo "CUDA_AVAILABLE: $(CUDA_AVAILABLE)"
 	@echo "CUDA_LIBS: $(CUDA_LIBS)"
 	@echo "OPENCV_LIBS: $(OPENCV_LIBS)"
 	@echo "MLPACK_LIBS: $(MLPACK_LIBS)"
 	@echo "FILESYSTEM_LIBS: $(FILESYSTEM_LIBS)"
 	@echo "BASIC_LIBS: $(BASIC_LIBS)"
+	@echo "=== Combined flags for compilation ==="
+	@echo "All include flags: $(QT5_CFLAGS) $(INCLUDE_PATHS)"
 	@echo "=== Testing individual file compilation ==="
 	$(CXX) $(CXXFLAGS) $(INCLUDE_PATHS) -c car_controls/sources/Polyfitter.cpp -o /tmp/test_polyfitter.o -v
 	@echo "Polyfitter compilation successful"
 
-.PHONY: all visual simple real clean install-deps check-cuda check-libs debug-compile
+# Show what flags are being used
+show-flags:
+	@echo "=== Include Paths Breakdown ==="
+	@echo "INCLUDE_PATHS: $(INCLUDE_PATHS)"
+	@echo ""
+	@echo "QT5_CFLAGS: $(QT5_CFLAGS)"
+	@echo ""
+	@echo "=== Combined in compilation ==="
+	@echo "$(QT5_CFLAGS) $(INCLUDE_PATHS)"
+
+.PHONY: all clean install-deps check-cuda check-libs debug-compile check-qt show-flags
