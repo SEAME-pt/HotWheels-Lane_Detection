@@ -21,9 +21,10 @@
 
 /*!
  * @brief Construct a JoysticksController object.
- * @details This constructor takes a QObject parent and two std::function callbacks.
- * The first callback is called when the steering of the joystick is updated, and
- * the second one is called when the speed of the joystick is updated.
+ * @details This constructor takes a QObject parent and two std::function
+ * callbacks. The first callback is called when the steering of the joystick is
+ * updated, and the second one is called when the speed of the joystick is
+ * updated.
  * @param steeringCallback The callback to be called when the steering of the
  * joystick is updated.
  * @param speedCallback The callback to be called when the speed of the joystick
@@ -54,9 +55,10 @@ JoysticksController::~JoysticksController()
 /*!
  * @brief Initializes the joystick controller.
  * @details This function initializes the SDL joystick subsystem and opens the
- * first available joystick device. If SDL initialization fails, an error message
- * is logged and the function returns false.
- * @return True if the joystick is successfully initialized and opened, false otherwise.
+ * first available joystick device. If SDL initialization fails, an error
+ * message is logged and the function returns false.
+ * @return True if the joystick is successfully initialized and opened, false
+ * otherwise.
  */
 bool JoysticksController::init()
 {
@@ -72,7 +74,7 @@ bool JoysticksController::init()
 		init();
 	}
 
-	return true;
+  return true;
 }
 
 /*!
@@ -122,6 +124,6 @@ void JoysticksController::processInput()
 		QThread::msleep(10);
 	}
 
-	// qDebug() << "Joystick controller loop finished.";
-	emit finished();
+  // qDebug() << "Joystick controller loop finished.";
+  emit finished();
 }

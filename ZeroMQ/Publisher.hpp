@@ -1,27 +1,27 @@
 #ifndef PUBLISHER_HPP
 #define PUBLISHER_HPP
 
-#include <zmq.hpp>
-#include <iostream>
-#include <thread>
 #include <chrono>
+#include <cuda_runtime.h>
+#include <iostream>
 #include <mutex>
 #include <opencv2/core/cuda.hpp>
-#include <cuda_runtime.h>
 #include <opencv2/opencv.hpp>
+#include <thread>
+#include <zmq.hpp>
 
 class Publisher
 {
 private:
-	explicit Publisher(int port);
+  explicit Publisher(int port);
 
-	zmq::context_t context;
-	zmq::socket_t publisher;
-	bool joytstick_value;
-	std::mutex joystick_mtx;
-	std::mutex frame_mtx;
-	std::string boundAddress;
-	bool running;
+  zmq::context_t context;
+  zmq::socket_t publisher;
+  bool joytstick_value;
+  std::mutex joystick_mtx;
+  std::mutex frame_mtx;
+  std::string boundAddress;
+  bool running;
 
 	static std::unordered_map<int, Publisher *> instances;
 

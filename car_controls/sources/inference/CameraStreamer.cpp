@@ -5,7 +5,7 @@ CameraStreamer::CameraStreamer(double scale)
 	: scale_factor(scale), m_publisherFrameObject(nullptr), m_running(true)
 {
 
-	// segmentationInferencer = std::make_shared<ONNXInferencer>(
+  // segmentationInferencer = std::make_shared<ONNXInferencer>(
 
 	segmentationInferencer = std::make_shared<TensorRTInferencer>("/home/jetson/models/lane-detection/model.engine");
 	yoloInferencer = std::make_shared<YOLOv5TRT>("/home/jetson/models/object-detection/yolov5m_updated.engine", "/home/jetson/models/object-detection/labels.txt");
@@ -18,11 +18,12 @@ CameraStreamer::CameraStreamer(double scale)
 						   "videoconvert ! video/x-raw, format=(string)BGR ! "
 						   "appsink drop=1 buffers=1";
 
-	std::cout << "[CameraStreamer] Using GStreamer pipeline: " << pipeline << std::endl;
+  std::cout << "[CameraStreamer] Using GStreamer pipeline: " << pipeline
+            << std::endl;
 
-	cap.open(pipeline, cv::CAP_GSTREAMER); // Open camera stream with GStreamer
+  cap.open(pipeline, cv::CAP_GSTREAMER); // Open camera stream with GStreamer
 
-	std::cout << "[CameraStreamer] Camera opened." << std::endl;
+  std::cout << "[CameraStreamer] Camera opened." << std::endl;
 
 	if (!cap.isOpened())
 	{ // Check if camera opened successfully
@@ -57,10 +58,10 @@ CameraStreamer::~CameraStreamer()
 		cuda_resource = nullptr;
 	}
 
-	delete m_publisherFrameObject;
-	m_publisherFrameObject = nullptr;
+  delete m_publisherFrameObject;
+  m_publisherFrameObject = nullptr;
 
-	std::cout << "[~CameraStreamer] Destructor done." << std::endl;
+  std::cout << "[~CameraStreamer] Destructor done." << std::endl;
 }
 
 void CameraStreamer::segmentationWorker()
@@ -72,10 +73,12 @@ void CameraStreamer::segmentationWorker()
 		{
 			// auto start = std::chrono::high_resolution_clock::now();
 
-			segmentationInferencer->doInference(frame);
+      segmentationInferencer->doInference(frame);
 
-			// auto end = std::chrono::high_resolution_clock::now();
-			// auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+      // auto end = std::chrono::high_resolution_clock::now();
+      // auto duration_ms =
+      // std::chrono::duration_cast<std::chrono::milliseconds>(end -
+      // start).count();
 
 			// std::cout << "[Segmentation] Inference time: " << duration_ms << " ms" << std::endl;
 		}
@@ -107,9 +110,9 @@ void CameraStreamer::start()
 {
 	m_running = true;
 
-	captureThread = std::thread(&CameraStreamer::captureLoop, this);
-	segmentationThread = std::thread(&CameraStreamer::segmentationWorker, this);
-	detectionThread = std::thread(&CameraStreamer::detectionWorker, this);
+  captureThread = std::thread(&CameraStreamer::captureLoop, this);
+  segmentationThread = std::thread(&CameraStreamer::segmentationWorker, this);
+  detectionThread = std::thread(&CameraStreamer::detectionWorker, this);
 }
 
 void CameraStreamer::captureLoop()
@@ -135,12 +138,14 @@ void CameraStreamer::captureLoop()
 			break;
 		}
 
-		segmentationBuffer.update(frame);
-		detectionBuffer.update(frame);
+    segmentationBuffer.update(frame);
+    detectionBuffer.update(frame);
 
-		frame_count++;
-		auto now = std::chrono::high_resolution_clock::now();
-		auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
+    frame_count++;
+    auto now = std::chrono::high_resolution_clock::now();
+    auto elapsed =
+        std::chrono::duration_cast<std::chrono::seconds>(now - start_time)
+            .count();
 
 		if (elapsed >= 1)
 		{
@@ -168,5 +173,5 @@ void CameraStreamer::stop()
 	}
 	std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-	std::cout << "[CameraStreamer] Shutdown complete." << std::endl;
+  std::cout << "[CameraStreamer] Shutdown complete." << std::endl;
 }

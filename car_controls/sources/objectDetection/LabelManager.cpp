@@ -31,7 +31,7 @@ void LabelManager::loadLabels(const std::string &labelPath)
 	}
 	file.close();
 
-	std::cout << "[INFO] Carregadas " << labels.size() << " labels." << std::endl;
+  std::cout << "[INFO] Carregadas " << labels.size() << " labels." << std::endl;
 }
 
 /**

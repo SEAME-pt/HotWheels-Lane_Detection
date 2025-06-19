@@ -1,24 +1,25 @@
-#include <iostream>
-#include <fstream>
-#include <vector>
-#include <opencv2/opencv.hpp>
-#include <opencv2/cudawarping.hpp>
-#include <opencv2/cudaimgproc.hpp>
-#include <opencv2/highgui.hpp>
-#include <opencv2/core/cuda.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-#include <cuda_runtime.h>
+#include "../../../ZeroMQ/Publisher.hpp"
+#include "../../../ZeroMQ/Subscriber.hpp"
+#include "LabelManager.hpp"
 #include <NvInfer.h>
 #include <chrono>
-#include "LabelManager.hpp"
-#include "../../../ZeroMQ/Subscriber.hpp"
-#include "../../../ZeroMQ/Publisher.hpp"
+#include <cuda_runtime.h>
+#include <fstream>
+#include <iostream>
+#include <opencv2/core/cuda.hpp>
+#include <opencv2/cudaimgproc.hpp>
+#include <opencv2/cudawarping.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/opencv.hpp>
+#include <vector>
 
 using namespace nvinfer1;
 
 /**
  * @struct Detection
- * @brief Estrutura para armazenar uma detecção (bounding box, confiança e classe).
+ * @brief Estrutura para armazenar uma detecção (bounding box, confiança e
+ * classe).
  */
 struct Detection
 {
@@ -39,10 +40,10 @@ public:
 	 */
 	YOLOv5TRT(const std::string &enginePath, const std::string &labelPath);
 
-	/**
-	 * @brief Destrutor. Libera recursos.
-	 */
-	~YOLOv5TRT();
+  /**
+   * @brief Destrutor. Libera recursos.
+   */
+  ~YOLOv5TRT();
 
 	void process_image(const cv::Mat &frame);
 
@@ -76,10 +77,10 @@ private:
 	size_t outputSize{0};
 	std::vector<void *> bindings;
 
-	LabelManager labelManager;
-	float conf_thresh = 0.25f;
-	float nms_thresh = 0.45f;
-	int num_classes;
+  LabelManager labelManager;
+  float conf_thresh = 0.25f;
+  float nms_thresh = 0.45f;
+  int num_classes;
 
 	void loadEngine(const std::string &enginePath);
 	void allocateBuffers();
@@ -87,8 +88,8 @@ private:
 
 	void setClassName(const std::string &class_name);
 
-	static std::string lastClassName;
-	static std::chrono::steady_clock::time_point lastNotificationTime;
+  static std::string lastClassName;
+  static std::chrono::steady_clock::time_point lastNotificationTime;
 
 protected:
 	size_t calculateVolume(const nvinfer1::Dims &dims);

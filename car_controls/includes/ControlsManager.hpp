@@ -26,7 +26,6 @@
 #include <QObject>
 #include <QProcess>
 #include <QThread>
-#include <atomic>
 
 /*!
  * @brief The ControlsManager class.

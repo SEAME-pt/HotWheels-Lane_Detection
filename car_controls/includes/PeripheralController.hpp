@@ -3,7 +3,8 @@
  * @brief File containing the PeripheralController class.
  * @version 0.1
  * @date 2025-02-12
- * @details This class is responsible for controlling the peripherals of the car.
+ * @details This class is responsible for controlling the peripherals of the
+ * car.
  * @note This class is a subclass of IPeripheralController.
  *
  * @author Félix LE BIHAN (@Fle-bihh)
@@ -28,15 +29,15 @@
 
 /*!
  * @brief The PeripheralController class
- * @details This class is responsible for controlling the peripherals of the car.
+ * @details This class is responsible for controlling the peripherals of the
+ * car.
  */
-class PeripheralController : public IPeripheralController
-{
+class PeripheralController : public IPeripheralController {
 private:
-	int servo_bus_fd_;
-	int motor_bus_fd_;
-	int servo_addr_;
-	int motor_addr_;
+  int servo_bus_fd_;
+  int motor_bus_fd_;
+  int servo_addr_;
+  int motor_addr_;
 
 public:
 	PeripheralController(int servo_addr, int motor_addr);

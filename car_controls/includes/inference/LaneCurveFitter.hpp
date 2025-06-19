@@ -1,8 +1,8 @@
 #pragma once
 
 #include <opencv2/opencv.hpp>
-#include <vector>
 #include <optional>
+#include <vector>
 
 class LaneCurveFitter
 {
@@ -20,16 +20,17 @@ public:
 		std::vector<cv::Point2f> c2;
 	};
 
-	LaneCurveFitter(float dbscanEps = 5.0f, int dbscanMinSamples = 20, int numWindows = 20, int laneWidthPx = 300);
+  LaneCurveFitter(float dbscanEps = 5.0f, int dbscanMinSamples = 20,
+                  int numWindows = 20, int laneWidthPx = 300);
 
 	std::vector<LaneCurve> fitLanes(const cv::Mat &binaryMask);
 	std::optional<CenterlineResult> computeVirtualCenterline(const std::vector<LaneCurve> &lanes, int imgWidth, int imgHeight);
 
 private:
-	float dbscanEps;
-	int dbscanMinSamples;
-	int numWindows;
-	int laneWidthPx;
+  float dbscanEps;
+  int dbscanMinSamples;
+  int numWindows;
+  int laneWidthPx;
 
 	std::vector<cv::Point> extractLanePoints(const cv::Mat &binaryMask);
 	std::vector<int> dbscanCluster(const std::vector<cv::Point> &points, std::vector<int> &uniqueLabels);
