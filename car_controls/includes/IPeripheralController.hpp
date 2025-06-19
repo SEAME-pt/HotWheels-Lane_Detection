@@ -28,12 +28,13 @@
  * @brief Interface for the peripheral controller.
  * @class IPeripheralController
  */
-class IPeripheralController {
+class IPeripheralController
+{
 public:
 	virtual ~IPeripheralController() = default;
 
 	virtual int i2c_smbus_write_byte_data(int file, uint8_t command,
-																				uint8_t value) = 0;
+										  uint8_t value) = 0;
 	virtual int i2c_smbus_read_byte_data(int file, uint8_t command) = 0;
 
 	virtual void write_byte_data(int fd, int reg, int value) = 0;

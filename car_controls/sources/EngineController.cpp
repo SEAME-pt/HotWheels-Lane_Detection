@@ -31,13 +31,15 @@
  * @param max_val Maximum value of the range.
  * @return The clamped value, or the original value if it is within the range.
  */
-template <typename T> T clamp(T value, T min_val, T max_val) {
+template <typename T>
+T clamp(T value, T min_val, T max_val)
+{
 	return (value < min_val) ? min_val : ((value > max_val) ? max_val : value);
 }
 
 /*!
-	* @brief Default constructor for the EngineController class.
-	*/
+ * @brief Default constructor for the EngineController class.
+ */
 EngineController::EngineController() {}
 
 /*!
@@ -48,9 +50,10 @@ EngineController::EngineController() {}
  * @details Sets up the PeripheralController and initializes the servo and motor controllers.
  */
 EngineController::EngineController(int servo_addr, int motor_addr,
-																	 QObject *parent)
-		: QObject(parent), m_running(false), m_current_speed(0),
-			m_current_angle(0) {
+								   QObject *parent)
+	: QObject(parent), m_running(false), m_current_speed(0),
+	  m_current_angle(0)
+{
 	pcontrol = new PeripheralController(servo_addr, motor_addr);
 
 	pcontrol->init_servo();
@@ -62,7 +65,8 @@ EngineController::EngineController(int servo_addr, int motor_addr,
  *
  * @details Stops the engine and deletes the peripheral controller.
  */
-EngineController::~EngineController() {
+EngineController::~EngineController()
+{
 	stop();
 	delete pcontrol;
 }
@@ -79,20 +83,23 @@ void EngineController::start() { m_running = true; }
  *
  * @details Sets the m_running flag to false and sets both speed and steering to 0.
  */
-void EngineController::stop() {
+void EngineController::stop()
+{
 	m_running = false;
 	set_speed(0);
 	set_steering(0);
 }
 
-	/*!
-	 * @brief Sets the direction of the car and emits the directionUpdated signal if the
-	 * direction has changed.
-	 *
-	 * @param newDirection The new direction to set.
-	 */
-void EngineController::setDirection(CarDirection newDirection) {
-	if (newDirection != this->m_currentDirection) {
+/*!
+ * @brief Sets the direction of the car and emits the directionUpdated signal if the
+ * direction has changed.
+ *
+ * @param newDirection The new direction to set.
+ */
+void EngineController::setDirection(CarDirection newDirection)
+{
+	if (newDirection != this->m_currentDirection)
+	{
 		emit this->directionUpdated(newDirection);
 		this->m_currentDirection = newDirection;
 	}
@@ -109,13 +116,15 @@ void EngineController::setDirection(CarDirection newDirection) {
  * car's direction accordingly and clamps the speed to ensure it is within the valid range.
  */
 
-void EngineController::set_speed(int speed) {
+void EngineController::set_speed(int speed)
+{
 
 	speed = clamp(speed, -100, 100);
 	int pwm_value = static_cast<int>(std::abs(speed) / 100.0 * 4096);
 
 	if (speed <
-			0) { // Forward
+		0)
+	{ // Forward
 		pcontrol->set_motor_pwm(0, pwm_value);
 		pcontrol->set_motor_pwm(1, 0);
 		pcontrol->set_motor_pwm(2, pwm_value);
@@ -123,7 +132,9 @@ void EngineController::set_speed(int speed) {
 		pcontrol->set_motor_pwm(6, 0);
 		pcontrol->set_motor_pwm(7, pwm_value);
 		setDirection(CarDirection::Reverse);
-	} else if (speed > 0) { // Backwards
+	}
+	else if (speed > 0)
+	{ // Backwards
 		pcontrol->set_motor_pwm(0, pwm_value);
 		pcontrol->set_motor_pwm(1, pwm_value);
 		pcontrol->set_motor_pwm(2, 0);
@@ -131,7 +142,9 @@ void EngineController::set_speed(int speed) {
 		pcontrol->set_motor_pwm(6, pwm_value);
 		pcontrol->set_motor_pwm(7, pwm_value);
 		setDirection(CarDirection::Drive);
-	} else { // Stop
+	}
+	else
+	{ // Stop
 		for (int channel = 0; channel < 9; ++channel)
 			pcontrol->set_motor_pwm(channel, 0);
 		setDirection(CarDirection::Stop);
@@ -139,28 +152,34 @@ void EngineController::set_speed(int speed) {
 	m_current_speed = speed;
 }
 
-	/*!
-	 * @brief Sets the steering angle of the car.
-	 *
-	 * @param angle The desired steering angle in degrees, ranging from -MAX_ANGLE to MAX_ANGLE.
-	 *
-	 * @details This function adjusts the servo PWM signal based on the input angle value.
-	 * The function clamps the angle to ensure it is within the valid range and calculates the
-	 * corresponding PWM value. The function also updates the internal steering angle and emits
-	 * the steeringUpdated signal.
-	 */
-void EngineController::set_steering(int angle) {
+/*!
+ * @brief Sets the steering angle of the car.
+ *
+ * @param angle The desired steering angle in degrees, ranging from -MAX_ANGLE to MAX_ANGLE.
+ *
+ * @details This function adjusts the servo PWM signal based on the input angle value.
+ * The function clamps the angle to ensure it is within the valid range and calculates the
+ * corresponding PWM value. The function also updates the internal steering angle and emits
+ * the steeringUpdated signal.
+ */
+void EngineController::set_steering(int angle)
+{
 	angle = clamp(angle, -MAX_ANGLE, MAX_ANGLE);
 	int pwm = 0;
-	if (angle < 0) {
+	if (angle < 0)
+	{
 		pwm = SERVO_CENTER_PWM +
-					static_cast<int>((angle / static_cast<float>(MAX_ANGLE)) *
-													 (SERVO_CENTER_PWM - SERVO_LEFT_PWM));
-	} else if (angle > 0) {
+			  static_cast<int>((angle / static_cast<float>(MAX_ANGLE)) *
+							   (SERVO_CENTER_PWM - SERVO_LEFT_PWM));
+	}
+	else if (angle > 0)
+	{
 		pwm = SERVO_CENTER_PWM +
-					static_cast<int>((angle / static_cast<float>(MAX_ANGLE)) *
-													 (SERVO_RIGHT_PWM - SERVO_CENTER_PWM));
-	} else {
+			  static_cast<int>((angle / static_cast<float>(MAX_ANGLE)) *
+							   (SERVO_RIGHT_PWM - SERVO_CENTER_PWM));
+	}
+	else
+	{
 		pwm = SERVO_CENTER_PWM;
 	}
 
