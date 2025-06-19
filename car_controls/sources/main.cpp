@@ -19,17 +19,19 @@
 
 volatile bool keepRunning = true;
 
-ControlsManager* g_controlsManager = nullptr;
+ControlsManager *g_controlsManager = nullptr;
 
 /*!
  * @brief SIGINT signal handler.
  * @details This function will be called when the SIGINT signal is received.
  * The function will quit the QCoreApplication.
  */
-void handleSigint(int) {
+void handleSigint(int)
+{
 	qDebug() << "SIGINT received. Quitting application...";
 
-	if (g_controlsManager) {
+	if (g_controlsManager)
+	{
 		delete g_controlsManager;
 		g_controlsManager = nullptr;
 	}
@@ -48,17 +50,21 @@ void handleSigint(int) {
  * non-zero exit status. The application runs until quit is invoked.
  */
 
- int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 	QCoreApplication a(argc, argv);
-	//to handle Ctrl+C
+	// to handle Ctrl+C
 	std::signal(SIGINT, handleSigint);
-	//to handle when service shuts down, as it gives a SIGTERM signal
+	// to handle when service shuts down, as it gives a SIGTERM signal
 	std::signal(SIGTERM, handleSigint);
 
-	try {
+	try
+	{
 		g_controlsManager = new ControlsManager(argc, argv);
 		return a.exec();
-	} catch (const std::exception &e) {
+	}
+	catch (const std::exception &e)
+	{
 		std::cerr << "Error: " << e.what() << std::endl;
 		return 1;
 	}

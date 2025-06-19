@@ -32,8 +32,9 @@
  * @brief The ControlsManager class.
  * @details This class is responsible for managing the controls of the car.
  */
-class ControlsManager : public QObject {
-  Q_OBJECT
+class ControlsManager : public QObject
+{
+	Q_OBJECT
 
 private:
   EngineController m_engineController;

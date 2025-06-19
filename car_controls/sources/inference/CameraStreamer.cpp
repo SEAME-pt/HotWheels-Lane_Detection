@@ -1,22 +1,22 @@
 #include "../../includes/inference/CameraStreamer.hpp"
 
-
 // Constructor: initializes camera capture, inference reference, and settings
 CameraStreamer::CameraStreamer(double scale)
-	: scale_factor(scale), m_publisherFrameObject(nullptr), m_running(true) {
+	: scale_factor(scale), m_publisherFrameObject(nullptr), m_running(true)
+{
 
 	// segmentationInferencer = std::make_shared<ONNXInferencer>(
 
-		segmentationInferencer = std::make_shared<TensorRTInferencer>("/home/jetson/models/lane-detection/model.engine");
+	segmentationInferencer = std::make_shared<TensorRTInferencer>("/home/jetson/models/lane-detection/model.engine");
 	yoloInferencer = std::make_shared<YOLOv5TRT>("/home/jetson/models/object-detection/yolov5m_updated.engine", "/home/jetson/models/object-detection/labels.txt");
 
 	// Define GStreamer pipeline for CSI camera
 	std::string pipeline = "nvarguscamerasrc sensor-mode=4 ! "
-			"video/x-raw(memory:NVMM), width=1280, height=720, "
-			"format=(string)NV12, framerate=30/1 ! "
-			"nvvidconv ! video/x-raw, format=(string)BGRx ! "
-			"videoconvert ! video/x-raw, format=(string)BGR ! "
-			"appsink drop=1 buffers=1";
+						   "video/x-raw(memory:NVMM), width=1280, height=720, "
+						   "format=(string)NV12, framerate=30/1 ! "
+						   "nvvidconv ! video/x-raw, format=(string)BGRx ! "
+						   "videoconvert ! video/x-raw, format=(string)BGR ! "
+						   "appsink drop=1 buffers=1";
 
 	std::cout << "[CameraStreamer] Using GStreamer pipeline: " << pipeline << std::endl;
 
@@ -24,29 +24,36 @@ CameraStreamer::CameraStreamer(double scale)
 
 	std::cout << "[CameraStreamer] Camera opened." << std::endl;
 
-	if (!cap.isOpened()) {  // Check if camera opened successfully
+	if (!cap.isOpened())
+	{ // Check if camera opened successfully
 		std::cerr << "Error: Could not open CSI camera" << std::endl;
-		exit(-1);  // Terminate if failed
+		exit(-1); // Terminate if failed
 	}
 }
 
 // Destructor: clean up resources
-CameraStreamer::~CameraStreamer() {
-	stop();  // Stop the camera stream
+CameraStreamer::~CameraStreamer()
+{
+	stop(); // Stop the camera stream
 
 	// Join all threads safely
-	if (captureThread.joinable()) captureThread.join();
-	if (segmentationThread.joinable()) segmentationThread.join();
-	if (detectionThread.joinable()) detectionThread.join();
+	if (captureThread.joinable())
+		captureThread.join();
+	if (segmentationThread.joinable())
+		segmentationThread.join();
+	if (detectionThread.joinable())
+		detectionThread.join();
 
-	if (cap.isOpened()) {
+	if (cap.isOpened())
+	{
 		cap.release(); // Release camera
 	}
 
-	cudaDeviceSynchronize();  // Ensure all CUDA operations are complete
+	cudaDeviceSynchronize(); // Ensure all CUDA operations are complete
 
-	if (cuda_resource) {
-		cudaGraphicsUnregisterResource(cuda_resource);  // Unregister CUDA graphics resource
+	if (cuda_resource)
+	{
+		cudaGraphicsUnregisterResource(cuda_resource); // Unregister CUDA graphics resource
 		cuda_resource = nullptr;
 	}
 
@@ -56,10 +63,13 @@ CameraStreamer::~CameraStreamer() {
 	std::cout << "[~CameraStreamer] Destructor done." << std::endl;
 }
 
-void CameraStreamer::segmentationWorker() {
-	while (m_running) {
+void CameraStreamer::segmentationWorker()
+{
+	while (m_running)
+	{
 		cv::Mat frame;
-		if (segmentationBuffer.getFrame(frame)) {
+		if (segmentationBuffer.getFrame(frame))
+		{
 			// auto start = std::chrono::high_resolution_clock::now();
 
 			segmentationInferencer->doInference(frame);
@@ -68,25 +78,33 @@ void CameraStreamer::segmentationWorker() {
 			// auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
 			// std::cout << "[Segmentation] Inference time: " << duration_ms << " ms" << std::endl;
-		} else {
+		}
+		else
+		{
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 		}
 	}
 }
 
-void CameraStreamer::detectionWorker() {
-	while (m_running) {
+void CameraStreamer::detectionWorker()
+{
+	while (m_running)
+	{
 		cv::Mat frame;
-		if (detectionBuffer.getFrame(frame)) {
+		if (detectionBuffer.getFrame(frame))
+		{
 			yoloInferencer->process_image(frame);
-		} else {
+		}
+		else
+		{
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 		}
 	}
 }
 
 // Main loop: capture, undistort, predict, visualize and render frames
-void CameraStreamer::start() {
+void CameraStreamer::start()
+{
 	m_running = true;
 
 	captureThread = std::thread(&CameraStreamer::captureLoop, this);
@@ -94,21 +112,25 @@ void CameraStreamer::start() {
 	detectionThread = std::thread(&CameraStreamer::detectionWorker, this);
 }
 
-void CameraStreamer::captureLoop() {
+void CameraStreamer::captureLoop()
+{
 	auto start_time = std::chrono::high_resolution_clock::now();
 	int frame_count = 0;
-	const int framesToSkip = 1;  // Skip frames to reduce processing load
+	const int framesToSkip = 1; // Skip frames to reduce processing load
 	cv::Mat frame;
 
-	while (m_running) {
+	while (m_running)
+	{
 		auto frame_start = std::chrono::high_resolution_clock::now();
 
-		for (int i = 0; i < framesToSkip; ++i) {
-			cap.grab();  // Grab frames without decoding
+		for (int i = 0; i < framesToSkip; ++i)
+		{
+			cap.grab(); // Grab frames without decoding
 		}
-		cap >> frame;  // Read one frame (decoded)
+		cap >> frame; // Read one frame (decoded)
 
-		if (frame.empty()) {
+		if (frame.empty())
+		{
 			std::cerr << "Empty frame, exiting" << std::endl;
 			break;
 		}
@@ -120,7 +142,8 @@ void CameraStreamer::captureLoop() {
 		auto now = std::chrono::high_resolution_clock::now();
 		auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
 
-		if (elapsed >= 1) {
+		if (elapsed >= 1)
+		{
 			std::cout << "Average FPS: " << frame_count / static_cast<double>(elapsed) << std::endl;
 			start_time = now;
 			frame_count = 0;
@@ -128,14 +151,19 @@ void CameraStreamer::captureLoop() {
 	}
 }
 
-void CameraStreamer::stop() {
-	if (!m_running) return;
+void CameraStreamer::stop()
+{
+	if (!m_running)
+		return;
 	m_running = false;
 
 	// Wait for any CUDA operations to finish
-	try {
+	try
+	{
 		cudaDeviceSynchronize();
-	} catch (const std::exception& e) {
+	}
+	catch (const std::exception &e)
+	{
 		std::cerr << "CUDA sync error in stop(): " << e.what() << std::endl;
 	}
 	std::this_thread::sleep_for(std::chrono::milliseconds(100));
