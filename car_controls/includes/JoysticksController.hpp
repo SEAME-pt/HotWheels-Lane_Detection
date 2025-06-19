@@ -35,12 +35,12 @@ private:
   bool m_running;
 
 public:
-  JoysticksController(std::function<void(int)> steeringCallback,
-                      std::function<void(int)> speedCallback,
-                      QObject *parent = nullptr);
-  ~JoysticksController();
-  bool init();
-  void requestStop();
+	JoysticksController(std::function<void(int)> steeringCallback,
+						std::function<void(int)> speedCallback,
+						QObject *parent = nullptr);
+	~JoysticksController();
+	bool init();
+	void requestStop();
 
 public slots:
   void processInput();

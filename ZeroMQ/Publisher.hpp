@@ -10,7 +10,8 @@
 #include <thread>
 #include <zmq.hpp>
 
-class Publisher {
+class Publisher
+{
 private:
   explicit Publisher(int port);
 
@@ -22,22 +23,21 @@ private:
   std::string boundAddress;
   bool running;
 
-  static std::unordered_map<int, Publisher *> instances;
+	static std::unordered_map<int, Publisher *> instances;
 
 public:
-  // Publisher(int port);
-  ~Publisher();
-  static Publisher *m_instance;
-  static void destroyAll();
+	// Publisher(int port);
+	~Publisher();
+	static Publisher *m_instance;
+	static void destroyAll();
 
-  // Singleton accessor
-  static Publisher *instance(int port); // default port
+	// Singleton accessor
+	static Publisher *instance(int port); // default port
 
-  void publish(const std::string &topic, const std::string &message);
-  void setJoystickStatus(bool new_joytstick_value);
-  void publishInferenceFrame(const std::string &topic,
-                             const cv::cuda::GpuMat &gpu_image);
-  // void publishCameraFrame(const std::string& topic, const cv::Mat& frame);
+	void publish(const std::string &topic, const std::string &message);
+	void setJoystickStatus(bool new_joytstick_value);
+	void publishInferenceFrame(const std::string &topic, const cv::cuda::GpuMat &gpu_image);
+	// void publishCameraFrame(const std::string& topic, const cv::Mat& frame);
 };
 
 #endif // PUBLISHER_HPP

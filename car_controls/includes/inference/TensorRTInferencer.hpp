@@ -18,17 +18,19 @@
 #include "../../../ZeroMQ/Publisher.hpp"
 #include "../../../ZeroMQ/Subscriber.hpp"
 
-class TensorRTInferencer : public IInferencer {
+class TensorRTInferencer : public IInferencer
+{
 private:
-  class Logger : public nvinfer1::ILogger {
-  public:
-    void log(Severity severity, const char *msg) noexcept override;
-  } logger;
+	class Logger : public nvinfer1::ILogger
+	{
+	public:
+		void log(Severity severity, const char *msg) noexcept override;
+	} logger;
 
-  std::vector<char> engineData;
-  nvinfer1::IRuntime *runtime;
-  nvinfer1::ICudaEngine *engine;
-  nvinfer1::IExecutionContext *context;
+	std::vector<char> engineData;
+	nvinfer1::IRuntime *runtime;
+	nvinfer1::ICudaEngine *engine;
+	nvinfer1::IExecutionContext *context;
 
   int inputBindingIndex;
   int outputBindingIndex;
@@ -42,18 +44,18 @@ private:
   size_t inputByteSize;
   size_t outputByteSize;
 
-  // Persistent CUDA resources
-  void *deviceInput;
-  void *deviceOutput;
-  cudaStream_t stream;
-  std::vector<void *> bindings;
+	// Persistent CUDA resources
+	void *deviceInput;
+	void *deviceOutput;
+	cudaStream_t stream;
+	std::vector<void *> bindings;
 
-  // Pinned host memory
-  float *hostInput;
-  float *hostOutput;
+	// Pinned host memory
+	float *hostInput;
+	float *hostOutput;
 
-  LanePostProcessor *lanePostProcessor;
-  LaneCurveFitter *laneCurveFitter;
+	LanePostProcessor *lanePostProcessor;
+	LaneCurveFitter *laneCurveFitter;
 
   cv::cuda::GpuMat d_mapx, d_mapy;
   cv::cuda::GpuMat outputMaskGpu;
@@ -61,22 +63,31 @@ private:
 
   Publisher *m_publisherObject;
 
-  std::vector<char> readEngineFile(const std::string &enginePath);
-  void cleanupResources();
+	std::vector<char> readEngineFile(const std::string &enginePath);
+	void cleanupResources();
 
   std::string serializeMask(const cv::Mat &mask);
 
 public:
-  TensorRTInferencer(const std::string &enginePath);
-  ~TensorRTInferencer();
+	TensorRTInferencer(const std::string &enginePath);
+	~TensorRTInferencer();
 
-  cv::cuda::GpuMat preprocessImage(const cv::cuda::GpuMat &gpuImage);
-  void runInference(const cv::cuda::GpuMat &gpuInput);
-  cv::cuda::GpuMat makePrediction(const cv::cuda::GpuMat &gpuImage) override;
-  void initUndistortMaps();
-  void doInference(const cv::Mat &frame) override;
+	cv::cuda::GpuMat preprocessImage(const cv::cuda::GpuMat &gpuImage);
+	void runInference(const cv::cuda::GpuMat &gpuInput);
+	cv::cuda::GpuMat makePrediction(const cv::cuda::GpuMat &gpuImage) override;
+	void initUndistortMaps();
+	void doInference(const cv::Mat &frame) override;
 
-  void *getDeviceInputPtr() const { return deviceInput; }
-  void *getDeviceOutputPtr() const { return deviceOutput; }
-  cv::cuda::GpuMat getOutputMaskGpu() const { return outputMaskGpu; }
+	void *getDeviceInputPtr() const
+	{
+		return deviceInput;
+	}
+	void *getDeviceOutputPtr() const
+	{
+		return deviceOutput;
+	}
+	cv::cuda::GpuMat getOutputMaskGpu() const
+	{
+		return outputMaskGpu;
+	}
 };

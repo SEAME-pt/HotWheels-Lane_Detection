@@ -18,9 +18,12 @@
 
 #include "EngineController.hpp"
 #include "JoysticksController.hpp"
-#include "ZeroMQ/Publisher.hpp"
-#include "ZeroMQ/Subscriber.hpp"
-#include "inference/CameraStreamer.hpp"
+#include "MPCPlanner.hpp"
+#include "Polyfitter.hpp"
+#include <atomic>
+#include "CameraStreamer.hpp"
+#include "Subscriber.hpp"
+#include "Publisher.hpp"
 #include <QObject>
 #include <QProcess>
 #include <QThread>
@@ -29,8 +32,9 @@
  * @brief The ControlsManager class.
  * @details This class is responsible for managing the controls of the car.
  */
-class ControlsManager : public QObject {
-  Q_OBJECT
+class ControlsManager : public QObject
+{
+	Q_OBJECT
 
 private:
   EngineController m_engineController;
@@ -40,17 +44,17 @@ private:
   Subscriber *m_subscriberJoystickObject;
   CameraStreamer *m_cameraStreamerObject;
 
-  std::atomic<bool> m_running;
+	std::atomic<bool> m_running;
+	QThread *m_cameraStreamerThread;
 
   QThread *m_manualControllerThread;
   QThread *m_joystickControlThread;
 
-  QThread *m_subscriberJoystickThread;
-  QThread *m_cameraStreamerThread;
-  MPCPlanner *m_mpcPlanner;
-  Polyfitter *m_polyfitter;
-  std::atomic<bool> m_autonomousMode;
-  QThread *m_autonomousControlThread;
+	QThread *m_subscriberJoystickThread;
+	MPCPlanner *m_mpcPlanner;
+	Polyfitter *m_polyfitter;
+	std::atomic<bool> m_autonomousMode;
+	QThread *m_autonomousControlThread;
 
 public:
   explicit ControlsManager(int argc, char **argv, QObject *parent = nullptr);

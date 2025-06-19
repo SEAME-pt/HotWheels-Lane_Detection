@@ -24,8 +24,9 @@
  * @brief The EngineController class
  * @details This class is responsible for controlling the engine of the car.
  */
-class EngineController : public QObject {
-  Q_OBJECT
+class EngineController : public QObject
+{
+	Q_OBJECT
 
 private:
   const int MAX_ANGLE = 180;
