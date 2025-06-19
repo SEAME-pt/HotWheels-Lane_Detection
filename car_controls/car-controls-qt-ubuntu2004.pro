@@ -2,26 +2,13 @@ QT = core
 
 CONFIG += c++17 cmdline
 
-# Target configuration
-TARGET = car-controls-qt
-TEMPLATE = app
-
 # Include Paths (explicit inheritance from root)
 INCLUDEPATH += \
 	$$PWD/includes \
 	$$PWD/includes/inference \
 	$$PWD/includes/objectDetection \
 
-#include ZeroMQ
-
 INCLUDEPATH += $$PWD/../ZeroMQ
-
-# Eigen (header-only)
-INCLUDEPATH += /usr/include/eigen3
-
-# OpenCV includes (for host compilation)
-INCLUDEPATH += /usr/include/opencv4
-
 
 # Application Sources
 SOURCES += \
@@ -87,22 +74,20 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
 
 	message("Building for ARM architecture")
 
-	JETSON_SYSROOT = /home/michel/qtjetson/sysroot
-
 	# CUDA includes
-	INCLUDEPATH += $${JETSON_SYSROOT}/usr/local/cuda-10.2/targets/aarch64-linux/include
+	INCLUDEPATH += /usr/local/cuda-10.2/targets/aarch64-linux/include
 
 	# TensorRT includes
-	INCLUDEPATH += $${JETSON_SYSROOT}/usr/include/aarch64-linux-gnu
+	INCLUDEPATH += /usr/include/aarch64-linux-gnu
 
 	# OpenCV includes
-	INCLUDEPATH += $${JETSON_SYSROOT}/usr/local/include/opencv4
-	INCLUDEPATH += $${JETSON_SYSROOT}/usr/include/opencv4
+	INCLUDEPATH += /usr/local/include/opencv4
+	INCLUDEPATH += /usr/include/opencv4
 
 	# GStreamer includes
-	INCLUDEPATH += $${JETSON_SYSROOT}/usr/include/gstreamer-1.0
-	INCLUDEPATH += $${JETSON_SYSROOT}/usr/include/glib-2.0
-	INCLUDEPATH += $${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu/glib-2.0/include
+	INCLUDEPATH += /usr/include/gstreamer-1.0
+	INCLUDEPATH += /usr/include/glib-2.0
+	INCLUDEPATH += /usr/lib/aarch64-linux-gnu/glib-2.0/include
 
 	# OpenGL, GLFW, GLEW includes
 	INCLUDEPATH += /usr/local/include
@@ -110,25 +95,19 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
 	INCLUDEPATH += /usr/include/GLFW
 
 	# Library paths
-	LIBS += -L$${JETSON_SYSROOT}/usr/local/lib
-	LIBS += -L$${JETSON_SYSROOT}/usr/local/cuda-10.2/targets/aarch64-linux/lib
-	LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu
-	LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu/tegra
-	LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu/openblas
+	LIBS += -L/usr/local/lib
+	LIBS += -L/usr/local/cuda-10.2/targets/aarch64-linux/lib
+	LIBS += -L/usr/lib/aarch64-linux-gnu
+	LIBS += -L/usr/lib/aarch64-linux-gnu/tegra
+	LIBS += -L/usr/lib/aarch64-linux-gnu/openblas
 
 	# Eigen libraries
-	INCLUDEPATH += $${JETSON_SYSROOT}/usr/include/eigen3
+	INCLUDEPATH += /usr/include/eigen3
 
-	# TensorRT, CUDA, OpenCV - usar versões disponíveis
+	# TensorRT, CUDA, OpenCV
 	LIBS += -lcudart -lnvinfer
-	
-	# Tentar diferentes versões do OpenCV
 	LIBS += -lopencv_core -lopencv_imgproc -lopencv_imgcodecs -lopencv_videoio -lopencv_highgui -lopencv_calib3d
-	LIBS += -lopencv_dnn
-	
-	# Se não funcionar, tentar versões específicas
-	# LIBS += -l:libopencv_core.so.4 -l:libopencv_imgproc.so.4 -l:libopencv_imgcodecs.so.4
-	
+	LIBS += -lopencv_cudaarithm -lopencv_cudawarping -lopencv_cudaimgproc -lopencv_cudacodec -lopencv_dnn
 	LIBS += -lcublasLt -llapack -lblas
 	LIBS += -lnvmedia -lnvdla_compiler
 
@@ -138,36 +117,8 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
 	# OpenGL, GLEW, GLFW libraries (ORDER MATTERS!)
 	LIBS += -lGLEW -lglfw -lGL
 
-	# Adicionar caminhos de runtime
-	QMAKE_LFLAGS += -Wl,-rpath,/usr/local/lib
-	QMAKE_LFLAGS += -Wl,-rpath,/usr/lib/aarch64-linux-gnu
-
-    # Force specific compiler and linker
-    QMAKE_CC = aarch64-linux-gnu-gcc
-    QMAKE_CXX = aarch64-linux-gnu-g++
-    QMAKE_LINK = aarch64-linux-gnu-g++
-    QMAKE_AR = aarch64-linux-gnu-ar cqs
-    QMAKE_OBJCOPY = aarch64-linux-gnu-objcopy
-    QMAKE_NM = aarch64-linux-gnu-nm -P
-    QMAKE_STRIP = aarch64-linux-gnu-strip
-    
-} else {
-	# Para compilação no host (desenvolvimento local)
-	LIBS += -lopencv_core -lopencv_imgproc -lopencv_imgcodecs -lopencv_videoio -lopencv_highgui -lopencv_calib3d
-	LIBS += -lopencv_dnn
+	# RPath for custom OpenCV runtime
+	QMAKE_LFLAGS += -Wl,-rpath-link,/usr/local/lib
+	QMAKE_LFLAGS += -Wl,-rpath-link,/usr/lib/aarch64-linux-gnu/tegra
 }
-
-# Debug configuration for cross-compilation
-CONFIG(debug, debug|release) {
-    DESTDIR = debug
-} else {
-    DESTDIR = release
-}
-
-# Explicit make command configuration
-unix {
-    QMAKE_MAKE = make
-}
-
-# Adicionando flags de compilação para warnings e erros
 # QMAKE_CXXFLAGS += -Wall -Werror -Wextra -pedantic

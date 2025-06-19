@@ -20,6 +20,7 @@ private:
   std::vector<double> _current_state;
   std::vector<Point2D> _current_reference;
   const LaneInfo *_current_lane_info;
+  std::vector<double> _current_poly_coeffs; // Add this line
 
 public:
   MPCOptimizer(void);
@@ -49,7 +50,9 @@ public:
                        const LaneInfo *lane_info) const;
 
   void _kinematicModel(double &x, double &y, double &yaw, double &v,
-                       double throttle, double steer) const;
+                       double &cte, double &epsi,
+                       double throttle, double steer,
+                       const std::vector<double>& poly_coeffs) const;
 
 		double _normalizeAngle(double angle) const;
 		double _calculatePathCurvature(const std::vector<Point2D>& reference) const;

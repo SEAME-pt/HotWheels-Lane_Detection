@@ -1,6 +1,6 @@
 #include "../../includes/inference/InferenceManager.hpp"
 #include <algorithm>
-#include <filesystem>
+#include <experimental/filesystem>
 #include <iostream>
 
 InferenceManager::InferenceManager()
@@ -10,7 +10,7 @@ InferenceManager::~InferenceManager() { clear(); }
 
 ModelType InferenceManager::detectModelType(const std::string &model_path) {
   // Obter extensão do arquivo
-  std::filesystem::path path(model_path);
+  std::experimental::filesystem::path path(model_path);
   std::string extension = path.extension().string();
 
   // Converter para lowercase
@@ -33,7 +33,7 @@ bool InferenceManager::loadModel(const std::string &model_name,
                                  ModelType model_type) {
 
   // Verificar se arquivo existe
-  if (!std::filesystem::exists(model_path)) {
+  if (!std::experimental::filesystem::exists(model_path)) {
     std::cerr << "[InferenceManager] Erro: Arquivo do modelo não encontrado: "
               << model_path << std::endl;
     return false;
@@ -52,7 +52,7 @@ bool InferenceManager::loadModel(const std::string &model_name,
     case ModelType::PYTORCH_ONNX:
       std::cout << "[InferenceManager] Carregando modelo PyTorch/ONNX: "
                 << model_name << std::endl;
-      inferencer = std::make_unique<ONNXInferencer>(model_path);
+      // inferencer = std::make_unique<ONNXInferencer>(model_path);
       break;
 
     case ModelType::KERAS:

@@ -4,8 +4,8 @@
  * @version 0.1
  * @date 2025-02-12
  * @details This file contains the implementation of the ControlsManager class,
- * which is responsible for managing the different controllers and worker
- * threads for the car controls.
+ * which is responsible for managing the different controllers and worker threads
+ * for the car controls.
  *
  * @author Félix LE BIHAN (@Fle-bihh)
  * @author Tiago Pereira (@t-pereira06)
@@ -16,12 +16,12 @@
  */
 
 #include "ControlsManager.hpp"
-#include <QDebug>
 #include <fcntl.h>
 #include <sstream>
 #include <string>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <QDebug>
 
 /*!
  * @brief Constructs a ControlsManager object.
@@ -35,96 +35,101 @@
  * through dedicated threads.
  */
 ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
-    : QObject(parent), m_engineController(0x40, 0x60, this),
-      m_manualController(nullptr), m_currentMode(DrivingMode::Manual),
-      m_subscriberJoystickObject(nullptr), m_manualControllerThread(nullptr),
-      m_joystickControlThread(nullptr), m_subscriberJoystickThread(nullptr),
-      m_cameraStreamerThread(nullptr), m_running(true), m_mpcPlanner(nullptr),
-      m_polyfitter(nullptr), m_autonomousMode(false),
-      m_autonomousControlThread(nullptr) {
-  qDebug() << "[ControlsManager] Inicializado no modo MANUAL";
+: QObject(parent), m_engineController(0x40, 0x60, this),
+	m_manualController(nullptr), m_currentMode(DrivingMode::Manual),
+	m_subscriberJoystickObject(nullptr), m_manualControllerThread(nullptr),
+	m_joystickControlThread(nullptr), m_subscriberJoystickThread(nullptr),
+	m_cameraStreamerThread(nullptr), m_running(true), m_mpcPlanner(nullptr),
+	m_polyfitter(nullptr), m_autonomousMode(false),
+	m_autonomousControlThread(nullptr) {
 
-  // Initialize the joystick controller with callbacks
-  m_manualController = new JoysticksController(
-      [this](int steering) {
-        if (m_currentMode == DrivingMode::Manual) {
-          m_engineController.set_steering(steering);
-        }
-      },
-      [this](int speed) {
-        if (m_currentMode == DrivingMode::Manual) {
-          m_engineController.set_speed(speed);
-        }
-      });
+	// Initialize the joystick controller with callbacks
+	//! Verify where to put AUTO mode.
+	m_manualController = new JoysticksController(
+		[this](int steering)
+		{
+			if (m_currentMode == DrivingMode::Manual)
+			{
+				m_engineController.set_steering(steering);
+			}
+		},
+		[this](int speed)
+		{
+			if (m_currentMode == DrivingMode::Manual)
+			{
+				m_engineController.set_speed(speed);
+			}
+		});
 
-  if (!m_manualController->init()) {
-    qDebug() << "Failed to initialize joystick controller.";
-    return;
-  }
+	if (!m_manualController->init())
+	{
+		qDebug() << "Failed to initialize joystick controller.";
+		return;
+	}
 
-  // Start the joystick controller in its own thread
-  m_manualControllerThread = new QThread(this);
-  m_manualController->moveToThread(m_manualControllerThread);
+	// Start the joystick controller in its own thread
+	m_manualControllerThread = new QThread(this);
+	m_manualController->moveToThread(m_manualControllerThread);
 
-  connect(m_manualControllerThread, &QThread::started, m_manualController,
-          &JoysticksController::processInput);
-  connect(m_manualController, &JoysticksController::finished,
-          m_manualControllerThread, &QThread::quit);
+	connect(m_manualControllerThread, &QThread::started, m_manualController,
+			&JoysticksController::processInput);
+	connect(m_manualController, &JoysticksController::finished,
+			m_manualControllerThread, &QThread::quit);
 
-  m_manualControllerThread->start();
+	m_manualControllerThread->start();
 
-  // **Running camera streamer**
-  m_cameraStreamerThread = QThread::create([this, argc, argv]() {
-    try {
-      m_cameraStreamerObject = new CameraStreamer(0.5);
-      m_cameraStreamerObject->start();
-    } catch (const std::exception &e) {
-      std::cerr << "Error: " << e.what() << std::endl;
-    }
-  });
-  m_cameraStreamerThread->start();
+	// **Running camera streamer**
+	m_cameraStreamerThread = QThread::create([this, argc, argv]()
+								{
+		try {
+			m_cameraStreamerObject = new CameraStreamer(0.5);
+			m_cameraStreamerObject->start();
+		} catch (const std::exception& e) {
+			std::cerr << "Error: " << e.what() << std::endl;
+		}
+	});
+	m_cameraStreamerThread->start();
 
-  // **Client Middleware Interface Thread**
-  m_subscriberJoystickObject = new Subscriber();
-  m_subscriberJoystickThread = QThread::create([this, argc, argv]() {
-    m_subscriberJoystickObject->connect("tcp://localhost:5555");
-    m_subscriberJoystickObject->subscribe("joystick_value");
-    while (m_running) {
-      try {
-        zmq::pollitem_t items[] = {
-            {static_cast<void *>(m_subscriberJoystickObject->getSocket()), 0,
-             ZMQ_POLLIN, 0}};
+	// **Client Middleware Interface Thread**
+	m_subscriberJoystickObject = new Subscriber();
+	m_subscriberJoystickThread = QThread::create([this, argc, argv]()
+									{
+		m_subscriberJoystickObject->connect("tcp://localhost:5555");
+		m_subscriberJoystickObject->subscribe("joystick_value");
+		while (m_running) {
+			try {
+				zmq::pollitem_t items[] = {
+					{ static_cast<void*>(m_subscriberJoystickObject->getSocket()), 0, ZMQ_POLLIN, 0 }
+				};
 
-        // Wait up to 100ms for a message
-        zmq::poll(items, 1, 100);
+				// Wait up to 100ms for a message
+				zmq::poll(items, 1, 100);
 
-        if (items[0].revents & ZMQ_POLLIN) {
-          zmq::message_t message;
-          if (!m_subscriberJoystickObject->getSocket().recv(&message, 0)) {
-            continue; // failed to receive
-          }
+				if (items[0].revents & ZMQ_POLLIN) {
+					zmq::message_t message;
+					if (!m_subscriberJoystickObject->getSocket().recv(&message, 0)) {
+						continue;  // failed to receive
+					}
 
-          std::string received_msg(static_cast<char *>(message.data()),
-                                   message.size());
+					std::string received_msg(static_cast<char*>(message.data()), message.size());
 
-          if (received_msg.find("joystick_value") == 0) {
-            std::string value =
-                received_msg.substr(std::string("joystick_value ").length());
-            if (value == "true") {
-              setMode(DrivingMode::Manual);
-            } else if (value == "false") {
-              setMode(DrivingMode::Automatic);
-            }
-          }
-        }
-      } catch (const zmq::error_t &e) {
-        std::cerr << "[Subscriber] ZMQ error: " << e.what() << std::endl;
-        break; // exit safely if socket is closed
-      }
-    }
-  });
-  m_polyfitter = new Polyfitter();
-  m_subscriberJoystickThread->start();
+					if (received_msg.find("joystick_value") == 0) {
+						std::string value = received_msg.substr(std::string("joystick_value ").length());
+						if (value == "true") {
+							setMode(DrivingMode::Manual);
+						} else if (value == "false") {
+							setMode(DrivingMode::Automatic);
+						}
+					}
+				}
+			} catch (const zmq::error_t& e) {
+				std::cerr << "[Subscriber] ZMQ error: " << e.what() << std::endl;
+				break;  // exit safely if socket is closed
+			}
+		}
+	});
+	m_polyfitter = new Polyfitter();
+	m_subscriberJoystickThread->start();
 }
 
 /*!
@@ -136,57 +141,61 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
  *          m_carDataObject, m_subscriberJoystickThread, and m_manualController.
  */
 
-ControlsManager::~ControlsManager() {
-  m_running = false;
-  stopAutonomousControl();
-  // Stop the client thread safely
-  if (m_subscriberJoystickThread) {
-    if (m_subscriberJoystickObject) {
-      m_subscriberJoystickObject->stop();
-    }
-    m_subscriberJoystickThread->quit();
-    m_subscriberJoystickThread->wait();
+ControlsManager::~ControlsManager()
+{
+	m_running = false;
+	stopAutonomousControl();
 
-    m_subscriberJoystickObject->getSocket().close();
+	// Stop the client thread safely
+	if (m_subscriberJoystickThread) {
+		if (m_subscriberJoystickObject) {
+			m_subscriberJoystickObject->stop();
+		}
+		m_subscriberJoystickThread->quit();
+		m_subscriberJoystickThread->wait();
 
-    delete m_subscriberJoystickThread;
-    m_subscriberJoystickThread = nullptr;
-  }
+		m_subscriberJoystickObject->getSocket().close();
 
-  // Stop manual controller thread
-  if (m_manualControllerThread) {
-    if (m_manualController)
-      m_manualController->requestStop();
+		delete m_subscriberJoystickThread;
+		m_subscriberJoystickThread = nullptr;
+	}
 
-    m_manualControllerThread->quit();
-    m_manualControllerThread->wait();
-    delete m_manualControllerThread;
-    m_manualControllerThread = nullptr;
-  }
 
-  // Stop camera streamer thread
-  if (m_cameraStreamerThread) {
-    if (m_cameraStreamerObject)
-      m_cameraStreamerObject->stop();
+	// Stop manual controller thread
+	if (m_manualControllerThread) {
+		if (m_manualController)
+			m_manualController->requestStop();
 
-    m_cameraStreamerThread->quit();
-    m_cameraStreamerThread->wait();
-    delete m_cameraStreamerThread;
-    m_cameraStreamerThread = nullptr;
-  }
+		m_manualControllerThread->quit();
+		m_manualControllerThread->wait();
+		delete m_manualControllerThread;
+		m_manualControllerThread = nullptr;
+	}
 
-  // Clean up objects
-  delete m_cameraStreamerObject;
-  m_cameraStreamerObject = nullptr;
+	//Stop camera streamer thread
+	if (m_cameraStreamerThread) {
+		if (m_cameraStreamerObject)
+			m_cameraStreamerObject->stop();
 
-  delete m_manualController;
-  m_manualController = nullptr;
+		m_cameraStreamerThread->quit();
+		m_cameraStreamerThread->wait();
+		delete m_cameraStreamerThread;
+		m_cameraStreamerThread = nullptr;
+	}
 
-  delete m_subscriberJoystickObject;
-  m_subscriberJoystickObject = nullptr;
+	// Clean up objects
+	delete m_cameraStreamerObject;
+	m_cameraStreamerObject = nullptr;
 
-  delete m_polyfitter;
-  m_polyfitter = nullptr;
+	delete m_manualController;
+	m_manualController = nullptr;
+
+	delete m_subscriberJoystickObject;
+	m_subscriberJoystickObject = nullptr;
+	if (m_mpcPlanner) {
+		delete m_mpcPlanner;
+		m_mpcPlanner = nullptr;
+	}
 }
 
 /*!
@@ -194,27 +203,14 @@ ControlsManager::~ControlsManager() {
  * @param mode The new driving mode.
  * @details Updates the current driving mode if it has changed.
  */
-void ControlsManager::setMode(DrivingMode mode) {
-  if (m_currentMode == mode)
-    return;
+void ControlsManager::setMode(DrivingMode mode)
+{
+	if (m_currentMode == mode)
+		return;
 
-  DrivingMode previous_mode = m_currentMode;
-  m_currentMode = mode;
-
-  if (mode == DrivingMode::Automatic) {
-    qDebug() << "Switching to AUTONOMOUS mode";
-    std::cout << "Starting autonomous control..." << std::endl;
+	m_currentMode = mode;
+  if (m_currentMode == DrivingMode::Automatic)
     startAutonomousControl();
-  } else {
-    qDebug() << "Switching to MANUAL mode";
-    stopAutonomousControl();
-
-    // Parada suave se vinha do automático
-    if (previous_mode == DrivingMode::Automatic) {
-      m_engineController.set_speed(0);
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-  }
 }
 
 void ControlsManager::startAutonomousControl() {
@@ -277,8 +273,15 @@ void ControlsManager::autonomousControlLoop() {
       // Mostra feedback visual da visão
       showVisionDebug();
       // 1. Obter dados de percepção
+      std::cout << "Getting current vehicle state and waypoints..." << std::endl;
       VehicleState current_state = getCurrentVehicleState();
+      std::cout << "Current state: "
+                << "x=" << current_state.x
+                << ", y=" << current_state.y
+                << ", velocity=" << current_state.velocity
+                << ", yaw=" << current_state.yaw << std::endl;
       std::vector<Point2D> waypoints = getWaypointsFromVision();
+      std::cout << "Waypoints size: " << waypoints.size() << std::endl;
       LaneInfo lane_info = getLaneInfoFromVision();
       // 2. Verificar obstáculos críticos
       if (checkEmergencyObstacles()) {
@@ -298,6 +301,7 @@ void ControlsManager::autonomousControlLoop() {
       m_engineController.set_speed(throttle_pct);
       m_engineController.set_steering(steer_angle);
     } catch (const std::exception &e) {
+      std::cerr << "Autonomous control error: " << e.what() << std::endl;
       qDebug() << "Autonomous control error:" << e.what();
       m_engineController.set_speed(0);
     }
@@ -327,33 +331,46 @@ std::vector<Point2D> ControlsManager::getWaypointsFromVision() {
 
   Subscriber vision_sub;
   vision_sub.connect("tcp://localhost:5556");
+  vision_sub.subscribe("binary_mask");
 
   try {
-    zmq::message_t topic_msg;
-    zmq::message_t data_msg;
-    vision_sub.getSocket().recv(&topic_msg);
-    vision_sub.getSocket().recv(&data_msg);
+    zmq::pollitem_t items[] = {
+      { static_cast<void*>(vision_sub.getSocket()), 0, ZMQ_POLLIN, 0 }
+    };
+    zmq::poll(items, 1, 100);  // Timeout: 100 ms
+    
+    if (items[0].revents & ZMQ_POLLIN) {
+      zmq::message_t message;
+      if (vision_sub.getSocket().recv(&message, 0)) {
+        std::string received_msg(static_cast<char*>(message.data()), message.size());
+        const std::string topic = "binary_mask ";
+        
+        if (received_msg.find(topic) == 0) {
+          std::string mask_data = received_msg.substr(topic.size());
+          cv::Mat binary_mask = deserializeMask(mask_data);
 
-    std::string topic(static_cast<char *>(topic_msg.data()), topic_msg.size());
-    if (topic == "binary_mask") {
-      std::string mask_data(static_cast<char *>(data_msg.data()),
-                            data_msg.size());
-      cv::Mat binary_mask = deserializeMask(mask_data);
+          // 1. Extraia as faixas
+          auto lanes = m_polyfitter->fitLanesInImage(binary_mask);
 
-      // 1. Extraia as faixas
-      auto lanes = m_polyfitter->fitLanesInImage(binary_mask);
+          // 2. Calcule a centerline virtual
+          CenterlineResult result = m_polyfitter->computeVirtualCenterline(
+              lanes, binary_mask.cols, binary_mask.rows);
 
-      // 2. Calcule a centerline virtual
-      CenterlineResult result = m_polyfitter->computeVirtualCenterline(
-          lanes, binary_mask.cols, binary_mask.rows);
-
-      // 3. Use result.blend como waypoints
-      if (result.valid) {
-        waypoints = result.blend;
+          // 3. Use result.blend como waypoints
+          if (result.valid) {
+            waypoints = result.blend;
+          }
+        }
       }
     }
+  } catch (const zmq::error_t& e) {
+    std::cerr << "[getWaypointsFromVision] ZMQ error: " << e.what() << std::endl;
   } catch (...) {
-    // Fallback: waypoints retos à frente
+    std::cerr << "[getWaypointsFromVision] Unknown error" << std::endl;
+  }
+
+  // Fallback: waypoints retos à frente se não conseguiu obter dados
+  if (waypoints.empty()) {
     for (int i = 1; i <= 10; ++i) {
       waypoints.emplace_back(i * 2.0, 0.0);
     }
@@ -365,53 +382,72 @@ std::vector<Point2D> ControlsManager::getWaypointsFromVision() {
 LaneInfo ControlsManager::getLaneInfoFromVision() {
   Subscriber vision_sub;
   vision_sub.connect("tcp://localhost:5556");
+  vision_sub.subscribe("binary_mask");
 
   try {
-    zmq::message_t topic_msg;
-    zmq::message_t data_msg;
-    vision_sub.getSocket().recv(&topic_msg);
-    vision_sub.getSocket().recv(&data_msg);
-
-    std::string topic(static_cast<char *>(topic_msg.data()), topic_msg.size());
-    if (topic == "binary_mask") {
-      std::string mask_data(static_cast<char *>(data_msg.data()),
-                            data_msg.size());
-      cv::Mat binary_mask = deserializeMask(mask_data);
-      // Use Polyfitter's fitLanesInImage and computeVirtualCenterline
-      auto lanes = m_polyfitter->fitLanesInImage(binary_mask);
-      auto centerline = m_polyfitter->computeVirtualCenterline(
-          lanes, binary_mask.cols, binary_mask.rows);
-      // You may want to extract LaneInfo from the centerline or lanes if needed
-      // For now, just return a default LaneInfo if not implemented
-      // TODO: Implement a method to extract LaneInfo from lanes/centerline if
-      // needed
-      return LaneInfo(0.0, 0.0);
+    zmq::pollitem_t items[] = {
+      { static_cast<void*>(vision_sub.getSocket()), 0, ZMQ_POLLIN, 0 }
+    };
+    zmq::poll(items, 1, 100);  // Timeout: 100 ms
+    
+    if (items[0].revents & ZMQ_POLLIN) {
+      zmq::message_t message;
+      if (vision_sub.getSocket().recv(&message, 0)) {
+        std::string received_msg(static_cast<char*>(message.data()), message.size());
+        const std::string topic = "binary_mask ";
+        
+        if (received_msg.find(topic) == 0) {
+          std::string mask_data = received_msg.substr(topic.size());
+          cv::Mat binary_mask = deserializeMask(mask_data);
+          
+          // Use Polyfitter's fitLanesInImage and computeVirtualCenterline
+          auto lanes = m_polyfitter->fitLanesInImage(binary_mask);
+          auto centerline = m_polyfitter->computeVirtualCenterline(
+              lanes, binary_mask.cols, binary_mask.rows);
+          
+          // TODO: Implement a method to extract LaneInfo from lanes/centerline if needed
+          return LaneInfo(0.0, 0.0);
+        }
+      }
     }
+  } catch (const zmq::error_t& e) {
+    std::cerr << "[getLaneInfoFromVision] ZMQ error: " << e.what() << std::endl;
   } catch (...) {
-    return LaneInfo(0.0, 0.0);
+    std::cerr << "[getLaneInfoFromVision] Unknown error" << std::endl;
   }
+  
   return LaneInfo(0.0, 0.0); // fallback
 }
 
 bool ControlsManager::checkEmergencyObstacles() {
   Subscriber obstacle_sub;
   obstacle_sub.connect("tcp://localhost:5557");
+  obstacle_sub.subscribe("emergency_stop");
 
   try {
-    zmq::message_t topic_msg;
-    zmq::message_t data_msg;
-    obstacle_sub.getSocket().recv(&topic_msg); // CORRIGIDO: obstacle_sub
-    obstacle_sub.getSocket().recv(&data_msg);
-
-    std::string topic(static_cast<char *>(topic_msg.data()), topic_msg.size());
-    if (topic == "emergency_stop") {
-      std::string obstacle_data(static_cast<char *>(data_msg.data()),
-                                data_msg.size());
-      return (obstacle_data == "true");
+    zmq::pollitem_t items[] = {
+      { static_cast<void*>(obstacle_sub.getSocket()), 0, ZMQ_POLLIN, 0 }
+    };
+    zmq::poll(items, 1, 100);  // Timeout: 100 ms
+    
+    if (items[0].revents & ZMQ_POLLIN) {
+      zmq::message_t message;
+      if (obstacle_sub.getSocket().recv(&message, 0)) {
+        std::string received_msg(static_cast<char*>(message.data()), message.size());
+        const std::string topic = "emergency_stop ";
+        
+        if (received_msg.find(topic) == 0) {
+          std::string obstacle_data = received_msg.substr(topic.size());
+          return (obstacle_data == "true");
+        }
+      }
     }
+  } catch (const zmq::error_t& e) {
+    std::cerr << "[checkEmergencyObstacles] ZMQ error: " << e.what() << std::endl;
   } catch (...) {
-    return false;
+    std::cerr << "[checkEmergencyObstacles] Unknown error" << std::endl;
   }
+  
   return false; // Garante retorno em todos os paths
 }
 
@@ -429,51 +465,57 @@ cv::Mat ControlsManager::deserializeMask(const std::string &data) {
 void ControlsManager::showVisionDebug() {
   Subscriber vision_sub;
   vision_sub.connect("tcp://localhost:5556");
+  vision_sub.subscribe("binary_mask");
+  
   try {
-    zmq::message_t topic_msg, data_msg;
-    vision_sub.getSocket().recv(&topic_msg);
-    vision_sub.getSocket().recv(&data_msg);
+    zmq::pollitem_t items[] = {
+      { static_cast<void*>(vision_sub.getSocket()), 0, ZMQ_POLLIN, 0 }
+    };
+    zmq::poll(items, 1, 100);  // Timeout: 100 ms
+    
+    if (items[0].revents & ZMQ_POLLIN) {
+      zmq::message_t message;
+      if (vision_sub.getSocket().recv(&message, 0)) {
+        std::string received_msg(static_cast<char*>(message.data()), message.size());
+        const std::string topic = "binary_mask ";
+        
+        if (received_msg.find(topic) == 0) {
+          std::string mask_data = received_msg.substr(topic.size());
+          cv::Mat binary_mask = deserializeMask(mask_data);
 
-    std::string topic(static_cast<char *>(topic_msg.data()), topic_msg.size());
-    if (topic == "binary_mask") {
-      std::string mask_data(static_cast<char *>(data_msg.data()),
-                            data_msg.size());
-      cv::Mat binary_mask = deserializeMask(mask_data);
+          // Visualização da máscara
+          cv::Mat vis;
+          cv::cvtColor(binary_mask, vis, cv::COLOR_GRAY2BGR);
 
-      // Visualização da máscara
-      cv::Mat vis;
-      cv::cvtColor(binary_mask, vis, cv::COLOR_GRAY2BGR);
+          // Extraia lanes e centerline
+          auto lanes = m_polyfitter->fitLanesInImage(binary_mask);
+          for (const auto &lane : lanes) {
+            for (size_t i = 1; i < lane.curve.size(); ++i) {
+              cv::line(vis, cv::Point(lane.curve[i - 1].x, lane.curve[i - 1].y),
+                       cv::Point(lane.curve[i].x, lane.curve[i].y),
+                       cv::Scalar(0, 255, 0), 2);
+            }
+          }
+          auto centerline = m_polyfitter->computeVirtualCenterline(
+              lanes, binary_mask.cols, binary_mask.rows);
+          if (centerline.valid) {
+            for (size_t i = 1; i < centerline.blend.size(); ++i) {
+              cv::line(
+                  vis,
+                  cv::Point(centerline.blend[i - 1].x, centerline.blend[i - 1].y),
+                  cv::Point(centerline.blend[i].x, centerline.blend[i].y),
+                  cv::Scalar(0, 128, 255), 2);
+            }
+          }
 
-      // Extraia lanes e centerline
-      auto lanes = m_polyfitter->fitLanesInImage(binary_mask);
-      for (const auto &lane : lanes) {
-        for (size_t i = 1; i < lane.curve.size(); ++i) {
-          cv::line(vis, cv::Point(lane.curve[i - 1].x, lane.curve[i - 1].y),
-                   cv::Point(lane.curve[i].x, lane.curve[i].y),
-                   cv::Scalar(0, 255, 0), 2);
+          cv::imshow("Lane Detection Debug", vis);
+          cv::waitKey(1);
         }
       }
-      auto centerline = m_polyfitter->computeVirtualCenterline(
-          lanes, binary_mask.cols, binary_mask.rows);
-      if (centerline.valid) {
-        for (size_t i = 1; i < centerline.blend.size(); ++i) {
-          cv::line(
-              vis,
-              cv::Point(centerline.blend[i - 1].x, centerline.blend[i - 1].y),
-              cv::Point(centerline.blend[i].x, centerline.blend[i].y),
-              cv::Scalar(0, 128, 255), 2);
-        }
-      }
-
-      // Opcional: desenhar waypoints do MPC (se disponíveis)
-      // for (const auto& pt : mpc_waypoints) {
-      //     cv::circle(vis, cv::Point(pt.x, pt.y), 3, cv::Scalar(255,0,0), -1);
-      // }
-
-            cv::imshow("Lane Detection Debug", vis);
-            cv::waitKey(1);
-        }
-    } catch (...) {
-            std::cerr << "Exceção desconhecida capturada!" << std::endl;
     }
+  } catch (const zmq::error_t& e) {
+    std::cerr << "[showVisionDebug] ZMQ error: " << e.what() << std::endl;
+  } catch (...) {
+    std::cerr << "[showVisionDebug] Unknown error" << std::endl;
+  }
 }

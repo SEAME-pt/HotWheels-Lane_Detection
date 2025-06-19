@@ -19,7 +19,7 @@
 
 volatile bool keepRunning = true;
 
-ControlsManager *g_controlsManager = nullptr;
+ControlsManager* g_controlsManager = nullptr;
 
 /*!
  * @brief SIGINT signal handler.
@@ -27,14 +27,14 @@ ControlsManager *g_controlsManager = nullptr;
  * The function will quit the QCoreApplication.
  */
 void handleSigint(int) {
-  qDebug() << "SIGINT received. Quitting application...";
+	qDebug() << "SIGINT received. Quitting application...";
 
-  if (g_controlsManager) {
-    delete g_controlsManager;
-    g_controlsManager = nullptr;
-  }
+	if (g_controlsManager) {
+		delete g_controlsManager;
+		g_controlsManager = nullptr;
+	}
 
-  QCoreApplication::quit();
+	QCoreApplication::quit();
 }
 
 /*!
@@ -48,18 +48,18 @@ void handleSigint(int) {
  * non-zero exit status. The application runs until quit is invoked.
  */
 
-int main(int argc, char *argv[]) {
-  QCoreApplication a(argc, argv);
-  // to handle Ctrl+C
-  std::signal(SIGINT, handleSigint);
-  // to handle when service shuts down, as it gives a SIGTERM signal
-  std::signal(SIGTERM, handleSigint);
+ int main(int argc, char *argv[]) {
+	QCoreApplication a(argc, argv);
+	//to handle Ctrl+C
+	std::signal(SIGINT, handleSigint);
+	//to handle when service shuts down, as it gives a SIGTERM signal
+	std::signal(SIGTERM, handleSigint);
 
-  try {
-    g_controlsManager = new ControlsManager(argc, argv);
-    return a.exec();
-  } catch (const std::exception &e) {
-    std::cerr << "Error: " << e.what() << std::endl;
-    return 1;
-  }
+	try {
+		g_controlsManager = new ControlsManager(argc, argv);
+		return a.exec();
+	} catch (const std::exception &e) {
+		std::cerr << "Error: " << e.what() << std::endl;
+		return 1;
+	}
 }

@@ -1,4 +1,5 @@
 #include "MPCPlanner.hpp"
+#include "Polyfitter.hpp"
 
 MPCPlanner::MPCPlanner(void) {}
 
@@ -42,11 +43,29 @@ ControlCommand MPCPlanner::plan(const VehicleState &current_state,
 
   // Garantir velocidade mínima para estabilidade
   double current_velocity = std::max(0.5, current_state.velocity);
+  
+  // Calcular polinômio da referência local usando Polyfitter
+  Polyfitter polyfitter;
+  std::vector<double> poly_coeffs = polyfitter.getPolynomialCoeffs(local_ref);
+  
+  double cte0 = 0.0, epsi0 = 0.0;
+  if (!poly_coeffs.empty()) {
+    cte0 = polyfitter.calculateCTE(poly_coeffs, 0.0, 0.0);
+    epsi0 = polyfitter.calculateEPSI(poly_coeffs, 0.0, current_state.yaw);
+  }
 
-  auto [throttle, steer] =
-      _optimizer.solve(current_state.x, current_state.y, current_state.yaw,
-                       current_velocity, local_ref, lane_info);
+  // Tratar latência
+  double latency = 0.1;
+  double steer0 = 0.0, throttle0 = 0.0;
+  std::vector<double> state_with_latency = _optimizer._predictStateWithLatency(
+      0.0, 0.0, current_state.yaw, current_velocity, throttle0, steer0, latency);
+  state_with_latency.push_back(cte0);
+  state_with_latency.push_back(epsi0);
 
+  auto [throttle, steer] = _optimizer.solve(
+      state_with_latency[0], state_with_latency[1], state_with_latency[2],
+      state_with_latency[3], local_ref, lane_info);
+  
   return _mapCommandsToHardware(throttle, steer);
 }
 
