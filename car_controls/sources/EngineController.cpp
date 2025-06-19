@@ -43,11 +43,13 @@ T clamp(T value, T min_val, T max_val)
 EngineController::EngineController() {}
 
 /*!
- * @brief Constructs an EngineController object, initializing motor and servo controllers.
+ * @brief Constructs an EngineController object, initializing motor and servo
+ * controllers.
  * @param servo_addr The address of the servo controller.
  * @param motor_addr The address of the motor controller.
  * @param parent The parent QObject for this instance.
- * @details Sets up the PeripheralController and initializes the servo and motor controllers.
+ * @details Sets up the PeripheralController and initializes the servo and motor
+ * controllers.
  */
 EngineController::EngineController(int servo_addr, int motor_addr,
 								   QObject *parent)
@@ -56,8 +58,8 @@ EngineController::EngineController(int servo_addr, int motor_addr,
 {
 	pcontrol = new PeripheralController(servo_addr, motor_addr);
 
-	pcontrol->init_servo();
-	pcontrol->init_motors();
+  pcontrol->init_servo();
+  pcontrol->init_motors();
 }
 
 /*!
@@ -81,7 +83,8 @@ void EngineController::start() { m_running = true; }
 /*!
  * @brief Stops the engine.
  *
- * @details Sets the m_running flag to false and sets both speed and steering to 0.
+ * @details Sets the m_running flag to false and sets both speed and steering to
+ * 0.
  */
 void EngineController::stop()
 {
@@ -110,17 +113,18 @@ void EngineController::setDirection(CarDirection newDirection)
  *
  * @param speed The desired speed value, ranging from -100 to 100.
  *
- * @details This function adjusts the motor PWM signals based on the input speed value.
- * Positive values set the car to move in reverse due to joystick reversal, while negative
- * values move it forward. A speed of zero stops the car. The function also updates the
- * car's direction accordingly and clamps the speed to ensure it is within the valid range.
+ * @details This function adjusts the motor PWM signals based on the input speed
+ * value. Positive values set the car to move in reverse due to joystick
+ * reversal, while negative values move it forward. A speed of zero stops the
+ * car. The function also updates the car's direction accordingly and clamps the
+ * speed to ensure it is within the valid range.
  */
 
 void EngineController::set_speed(int speed)
 {
 
-	speed = clamp(speed, -100, 100);
-	int pwm_value = static_cast<int>(std::abs(speed) / 100.0 * 4096);
+  speed = clamp(speed, -100, 100);
+  int pwm_value = static_cast<int>(std::abs(speed) / 100.0 * 4096);
 
 	if (speed <
 		0)
@@ -183,7 +187,7 @@ void EngineController::set_steering(int angle)
 		pwm = SERVO_CENTER_PWM;
 	}
 
-	pcontrol->set_servo_pwm(STEERING_CHANNEL, 0, pwm);
-	m_current_angle = angle;
-	emit this->steeringUpdated(angle);
+  pcontrol->set_servo_pwm(STEERING_CHANNEL, 0, pwm);
+  m_current_angle = angle;
+  emit this->steeringUpdated(angle);
 }

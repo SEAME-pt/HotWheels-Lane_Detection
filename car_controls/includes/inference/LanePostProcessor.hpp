@@ -1,7 +1,7 @@
 #pragma once
 
-#include <opencv2/opencv.hpp>
 #include <opencv2/cudaimgproc.hpp>
+#include <opencv2/opencv.hpp>
 #include <vector>
 
 class LanePostProcessor
@@ -16,15 +16,16 @@ public:
 		std::vector<cv::Point> contour;
 	};
 
-	LanePostProcessor(int minArea, int minLength, float angleThresh, float mergeDist);
+  LanePostProcessor(int minArea, int minLength, float angleThresh,
+                    float mergeDist);
 
 	cv::cuda::GpuMat process(const cv::cuda::GpuMat &rawMaskGpu);
 
 private:
-	int minComponentSize;
-	int minComponentLength;
-	float angleThreshold;
-	float mergeDistance;
+  int minComponentSize;
+  int minComponentLength;
+  float angleThreshold;
+  float mergeDistance;
 
 	std::vector<LaneInfo> extractLaneInfo(const cv::Mat &mask, bool filterSize, bool filterLength);
 	bool shouldMerge(const LaneInfo &a, const LaneInfo &b) const;

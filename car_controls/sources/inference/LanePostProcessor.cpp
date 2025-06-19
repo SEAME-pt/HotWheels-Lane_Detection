@@ -1,13 +1,12 @@
 #include "../../includes/inference/LanePostProcessor.hpp"
-#include <opencv2/cudaarithm.hpp>
 #include <cmath>
 #include <numeric>
+#include <opencv2/cudaarithm.hpp>
 
-LanePostProcessor::LanePostProcessor(int minArea, int minLength, float angleThresh, float mergeDist)
-	: minComponentSize(minArea),
-	  minComponentLength(minLength),
-	  angleThreshold(angleThresh),
-	  mergeDistance(mergeDist) {}
+LanePostProcessor::LanePostProcessor(int minArea, int minLength,
+                                     float angleThresh, float mergeDist)
+    : minComponentSize(minArea), minComponentLength(minLength),
+      angleThreshold(angleThresh), mergeDistance(mergeDist) {}
 
 cv::cuda::GpuMat LanePostProcessor::process(const cv::cuda::GpuMat &rawMaskGpu)
 {
@@ -15,24 +14,24 @@ cv::cuda::GpuMat LanePostProcessor::process(const cv::cuda::GpuMat &rawMaskGpu)
 	cv::cuda::threshold(rawMaskGpu, binaryMaskGpu, 0.5, 255.0, cv::THRESH_BINARY);
 	binaryMaskGpu.convertTo(binaryMaskGpu, CV_8U);
 
-	cv::Mat binaryMask;
-	binaryMaskGpu.download(binaryMask); // CPU copy for contour analysis
+  cv::Mat binaryMask;
+  binaryMaskGpu.download(binaryMask); // CPU copy for contour analysis
 
-	std::vector<LaneInfo> initialLanes = extractLaneInfo(binaryMask, false, true);
+  std::vector<LaneInfo> initialLanes = extractLaneInfo(binaryMask, false, true);
 
-	cv::Mat mergedMask;
-	cv::cvtColor(binaryMask, mergedMask, cv::COLOR_GRAY2BGR);
-	drawLaneConnections(initialLanes, mergedMask);
+  cv::Mat mergedMask;
+  cv::cvtColor(binaryMask, mergedMask, cv::COLOR_GRAY2BGR);
+  drawLaneConnections(initialLanes, mergedMask);
 
-	cv::Mat grayMerged;
-	cv::cvtColor(mergedMask, grayMerged, cv::COLOR_BGR2GRAY);
+  cv::Mat grayMerged;
+  cv::cvtColor(mergedMask, grayMerged, cv::COLOR_BGR2GRAY);
 
-	std::vector<LaneInfo> finalLanes = extractLaneInfo(grayMerged, true, false);
-	cv::Mat filtered = renderFilteredMask(finalLanes, binaryMask.size());
+  std::vector<LaneInfo> finalLanes = extractLaneInfo(grayMerged, true, false);
+  cv::Mat filtered = renderFilteredMask(finalLanes, binaryMask.size());
 
-	cv::cuda::GpuMat resultGpu;
-	resultGpu.upload(filtered);
-	return resultGpu;
+  cv::cuda::GpuMat resultGpu;
+  resultGpu.upload(filtered);
+  return resultGpu;
 }
 
 std::vector<LanePostProcessor::LaneInfo> LanePostProcessor::extractLaneInfo(const cv::Mat &mask, bool filterSize, bool filterLength)
@@ -40,8 +39,8 @@ std::vector<LanePostProcessor::LaneInfo> LanePostProcessor::extractLaneInfo(cons
 	std::vector<std::vector<cv::Point>> contours;
 	cv::findContours(mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
-	std::vector<LaneInfo> lanes;
-	int height = mask.rows, width = mask.cols;
+  std::vector<LaneInfo> lanes;
+  int height = mask.rows, width = mask.cols;
 
 	for (const auto &cnt : contours)
 	{
@@ -53,10 +52,10 @@ std::vector<LanePostProcessor::LaneInfo> LanePostProcessor::extractLaneInfo(cons
 			cnt.size() >= 2)
 		{
 
-			cv::Vec4f line;
-			cv::fitLine(cnt, line, cv::DIST_L2, 0, 0.01, 0.01);
-			float vx = line[0], vy = line[1], x0 = line[2], y0 = line[3];
-			float angle = std::fmod(std::atan2(vy, vx) * 180.0 / CV_PI, 180.0f);
+      cv::Vec4f line;
+      cv::fitLine(cnt, line, cv::DIST_L2, 0, 0.01, 0.01);
+      float vx = line[0], vy = line[1], x0 = line[2], y0 = line[3];
+      float angle = std::fmod(std::atan2(vy, vx) * 180.0 / CV_PI, 180.0f);
 
 			cv::Moments M = cv::moments(cnt);
 			if (M.m00 == 0)
@@ -94,7 +93,7 @@ std::vector<LanePostProcessor::LaneInfo> LanePostProcessor::extractLaneInfo(cons
 		}
 	}
 
-	return lanes;
+  return lanes;
 }
 
 bool LanePostProcessor::shouldMerge(const LaneInfo &a, const LaneInfo &b) const
@@ -135,7 +134,7 @@ std::pair<cv::Point, cv::Point> LanePostProcessor::getExtremities(const std::vec
 		}
 	}
 
-	return {ext1, ext2};
+  return {ext1, ext2};
 }
 
 void LanePostProcessor::drawLaneConnections(const std::vector<LaneInfo> &lanes, cv::Mat &canvas) const
@@ -155,10 +154,11 @@ void LanePostProcessor::drawLaneConnections(const std::vector<LaneInfo> &lanes, 
 				auto bestPair = *std::min_element(pairs.begin(), pairs.end(), [](const auto &p1, const auto &p2)
 												  { return cv::norm(p1.first - p1.second) < cv::norm(p2.first - p2.second); });
 
-				cv::line(canvas, bestPair.first, bestPair.second, cv::Scalar(255, 255, 255), 3);
-			}
-		}
-	}
+        cv::line(canvas, bestPair.first, bestPair.second,
+                 cv::Scalar(255, 255, 255), 3);
+      }
+    }
+  }
 }
 
 cv::Mat LanePostProcessor::renderFilteredMask(const std::vector<LaneInfo> &lanes, cv::Size shape) const

@@ -1,7 +1,8 @@
 #include "YOLOv5TRT.hpp"
 
 std::string YOLOv5TRT::lastClassName = "";
-std::chrono::steady_clock::time_point YOLOv5TRT::lastNotificationTime = std::chrono::steady_clock::now();
+std::chrono::steady_clock::time_point YOLOv5TRT::lastNotificationTime =
+    std::chrono::steady_clock::now();
 
 YOLOv5TRT::YOLOv5TRT(const std::string &enginePath, const std::string &labelPath)
 	: labelManager(labelPath)
@@ -19,16 +20,16 @@ YOLOv5TRT::YOLOv5TRT(const std::string &enginePath, const std::string &labelPath
 		std::cerr << "[AVISO] Falha ao configurar jetson_clocks" << std::endl;
 	}
 
-	// Configurar OpenCV para usar CUDA
-	cv::cuda::setDevice(0);
-	loadEngine(enginePath);
-	allocateBuffers();
+  // Configurar OpenCV para usar CUDA
+  cv::cuda::setDevice(0);
+  loadEngine(enginePath);
+  allocateBuffers();
 
 	// Pré-alocar buffers reutilizáveis
 	channels.resize(3);
 	hostDataBuffer = new float[3 * 640 * 640];
 
-	num_classes = static_cast<int>(labelManager.getNumClasses());
+  num_classes = static_cast<int>(labelManager.getNumClasses());
 
 	Publisher::instance(5557); // Initialize publisher
 }
@@ -43,7 +44,8 @@ YOLOv5TRT::~YOLOv5TRT()
 }
 
 /**
- * @brief Calcula o volume (número total de elementos) de um tensor dado suas dimensões.
+ * @brief Calcula o volume (número total de elementos) de um tensor dado suas
+ * dimensões.
  * @param dims Dimensões do tensor.
  * @return Volume total.
  */
@@ -66,11 +68,11 @@ void YOLOv5TRT::loadEngine(const std::string &enginePath)
 		exit(EXIT_FAILURE);
 	}
 
-	file.seekg(0, file.end);
-	size_t size = file.tellg();
-	file.seekg(0, file.beg);
-	std::vector<char> engineData(size);
-	file.read(engineData.data(), size);
+  file.seekg(0, file.end);
+  size_t size = file.tellg();
+  file.seekg(0, file.beg);
+  std::vector<char> engineData(size);
+  file.read(engineData.data(), size);
 
 	runtime = createInferRuntime(logger);
 	engine = runtime->deserializeCudaEngine(engineData.data(), size);
@@ -80,7 +82,7 @@ void YOLOv5TRT::loadEngine(const std::string &enginePath)
 		exit(EXIT_FAILURE);
 	}
 
-	context = engine->createExecutionContext();
+  context = engine->createExecutionContext();
 }
 
 void YOLOv5TRT::allocateBuffers()
@@ -88,14 +90,14 @@ void YOLOv5TRT::allocateBuffers()
 	inputSize = calculateVolume(engine->getBindingDimensions(0)) * sizeof(float);
 	outputSize = calculateVolume(engine->getBindingDimensions(1)) * sizeof(float);
 
-	cudaMalloc(&inputDevice, inputSize);
-	cudaMalloc(&outputDevice, outputSize);
+  cudaMalloc(&inputDevice, inputSize);
+  cudaMalloc(&outputDevice, outputSize);
 
-	bindings.push_back(inputDevice);
-	bindings.push_back(outputDevice);
+  bindings.push_back(inputDevice);
+  bindings.push_back(outputDevice);
 
-	cudaStreamCreate(&stream);
-	outputHost = new float[outputSize / sizeof(float)];
+  cudaStreamCreate(&stream);
+  outputHost = new float[outputSize / sizeof(float)];
 }
 
 /**
@@ -110,9 +112,9 @@ std::vector<float> YOLOv5TRT::infer(const cv::Mat &image)
 	cv::cuda::resize(gpu_image, gpu_resized, cv::Size(640, 640));
 	gpu_resized.convertTo(gpu_float, CV_32FC3, 1.0 / 255.0);
 
-	// Download otimizado
-	gpu_float.download(blob);
-	cv::split(blob, channels);
+  // Download otimizado
+  gpu_float.download(blob);
+  cv::split(blob, channels);
 
 	// Cópia otimizada dos canais (HWC -> CHW)
 	for (int c = 0; c < 3; c++)
@@ -126,19 +128,21 @@ std::vector<float> YOLOv5TRT::infer(const cv::Mat &image)
 	cudaMemcpyAsync(inputDevice, hostDataBuffer, 3 * 640 * 640 * sizeof(float),
 					cudaMemcpyHostToDevice, stream);
 
-	// Executar inferência
-	context->enqueueV2(bindings.data(), stream, nullptr);
+  // Executar inferência
+  context->enqueueV2(bindings.data(), stream, nullptr);
 
-	// Copiar resultados para o host
-	cudaMemcpyAsync(outputHost, outputDevice, outputSize,
-					cudaMemcpyDeviceToHost, stream);
-	cudaStreamSynchronize(stream);
+  // Copiar resultados para o host
+  cudaMemcpyAsync(outputHost, outputDevice, outputSize, cudaMemcpyDeviceToHost,
+                  stream);
+  cudaStreamSynchronize(stream);
 
-	return std::vector<float>(outputHost, outputHost + outputSize / sizeof(float));
+  return std::vector<float>(outputHost,
+                            outputHost + outputSize / sizeof(float));
 }
 
 /**
- * @brief Pós-processa a saída do modelo, aplicando threshold de confiança e NMS.
+ * @brief Pós-processa a saída do modelo, aplicando threshold de confiança e
+ * NMS.
  * @param output Saída bruta do modelo.
  * @param num_classes Número de classes.
  * @param conf_thresh Threshold de confiança.
@@ -173,8 +177,8 @@ std::vector<Detection> YOLOv5TRT::postprocess(const std::vector<float> &output, 
 		if (score < conf_thresh)
 			continue;
 
-		dets.push_back({pred[0], pred[1], pred[2], pred[3], score, class_id});
-	}
+    dets.push_back({pred[0], pred[1], pred[2], pred[3], score, class_id});
+  }
 
 	// NMS
 	std::vector<Detection> result;
@@ -199,12 +203,12 @@ std::vector<Detection> YOLOv5TRT::postprocess(const std::vector<float> &output, 
 			float xx2 = std::min(dets[i].x + dets[i].w / 2, dets[j].x + dets[j].w / 2);
 			float yy2 = std::min(dets[i].y + dets[i].h / 2, dets[j].y + dets[j].h / 2);
 
-			float w = std::max(0.0f, xx2 - xx1);
-			float h = std::max(0.0f, yy2 - yy1);
-			float inter = w * h;
-			float area1 = dets[i].w * dets[i].h;
-			float area2 = dets[j].w * dets[j].h;
-			float ovr = inter / (area1 + area2 - inter);
+      float w = std::max(0.0f, xx2 - xx1);
+      float h = std::max(0.0f, yy2 - yy1);
+      float inter = w * h;
+      float area1 = dets[i].w * dets[i].h;
+      float area2 = dets[j].w * dets[j].h;
+      float ovr = inter / (area1 + area2 - inter);
 
 			if (ovr > nms_thresh)
 				removed[j] = true;
@@ -214,7 +218,8 @@ std::vector<Detection> YOLOv5TRT::postprocess(const std::vector<float> &output, 
 }
 
 /**
- * @brief Função principal. Inicializa recursos, executa loop de inferência e exibe resultados.
+ * @brief Função principal. Inicializa recursos, executa loop de inferência e
+ * exibe resultados.
  * @return 0 em caso de sucesso.
  */
 void YOLOv5TRT::process_image(const cv::Mat &frame)
@@ -231,17 +236,17 @@ void YOLOv5TRT::process_image(const cv::Mat &frame)
 		float width = (det.w / 640.0f) * frame.cols;
 		float height = (det.h / 640.0f) * frame.rows;
 
-		// Calcular coordenadas do retângulo
-		int x1 = static_cast<int>(x_center - width / 2);
-		int y1 = static_cast<int>(y_center - height / 2);
-		int x2 = static_cast<int>(x_center + width / 2);
-		int y2 = static_cast<int>(y_center + height / 2);
+    // Calcular coordenadas do retângulo
+    int x1 = static_cast<int>(x_center - width / 2);
+    int y1 = static_cast<int>(y_center - height / 2);
+    int x2 = static_cast<int>(x_center + width / 2);
+    int y2 = static_cast<int>(y_center + height / 2);
 
-		// Garantir que as coordenadas estão dentro da imagem
-		x1 = std::max(0, std::min(x1, frame.cols - 1));
-		y1 = std::max(0, std::min(y1, frame.rows - 1));
-		x2 = std::max(0, std::min(x2, frame.cols - 1));
-		y2 = std::max(0, std::min(y2, frame.rows - 1));
+    // Garantir que as coordenadas estão dentro da imagem
+    x1 = std::max(0, std::min(x1, frame.cols - 1));
+    y1 = std::max(0, std::min(y1, frame.rows - 1));
+    x2 = std::max(0, std::min(x2, frame.cols - 1));
+    y2 = std::max(0, std::min(y2, frame.rows - 1));
 
 		// Verificar se o retângulo é válido
 		if (x2 > x1 && y2 > y1)
@@ -249,8 +254,10 @@ void YOLOv5TRT::process_image(const cv::Mat &frame)
 			std::string className = labelManager.getLabel(det.class_id);
 			std::cout << "Object found: " << className << " at (" << x1 << "," << y1 << ")-(" << x2 << "," << y2 << ")" << std::endl;
 
-			auto now = std::chrono::steady_clock::now();
-			auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastNotificationTime).count();
+      auto now = std::chrono::steady_clock::now();
+      auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                           now - lastNotificationTime)
+                           .count();
 
 			if (className != lastClassName || elapsedMs > 2000)
 			{ // Only notify again if different or 2s passed
@@ -259,40 +266,44 @@ void YOLOv5TRT::process_image(const cv::Mat &frame)
 				Publisher::instance(5557)->publish("notification", className);
 			}
 
-			/* if (className != lastClassName)
-			{
-				lastClassName = className;
-				std::lock_guard<std::mutex> lock(pubMutex);
-				Publisher::instance(5557)->publish("notification", className);
-			} */
-			// Desenhar retângulo usando coordenadas Point
-			/* cv::rectangle(frame, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 255, 0), 3);
+      /* if (className != lastClassName)
+      {
+              lastClassName = className;
+              std::lock_guard<std::mutex> lock(pubMutex);
+              Publisher::instance(5557)->publish("notification", className);
+      } */
+      // Desenhar retângulo usando coordenadas Point
+      /* cv::rectangle(frame, cv::Point(x1, y1), cv::Point(x2, y2),
+      cv::Scalar(0, 255, 0), 3);
 
-			// Desenhar label
-			std::string label = className + " (" + std::to_string(int(det.conf * 100)) + "%)";
+      // Desenhar label
+      std::string label = className + " (" + std::to_string(int(det.conf * 100))
+      + "%)";
 
-			int baseline = 0;
-			cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.6, 2, &baseline);
+      int baseline = 0;
+      cv::Size textSize = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.6,
+      2, &baseline);
 
-			// Fundo do texto
-			cv::rectangle(frame,
-						cv::Point(x1, y1 - textSize.height - 10),
-						cv::Point(x1 + textSize.width, y1),
-						cv::Scalar(0, 255, 0), -1);
+      // Fundo do texto
+      cv::rectangle(frame,
+                              cv::Point(x1, y1 - textSize.height - 10),
+                              cv::Point(x1 + textSize.width, y1),
+                              cv::Scalar(0, 255, 0), -1);
 
-			// Texto
-			cv::putText(frame, label,
-						cv::Point(x1, y1 - 5),
-						cv::FONT_HERSHEY_SIMPLEX, 0.6,
-						cv::Scalar(0, 0, 0), 2); */
-		} /* else {
-			std::cout << "Invalid rectangle coordinates for detection: "
-					<< "x1=" << x1 << ", y1=" << y1
-					<< ", x2=" << x2 << ", y2=" << y2
-					<< ", width=" << width << ", height=" << height
-					<< ", det.x=" << det.x << ", det.y=" << det.y
-					<< ", det.w=" << det.w << ", det.h=" << det.h
-					<< ", class_id=" << det.class_id << ", conf=" << det.conf << std::endl;
-		} */
-	}
+      // Texto
+      cv::putText(frame, label,
+                              cv::Point(x1, y1 - 5),
+                              cv::FONT_HERSHEY_SIMPLEX, 0.6,
+                              cv::Scalar(0, 0, 0), 2); */
+    } /* else {
+            std::cout << "Invalid rectangle coordinates for detection: "
+                            << "x1=" << x1 << ", y1=" << y1
+                            << ", x2=" << x2 << ", y2=" << y2
+                            << ", width=" << width << ", height=" << height
+                            << ", det.x=" << det.x << ", det.y=" << det.y
+                            << ", det.w=" << det.w << ", det.h=" << det.h
+                            << ", class_id=" << det.class_id << ", conf=" <<
+    det.conf << std::endl;
+    } */
+  }
 }

@@ -1,11 +1,13 @@
 #include "../../includes/inference/LaneCurveFitter.hpp"
-#include <numeric>
 #include <cmath>
 #include <map>
+#include <numeric>
 #include <set>
 
-LaneCurveFitter::LaneCurveFitter(float eps, int minSamples, int windows, int laneWidthPx)
-	: dbscanEps(eps), dbscanMinSamples(minSamples), numWindows(windows), laneWidthPx(laneWidthPx) {}
+LaneCurveFitter::LaneCurveFitter(float eps, int minSamples, int windows,
+                                 int laneWidthPx)
+    : dbscanEps(eps), dbscanMinSamples(minSamples), numWindows(windows),
+      laneWidthPx(laneWidthPx) {}
 
 std::vector<cv::Point> LaneCurveFitter::extractLanePoints(const cv::Mat &binaryMask)
 {
@@ -40,8 +42,8 @@ float interpolateXatY(const std::vector<cv::Point2f> &points, float y_query)
 		}
 	}
 
-	// Extrapolate if y_query is outside range
-	return points.back().x;
+  // Extrapolate if y_query is outside range
+  return points.back().x;
 }
 
 // Simple DBSCAN implementation (brute force)
@@ -66,9 +68,9 @@ std::vector<int> LaneCurveFitter::dbscanCluster(const std::vector<cv::Point> &po
 		if (neighbors.size() < static_cast<size_t>(dbscanMinSamples))
 			continue;
 
-		labels[i] = clusterId;
-		std::set<int> seeds(neighbors.begin(), neighbors.end());
-		seeds.erase(i);
+    labels[i] = clusterId;
+    std::set<int> seeds(neighbors.begin(), neighbors.end());
+    seeds.erase(i);
 
 		while (!seeds.empty())
 		{
@@ -93,17 +95,18 @@ std::vector<int> LaneCurveFitter::dbscanCluster(const std::vector<cv::Point> &po
 			}
 		}
 
-		++clusterId;
-	}
+    ++clusterId;
+  }
 
-	uniqueLabels.clear();
-	for (int l : labels)
-		if (l != -1)
-			uniqueLabels.push_back(l);
-	std::sort(uniqueLabels.begin(), uniqueLabels.end());
-	uniqueLabels.erase(std::unique(uniqueLabels.begin(), uniqueLabels.end()), uniqueLabels.end());
+  uniqueLabels.clear();
+  for (int l : labels)
+    if (l != -1)
+      uniqueLabels.push_back(l);
+  std::sort(uniqueLabels.begin(), uniqueLabels.end());
+  uniqueLabels.erase(std::unique(uniqueLabels.begin(), uniqueLabels.end()),
+                     uniqueLabels.end());
 
-	return labels;
+  return labels;
 }
 
 std::pair<std::vector<float>, std::vector<float>> LaneCurveFitter::slidingWindowCentroids(const std::vector<cv::Point> &cluster, cv::Size imgSize, bool smooth)
@@ -141,7 +144,7 @@ std::pair<std::vector<float>, std::vector<float>> LaneCurveFitter::slidingWindow
 		}
 	}
 
-	return {cy, cx};
+  return {cy, cx};
 }
 
 bool LaneCurveFitter::isStraightLine(const std::vector<float> &y, const std::vector<float> &x, float threshold)
@@ -149,8 +152,8 @@ bool LaneCurveFitter::isStraightLine(const std::vector<float> &y, const std::vec
 	if (x.size() < 4)
 		return false;
 
-	float mean_x = std::accumulate(x.begin(), x.end(), 0.0f) / x.size();
-	float mean_y = std::accumulate(y.begin(), y.end(), 0.0f) / y.size();
+  float mean_x = std::accumulate(x.begin(), x.end(), 0.0f) / x.size();
+  float mean_y = std::accumulate(y.begin(), y.end(), 0.0f) / y.size();
 
 	float num = 0.0f, den_x = 0.0f, den_y = 0.0f;
 	for (size_t i = 0; i < x.size(); ++i)
@@ -160,8 +163,8 @@ bool LaneCurveFitter::isStraightLine(const std::vector<float> &y, const std::vec
 		den_y += (y[i] - mean_y) * (y[i] - mean_y);
 	}
 
-	float corr = num / std::sqrt(den_x * den_y + 1e-6f);
-	return std::abs(corr) > threshold;
+  float corr = num / std::sqrt(den_x * den_y + 1e-6f);
+  return std::abs(corr) > threshold;
 }
 
 bool LaneCurveFitter::hasSignFlip(const std::vector<float> &xVals)
@@ -170,10 +173,10 @@ bool LaneCurveFitter::hasSignFlip(const std::vector<float> &xVals)
 	for (size_t i = 1; i + 1 < xVals.size(); ++i)
 		dx2[i] = xVals[i + 1] + xVals[i - 1] - 2 * xVals[i];
 
-	for (size_t i = 1; i < dx2.size(); ++i)
-		if ((dx2[i] > 0) != (dx2[i - 1] > 0))
-			return true;
-	return false;
+  for (size_t i = 1; i < dx2.size(); ++i)
+    if ((dx2[i] > 0) != (dx2[i - 1] > 0))
+      return true;
+  return false;
 }
 
 std::vector<float> LaneCurveFitter::fitCurve(const std::vector<float> &y, const std::vector<float> &x, const std::vector<float> &yEval)
@@ -185,8 +188,8 @@ std::vector<float> LaneCurveFitter::fitCurve(const std::vector<float> &y, const 
 		return fallback;
 	}
 
-	cv::Mat A(y.size(), 3, CV_32F);
-	cv::Mat X(x);
+  cv::Mat A(y.size(), 3, CV_32F);
+  cv::Mat X(x);
 
 	for (size_t i = 0; i < y.size(); ++i)
 	{
@@ -216,8 +219,8 @@ std::vector<LaneCurveFitter::LaneCurve> LaneCurveFitter::fitLanes(const cv::Mat 
 	std::vector<LaneCurve> lanes;
 	auto points = extractLanePoints(binaryMask);
 
-	std::vector<int> uniqueLabels;
-	auto labels = dbscanCluster(points, uniqueLabels);
+  std::vector<int> uniqueLabels;
+  auto labels = dbscanCluster(points, uniqueLabels);
 
 	for (int label : uniqueLabels)
 	{
@@ -260,25 +263,25 @@ std::vector<LaneCurveFitter::LaneCurve> LaneCurveFitter::fitLanes(const cv::Mat 
 			}
 		}
 
-		float y_min = *std::min_element(y_sorted.begin(), y_sorted.end());
-		float y_max = *std::max_element(y_sorted.begin(), y_sorted.end());
-		std::vector<float> y_plot(300);
-		float step = (y_max + 10 - (y_min - 30)) / 300.0f;
-		for (int i = 0; i < 300; ++i)
-			y_plot[i] = y_max + 10 - i * step;
+    float y_min = *std::min_element(y_sorted.begin(), y_sorted.end());
+    float y_max = *std::max_element(y_sorted.begin(), y_sorted.end());
+    std::vector<float> y_plot(300);
+    float step = (y_max + 10 - (y_min - 30)) / 300.0f;
+    for (int i = 0; i < 300; ++i)
+      y_plot[i] = y_max + 10 - i * step;
 
-		std::vector<float> x_plot = fitCurve(y_sorted, x_sorted, y_plot);
+    std::vector<float> x_plot = fitCurve(y_sorted, x_sorted, y_plot);
 
-		std::vector<cv::Point2f> curve, cents;
-		for (size_t i = 0; i < y_plot.size(); ++i)
-			curve.emplace_back(x_plot[i], y_plot[i]);
-		for (size_t i = 0; i < x_sorted.size(); ++i)
-			cents.emplace_back(x_sorted[i], y_sorted[i]);
+    std::vector<cv::Point2f> curve, cents;
+    for (size_t i = 0; i < y_plot.size(); ++i)
+      curve.emplace_back(x_plot[i], y_plot[i]);
+    for (size_t i = 0; i < x_sorted.size(); ++i)
+      cents.emplace_back(x_sorted[i], y_sorted[i]);
 
-		lanes.push_back({cents, curve});
-	}
+    lanes.push_back({cents, curve});
+  }
 
-	return lanes;
+  return lanes;
 }
 
 std::optional<LaneCurveFitter::CenterlineResult> LaneCurveFitter::computeVirtualCenterline(const std::vector<LaneCurve> &lanes, int imgWidth, int imgHeight)
@@ -296,9 +299,10 @@ std::optional<LaneCurveFitter::CenterlineResult> LaneCurveFitter::computeVirtual
 		if (bottomXs.empty())
 			continue;
 
-		float avgX = std::accumulate(bottomXs.begin(), bottomXs.end(), 0.0f) / bottomXs.size();
-		candidates.emplace_back(avgX, lane);
-	}
+    float avgX = std::accumulate(bottomXs.begin(), bottomXs.end(), 0.0f) /
+                 bottomXs.size();
+    candidates.emplace_back(avgX, lane);
+  }
 
 	std::sort(candidates.begin(), candidates.end(), [](auto &a, auto &b)
 			  { return a.first < b.first; });
@@ -334,12 +338,12 @@ std::optional<LaneCurveFitter::CenterlineResult> LaneCurveFitter::computeVirtual
 			float w = static_cast<float>(i) / 299.0f;
 			float blendX = w * mid + (1 - w) * centerX;
 
-			c1.emplace_back(mid, y_common[i]);
-			c2.emplace_back(centerX, y_common[i]);
-			blended.emplace_back(blendX, y_common[i]);
-		}
-		return CenterlineResult{blended, c1, c2};
-	}
+      c1.emplace_back(mid, y_common[i]);
+      c2.emplace_back(centerX, y_common[i]);
+      blended.emplace_back(blendX, y_common[i]);
+    }
+    return CenterlineResult{blended, c1, c2};
+  }
 
-	return std::nullopt;
+  return std::nullopt;
 }

@@ -47,8 +47,8 @@ void Publisher::publish(const std::string &topic, const std::string &message)
 {
 	std::cout << "[Publisher] Full message: " << topic << " " << message << std::endl;
 
-	std::string full_message = topic + " " + message;
-	zmq::message_t zmq_message(full_message.begin(), full_message.end());
+  std::string full_message = topic + " " + message;
+  zmq::message_t zmq_message(full_message.begin(), full_message.end());
 
 	publisher.send(zmq_message); // Send the message
 }
@@ -89,15 +89,15 @@ void Publisher::publishInferenceFrame(const std::string &topic, const cv::cuda::
 			return;
 		}
 
-		// Build single message: "topic " + raw image bytes
-		std::string header = topic + " ";
-		std::vector<uchar> messageData;
-		messageData.reserve(header.size() + encoded.size());
-		messageData.insert(messageData.end(), header.begin(), header.end());
-		messageData.insert(messageData.end(), encoded.begin(), encoded.end());
+    // Build single message: "topic " + raw image bytes
+    std::string header = topic + " ";
+    std::vector<uchar> messageData;
+    messageData.reserve(header.size() + encoded.size());
+    messageData.insert(messageData.end(), header.begin(), header.end());
+    messageData.insert(messageData.end(), encoded.begin(), encoded.end());
 
-		zmq::message_t zmq_message(messageData.data(), messageData.size());
-		publisher.send(zmq_message);
+    zmq::message_t zmq_message(messageData.data(), messageData.size());
+    publisher.send(zmq_message);
 
 		// std::cout << "[Publisher] Sent image as single-part message. Size: " << messageData.size() << std::endl;
 	}
@@ -107,34 +107,37 @@ void Publisher::publishInferenceFrame(const std::string &topic, const cv::cuda::
 	}
 }
 
-/* void Publisher::publishCameraFrame(const std::string& topic, const cv::Mat& frame) {
-	std::lock_guard<std::mutex> lock(frame_mtx);  // Ensure thread safety
-	try {
-		if (frame.empty()) {
-			std::cerr << "[Publisher] Skipped: empty CPU image." << std::endl;
-			return;
-		}
+/* void Publisher::publishCameraFrame(const std::string& topic, const cv::Mat&
+frame) { std::lock_guard<std::mutex> lock(frame_mtx);  // Ensure thread safety
+        try {
+                if (frame.empty()) {
+                        std::cerr << "[Publisher] Skipped: empty CPU image." <<
+std::endl; return;
+                }
 
-		// Encode to JPEG
-		std::vector<uchar> encoded;
-		if (!cv::imencode(".jpg", frame, encoded)) {
-			std::cerr << "[Publisher] Encoding failed." << std::endl;
-			return;
-		}
+                // Encode to JPEG
+                std::vector<uchar> encoded;
+                if (!cv::imencode(".jpg", frame, encoded)) {
+                        std::cerr << "[Publisher] Encoding failed." <<
+std::endl; return;
+                }
 
-		// Build single message: "topic " + raw image bytes
-		std::string header = topic + " ";
-		std::vector<uchar> messageData;
-		messageData.reserve(header.size() + encoded.size());
-		messageData.insert(messageData.end(), header.begin(), header.end());
-		messageData.insert(messageData.end(), encoded.begin(), encoded.end());
+                // Build single message: "topic " + raw image bytes
+                std::string header = topic + " ";
+                std::vector<uchar> messageData;
+                messageData.reserve(header.size() + encoded.size());
+                messageData.insert(messageData.end(), header.begin(),
+header.end()); messageData.insert(messageData.end(), encoded.begin(),
+encoded.end());
 
-		zmq::message_t zmq_message(messageData.data(), messageData.size());
-		publisher.send(zmq_message);
+                zmq::message_t zmq_message(messageData.data(),
+messageData.size()); publisher.send(zmq_message);
 
-		//std::cout << "[Publisher] Sent image as single-part message. Size: " << messageData.size() << std::endl;
+                //std::cout << "[Publisher] Sent image as single-part message.
+Size: " << messageData.size() << std::endl;
 
-	} catch (const std::exception& e) {
-		std::cerr << "[Publisher] Failed to publish image: " << e.what() << std::endl;
-	}
+        } catch (const std::exception& e) {
+                std::cerr << "[Publisher] Failed to publish image: " << e.what()
+<< std::endl;
+        }
 } */

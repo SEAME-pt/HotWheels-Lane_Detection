@@ -3,8 +3,8 @@
  * @brief Implementation of the PeripheralController class.
  * @version 0.1
  * @date 2025-02-12
- * @details This file contains the implementation of the PeripheralController class,
- * which is responsible for controlling the peripherals of the car.
+ * @details This file contains the implementation of the PeripheralController
+ * class, which is responsible for controlling the peripherals of the car.
  * @author Félix LE BIHAN (@Fle-bihh)
  * @author Tiago Pereira (@t-pereira06)
  * @author Ricardo Melo (@reomelo)
@@ -109,13 +109,13 @@ int PeripheralController::i2c_smbus_write_byte_data(int file, uint8_t command,
 	union i2c_smbus_data data;
 	data.byte = value;
 
-	struct i2c_smbus_ioctl_data args;
-	args.read_write = I2C_SMBUS_WRITE;
-	args.command = command;
-	args.size = I2C_SMBUS_BYTE_DATA;
-	args.data = &data;
+  struct i2c_smbus_ioctl_data args;
+  args.read_write = I2C_SMBUS_WRITE;
+  args.command = command;
+  args.size = I2C_SMBUS_BYTE_DATA;
+  args.data = &data;
 
-	return ioctl(file, I2C_SMBUS, &args);
+  return ioctl(file, I2C_SMBUS, &args);
 }
 
 /*!
@@ -123,17 +123,18 @@ int PeripheralController::i2c_smbus_write_byte_data(int file, uint8_t command,
  *
  * @param file The file descriptor of the I2C bus.
  * @param command The register address to read from.
- * @return The byte of data read from the register, or -1 if the operation fails.
+ * @return The byte of data read from the register, or -1 if the operation
+ * fails.
  */
 int PeripheralController::i2c_smbus_read_byte_data(int file, uint8_t command)
 {
 	union i2c_smbus_data data;
 
-	struct i2c_smbus_ioctl_data args;
-	args.read_write = I2C_SMBUS_READ;
-	args.command = command;
-	args.size = I2C_SMBUS_BYTE_DATA;
-	args.data = &data;
+  struct i2c_smbus_ioctl_data args;
+  args.read_write = I2C_SMBUS_READ;
+  args.command = command;
+  args.size = I2C_SMBUS_BYTE_DATA;
+  args.data = &data;
 
 	if (ioctl(file, I2C_SMBUS, &args) < 0)
 	{
@@ -231,17 +232,17 @@ void PeripheralController::init_servo()
 	write_byte_data(servo_bus_fd_, 0x00, 0x06);
 	usleep(100000);
 
-	write_byte_data(servo_bus_fd_, 0x00, 0x10);
-	usleep(100000);
+  write_byte_data(servo_bus_fd_, 0x00, 0x10);
+  usleep(100000);
 
-	write_byte_data(servo_bus_fd_, 0xFE, 0x79);
-	usleep(100000);
+  write_byte_data(servo_bus_fd_, 0xFE, 0x79);
+  usleep(100000);
 
-	write_byte_data(servo_bus_fd_, 0x01, 0x04);
-	usleep(100000);
+  write_byte_data(servo_bus_fd_, 0x01, 0x04);
+  usleep(100000);
 
-	write_byte_data(servo_bus_fd_, 0x00, 0x20);
-	usleep(100000);
+  write_byte_data(servo_bus_fd_, 0x00, 0x20);
+  usleep(100000);
 }
 
 /*!
@@ -254,13 +255,13 @@ void PeripheralController::init_motors()
 {
 	write_byte_data(motor_bus_fd_, 0x00, 0x20);
 
-	int prescale = static_cast<int>(std::floor(25000000.0 / 4096.0 / 100 - 1));
-	int oldmode = read_byte_data(motor_bus_fd_, 0x00);
-	int newmode = (oldmode & 0x7F) | 0x10;
+  int prescale = static_cast<int>(std::floor(25000000.0 / 4096.0 / 100 - 1));
+  int oldmode = read_byte_data(motor_bus_fd_, 0x00);
+  int newmode = (oldmode & 0x7F) | 0x10;
 
-	write_byte_data(motor_bus_fd_, 0x00, newmode);
-	write_byte_data(motor_bus_fd_, 0xFE, prescale);
-	write_byte_data(motor_bus_fd_, 0x00, oldmode);
-	usleep(5000);
-	write_byte_data(motor_bus_fd_, 0x00, oldmode | 0xa1);
+  write_byte_data(motor_bus_fd_, 0x00, newmode);
+  write_byte_data(motor_bus_fd_, 0xFE, prescale);
+  write_byte_data(motor_bus_fd_, 0x00, oldmode);
+  usleep(5000);
+  write_byte_data(motor_bus_fd_, 0x00, oldmode | 0xa1);
 }

@@ -1,8 +1,8 @@
 #include "../../includes/inference/TensorRTInferencer.hpp" // Include TensorRTInferencer header
 #include <fstream>
 #include <iostream>
-#include <stdexcept>
 #include <numeric>
+#include <stdexcept>
 
 // Logger callback for TensorRT to print warnings and errors
 void TensorRTInferencer::Logger::log(Severity severity, const char *msg) noexcept
@@ -126,7 +126,7 @@ TensorRTInferencer::TensorRTInferencer(const std::string &enginePath) : runtime(
 	bindings[inputBindingIndex] = deviceInput;	 // Assign device input buffer
 	bindings[outputBindingIndex] = deviceOutput; // Assign device output buffer
 
-	Publisher::instance(5556); // Initialize publisher for inference results
+  Publisher::instance(5556); // Initialize publisher for inference results
 
 	initUndistortMaps();			 // Initialize undistortion maps for camera calibration
 	cudaStream = cv::cuda::Stream(); // CUDA stream for asynchronous operations
@@ -220,11 +220,14 @@ cv::cuda::GpuMat TensorRTInferencer::preprocessImage(const cv::cuda::GpuMat &gpu
 		gpuGray = gpuImage; // Already grayscale, no conversion needed
 	}
 
-	cv::cuda::GpuMat gpuResized;
-	cv::cuda::resize(gpuGray, gpuResized, inputSize, 0, 0, cv::INTER_LINEAR); // Resize to network input size
+  cv::cuda::GpuMat gpuResized;
+  cv::cuda::resize(gpuGray, gpuResized, inputSize, 0, 0,
+                   cv::INTER_LINEAR); // Resize to network input size
 
-	cv::cuda::GpuMat gpuFloat;
-	gpuResized.convertTo(gpuFloat, CV_32F, 1.0 / 255.0); // Normalize to [0,1] and convert to float32
+  cv::cuda::GpuMat gpuFloat;
+  gpuResized.convertTo(gpuFloat, CV_32F,
+                       1.0 /
+                           255.0); // Normalize to [0,1] and convert to float32
 
 	return gpuFloat; // Return preprocessed image (still on GPU)
 }
@@ -315,7 +318,7 @@ cv::cuda::GpuMat TensorRTInferencer::makePrediction(const cv::cuda::GpuMat &gpuI
 		// Upload mask with centerline back to GPU
 		postProcessedMaskGpu.upload(maskCpu); */
 
-	return outputMaskGpu;
+  return outputMaskGpu;
 }
 
 void TensorRTInferencer::initUndistortMaps()
@@ -365,11 +368,11 @@ void TensorRTInferencer::doInference(const cv::Mat &frame)
 	cv::threshold(binary_mask_cpu, binary_mask_cpu, 128, 255, cv::THRESH_BINARY);
 	cudaStream.waitForCompletion(); // Ensure async operations are complete
 
-	// Convert model output to 8-bit binary mask on GPU
-	cv::cuda::GpuMat d_visualization;
-	d_prediction_mask.convertTo(d_visualization, CV_8U, 255.0, 0, cudaStream);
+  // Convert model output to 8-bit binary mask on GPU
+  cv::cuda::GpuMat d_visualization;
+  d_prediction_mask.convertTo(d_visualization, CV_8U, 255.0, 0, cudaStream);
 
-	cv::cuda::GpuMat d_resized_mask;
+  cv::cuda::GpuMat d_resized_mask;
 
 	cv::cuda::resize(d_visualization, d_resized_mask,
 					 cv::Size(frame.cols * 0.5, frame.rows * 0.5),

@@ -3,7 +3,8 @@
  * @brief File containing the ControlsManager class.
  * @version 0.1
  * @date 2025-02-12
- * @details This file contains the declaration of the ControlsManager class, which
+ * @details This file contains the declaration of the ControlsManager class,
+ * which
  * @author Félix LE BIHAN (@Fle-bihh)
  * @author Tiago Pereira (@t-pereira06)
  * @author Ricardo Melo (@reomelo)
@@ -24,8 +25,8 @@
 #include "Subscriber.hpp"
 #include "Publisher.hpp"
 #include <QObject>
-#include <QThread>
 #include <QProcess>
+#include <QThread>
 
 /*!
  * @brief The ControlsManager class.
@@ -36,18 +37,18 @@ class ControlsManager : public QObject
 	Q_OBJECT
 
 private:
-	EngineController m_engineController;
-	JoysticksController *m_manualController;
-	DrivingMode m_currentMode;
+  EngineController m_engineController;
+  JoysticksController *m_manualController;
+  DrivingMode m_currentMode;
 
-	Subscriber *m_subscriberJoystickObject;
-	CameraStreamer *m_cameraStreamerObject;
+  Subscriber *m_subscriberJoystickObject;
+  CameraStreamer *m_cameraStreamerObject;
 
 	std::atomic<bool> m_running;
 	QThread *m_cameraStreamerThread;
 
-	QThread *m_manualControllerThread;
-	QThread *m_joystickControlThread;
+  QThread *m_manualControllerThread;
+  QThread *m_joystickControlThread;
 
 	QThread *m_subscriberJoystickThread;
 	MPCPlanner *m_mpcPlanner;
@@ -56,25 +57,25 @@ private:
 	QThread *m_autonomousControlThread;
 
 public:
-	explicit ControlsManager(int argc, char **argv, QObject *parent = nullptr);
-	~ControlsManager();
+  explicit ControlsManager(int argc, char **argv, QObject *parent = nullptr);
+  ~ControlsManager();
 
-	void setMode(DrivingMode mode);
-	void readJoystickEnable();
-	bool isProcessRunning(const QString &processName);
-	void startAutonomousControl();
-	void stopAutonomousControl();
-	void autonomousControlLoop();
-	// Exibe a imagem da câmera com as lanes e centerline desenhadas
-	void showVisionDebug();
+  void setMode(DrivingMode mode);
+  void readJoystickEnable();
+  bool isProcessRunning(const QString &processName);
+  void startAutonomousControl();
+  void stopAutonomousControl();
+  void autonomousControlLoop();
+  // Exibe a imagem da câmera com as lanes e centerline desenhadas
+  void showVisionDebug();
 
 private:
-	VehicleState getCurrentVehicleState();
-	std::vector<Point2D> getWaypointsFromVision();
-	LaneInfo getLaneInfoFromVision();
-	bool checkEmergencyObstacles();
-	std::string serializeMask(const cv::Mat &mask);
-	cv::Mat deserializeMask(const std::string &data);
+  VehicleState getCurrentVehicleState();
+  std::vector<Point2D> getWaypointsFromVision();
+  LaneInfo getLaneInfoFromVision();
+  bool checkEmergencyObstacles();
+  std::string serializeMask(const cv::Mat &mask);
+  cv::Mat deserializeMask(const std::string &data);
 };
 
 #endif // CONTROLSMANAGER_HPP

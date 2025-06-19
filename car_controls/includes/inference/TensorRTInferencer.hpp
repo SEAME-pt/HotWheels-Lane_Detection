@@ -3,20 +3,20 @@
 #include <string>
 #include <vector>
 
-#include <opencv2/opencv.hpp>
 #include <opencv2/cudaimgproc.hpp>
 #include <opencv2/cudawarping.hpp>
+#include <opencv2/opencv.hpp>
 
 #include <NvInfer.h>
-#include <cuda_runtime_api.h>
 #include <cuda_fp16.h>
+#include <cuda_runtime_api.h>
 
 #include "IInferencer.hpp"
-#include "LanePostProcessor.hpp"
 #include "LaneCurveFitter.hpp"
+#include "LanePostProcessor.hpp"
 
-#include "../../../ZeroMQ/Subscriber.hpp"
 #include "../../../ZeroMQ/Publisher.hpp"
+#include "../../../ZeroMQ/Subscriber.hpp"
 
 class TensorRTInferencer : public IInferencer
 {
@@ -32,17 +32,17 @@ private:
 	nvinfer1::ICudaEngine *engine;
 	nvinfer1::IExecutionContext *context;
 
-	int inputBindingIndex;
-	int outputBindingIndex;
-	nvinfer1::Dims inputDims;
-	nvinfer1::Dims outputDims;
-	cv::Size inputSize;
+  int inputBindingIndex;
+  int outputBindingIndex;
+  nvinfer1::Dims inputDims;
+  nvinfer1::Dims outputDims;
+  cv::Size inputSize;
 
-	// Pre-calculated counts and sizes
-	size_t inputElementCount;
-	size_t outputElementCount;
-	size_t inputByteSize;
-	size_t outputByteSize;
+  // Pre-calculated counts and sizes
+  size_t inputElementCount;
+  size_t outputElementCount;
+  size_t inputByteSize;
+  size_t outputByteSize;
 
 	// Persistent CUDA resources
 	void *deviceInput;
@@ -57,16 +57,16 @@ private:
 	LanePostProcessor *lanePostProcessor;
 	LaneCurveFitter *laneCurveFitter;
 
-	cv::cuda::GpuMat d_mapx, d_mapy;
-	cv::cuda::GpuMat outputMaskGpu;
-	cv::cuda::Stream cudaStream;
+  cv::cuda::GpuMat d_mapx, d_mapy;
+  cv::cuda::GpuMat outputMaskGpu;
+  cv::cuda::Stream cudaStream;
 
-	Publisher *m_publisherObject;
+  Publisher *m_publisherObject;
 
 	std::vector<char> readEngineFile(const std::string &enginePath);
 	void cleanupResources();
 
-	std::string serializeMask(const cv::Mat &mask);
+  std::string serializeMask(const cv::Mat &mask);
 
 public:
 	TensorRTInferencer(const std::string &enginePath);

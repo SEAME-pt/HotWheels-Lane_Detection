@@ -1,9 +1,10 @@
 #include "Subscriber.hpp"
-#include <iostream>
 #include <chrono>
+#include <iostream>
 #include <thread>
 
-Subscriber::Subscriber() : context(1), subscriber(context, ZMQ_SUB), running(false) {}
+Subscriber::Subscriber()
+    : context(1), subscriber(context, ZMQ_SUB), running(false) {}
 
 Subscriber::~Subscriber()
 {

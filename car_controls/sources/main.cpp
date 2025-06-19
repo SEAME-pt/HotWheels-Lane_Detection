@@ -36,7 +36,7 @@ void handleSigint(int)
 		g_controlsManager = nullptr;
 	}
 
-	QCoreApplication::quit();
+  QCoreApplication::quit();
 }
 
 /*!
