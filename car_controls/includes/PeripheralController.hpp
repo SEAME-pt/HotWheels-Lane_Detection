@@ -5,7 +5,7 @@
  * @date 2025-02-12
  * @details This class is responsible for controlling the peripherals of the car.
  * @note This class is a subclass of IPeripheralController.
- * 
+ *
  * @author Félix LE BIHAN (@Fle-bihh)
  * @author Tiago Pereira (@t-pereira06)
  * @author Ricardo Melo (@reomelo)
@@ -49,7 +49,6 @@ public:
 	void set_motor_pwm(int channel, int value) override;
 	void init_servo() override;
 	void init_motors() override;
-	
 };
 
 #endif // PERIPHERALCONTROLLER_HPP

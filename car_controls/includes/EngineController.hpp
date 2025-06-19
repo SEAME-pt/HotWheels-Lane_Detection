@@ -24,7 +24,8 @@
  * @brief The EngineController class
  * @details This class is responsible for controlling the engine of the car.
  */
-class EngineController : public QObject {
+class EngineController : public QObject
+{
 	Q_OBJECT
 
 private:
