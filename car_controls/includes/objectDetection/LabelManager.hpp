@@ -15,7 +15,8 @@
  * @class LabelManager
  * @brief Gerencia o carregamento e acesso às labels das classes.
  */
-class LabelManager {
+class LabelManager
+{
 private:
 	std::vector<std::string> labels; ///< Lista de labels
 
@@ -24,9 +25,9 @@ public:
 	 * @brief Construtor que carrega as labels de um arquivo.
 	 * @param labelPath Caminho para o arquivo de labels.
 	 */
-	LabelManager(const std::string& labelPath);
+	LabelManager(const std::string &labelPath);
 
-	void loadLabels(const std::string& labelPath);
+	void loadLabels(const std::string &labelPath);
 	std::string getLabel(int classId) const;
 	size_t getNumClasses() const;
 };

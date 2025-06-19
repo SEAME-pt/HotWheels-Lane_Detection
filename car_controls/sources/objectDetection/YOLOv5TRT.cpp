@@ -3,16 +3,19 @@
 std::string YOLOv5TRT::lastClassName = "";
 std::chrono::steady_clock::time_point YOLOv5TRT::lastNotificationTime = std::chrono::steady_clock::now();
 
-YOLOv5TRT::YOLOv5TRT(const std::string& enginePath, const std::string& labelPath)
-	: labelManager(labelPath) {
+YOLOv5TRT::YOLOv5TRT(const std::string &enginePath, const std::string &labelPath)
+	: labelManager(labelPath)
+{
 	// Correção: verificar valores de retorno do system()
 	int result1 = system("sudo nvpmodel -m 0");
-	if (result1 != 0) {
+	if (result1 != 0)
+	{
 		std::cerr << "[AVISO] Falha ao configurar nvpmodel" << std::endl;
 	}
 
 	int result2 = system("sudo jetson_clocks");
-	if (result2 != 0) {
+	if (result2 != 0)
+	{
 		std::cerr << "[AVISO] Falha ao configurar jetson_clocks" << std::endl;
 	}
 
@@ -23,14 +26,15 @@ YOLOv5TRT::YOLOv5TRT(const std::string& enginePath, const std::string& labelPath
 
 	// Pré-alocar buffers reutilizáveis
 	channels.resize(3);
-	hostDataBuffer = new float[3*640*640];
+	hostDataBuffer = new float[3 * 640 * 640];
 
 	num_classes = static_cast<int>(labelManager.getNumClasses());
 
-	Publisher::instance(5557); //Initialize publisher
+	Publisher::instance(5557); // Initialize publisher
 }
 
-YOLOv5TRT::~YOLOv5TRT() {
+YOLOv5TRT::~YOLOv5TRT()
+{
 	cudaStreamDestroy(stream);
 	delete[] hostDataBuffer;
 	delete[] outputHost;
@@ -43,17 +47,21 @@ YOLOv5TRT::~YOLOv5TRT() {
  * @param dims Dimensões do tensor.
  * @return Volume total.
  */
-size_t YOLOv5TRT::calculateVolume(const nvinfer1::Dims& dims) {
+size_t YOLOv5TRT::calculateVolume(const nvinfer1::Dims &dims)
+{
 	size_t volume = 1;
-	for (int i = 0; i < dims.nbDims; ++i) {
+	for (int i = 0; i < dims.nbDims; ++i)
+	{
 		volume *= dims.d[i];
 	}
 	return volume;
 }
 
-void YOLOv5TRT::loadEngine(const std::string& enginePath) {
+void YOLOv5TRT::loadEngine(const std::string &enginePath)
+{
 	std::ifstream file(enginePath, std::ios::binary);
-	if (!file) {
+	if (!file)
+	{
 		std::cerr << "[ERRO] Falha ao carregar o engine TensorRT!" << std::endl;
 		exit(EXIT_FAILURE);
 	}
@@ -66,7 +74,8 @@ void YOLOv5TRT::loadEngine(const std::string& enginePath) {
 
 	runtime = createInferRuntime(logger);
 	engine = runtime->deserializeCudaEngine(engineData.data(), size);
-	if (!engine) {
+	if (!engine)
+	{
 		std::cerr << "[ERRO] Falha ao desserializar o engine TensorRT!" << std::endl;
 		exit(EXIT_FAILURE);
 	}
@@ -74,7 +83,8 @@ void YOLOv5TRT::loadEngine(const std::string& enginePath) {
 	context = engine->createExecutionContext();
 }
 
-void YOLOv5TRT::allocateBuffers() {
+void YOLOv5TRT::allocateBuffers()
+{
 	inputSize = calculateVolume(engine->getBindingDimensions(0)) * sizeof(float);
 	outputSize = calculateVolume(engine->getBindingDimensions(1)) * sizeof(float);
 
@@ -93,25 +103,27 @@ void YOLOv5TRT::allocateBuffers() {
  * @param image Imagem de entrada (cv::Mat BGR).
  * @return Vetor de floats com a saída do modelo.
  */
-std::vector<float> YOLOv5TRT::infer(const cv::Mat& image) {
+std::vector<float> YOLOv5TRT::infer(const cv::Mat &image)
+{
 	// Usar GPU para processamento
 	gpu_image.upload(image);
 	cv::cuda::resize(gpu_image, gpu_resized, cv::Size(640, 640));
-	gpu_resized.convertTo(gpu_float, CV_32FC3, 1.0/255.0);
+	gpu_resized.convertTo(gpu_float, CV_32FC3, 1.0 / 255.0);
 
 	// Download otimizado
 	gpu_float.download(blob);
 	cv::split(blob, channels);
 
 	// Cópia otimizada dos canais (HWC -> CHW)
-	for (int c = 0; c < 3; c++) {
-		memcpy(hostDataBuffer + c*640*640,
-				channels[c].ptr<float>(),
-				640*640*sizeof(float));
+	for (int c = 0; c < 3; c++)
+	{
+		memcpy(hostDataBuffer + c * 640 * 640,
+			   channels[c].ptr<float>(),
+			   640 * 640 * sizeof(float));
 	}
 
 	// Copiar dados para GPU
-	cudaMemcpyAsync(inputDevice, hostDataBuffer, 3*640*640*sizeof(float),
+	cudaMemcpyAsync(inputDevice, hostDataBuffer, 3 * 640 * 640 * sizeof(float),
 					cudaMemcpyHostToDevice, stream);
 
 	// Executar inferência
@@ -133,50 +145,59 @@ std::vector<float> YOLOv5TRT::infer(const cv::Mat& image) {
  * @param nms_thresh Threshold de NMS.
  * @return Vetor de detecções finais.
  */
-std::vector<Detection> YOLOv5TRT::postprocess(const std::vector<float>& output, int num_classes, float conf_thresh, float nms_thresh) {
+std::vector<Detection> YOLOv5TRT::postprocess(const std::vector<float> &output, int num_classes, float conf_thresh, float nms_thresh)
+{
 	std::vector<Detection> dets;
 	int num_preds = output.size() / (5 + num_classes);
 
-	for (int i = 0; i < num_preds; ++i) {
-		const float* pred = &output[i * (5 + num_classes)];
+	for (int i = 0; i < num_preds; ++i)
+	{
+		const float *pred = &output[i * (5 + num_classes)];
 		float obj = pred[4];
-		if (obj < conf_thresh) continue;
+		if (obj < conf_thresh)
+			continue;
 
 		// Encontrar a classe com maior probabilidade
 		float max_cls = pred[5];
 		int class_id = 0;
-		for (int c = 1; c < num_classes; ++c) {
-			if (pred[5 + c] > max_cls) {
+		for (int c = 1; c < num_classes; ++c)
+		{
+			if (pred[5 + c] > max_cls)
+			{
 				max_cls = pred[5 + c];
 				class_id = c;
 			}
 		}
 
 		float score = obj * max_cls;
-		if (score < conf_thresh) continue;
+		if (score < conf_thresh)
+			continue;
 
 		dets.push_back({pred[0], pred[1], pred[2], pred[3], score, class_id});
 	}
 
 	// NMS
 	std::vector<Detection> result;
-	std::sort(dets.begin(), dets.end(), [](const Detection& a, const Detection& b) {
-		return a.conf > b.conf;
-	});
+	std::sort(dets.begin(), dets.end(), [](const Detection &a, const Detection &b)
+			  { return a.conf > b.conf; });
 
 	std::vector<bool> removed(dets.size(), false);
-	for (size_t i = 0; i < dets.size(); ++i) {
-		if (removed[i]) continue;
+	for (size_t i = 0; i < dets.size(); ++i)
+	{
+		if (removed[i])
+			continue;
 		result.push_back(dets[i]);
 
-		for (size_t j = i + 1; j < dets.size(); ++j) {
-			if (removed[j]) continue;
+		for (size_t j = i + 1; j < dets.size(); ++j)
+		{
+			if (removed[j])
+				continue;
 
 			// Calcular IoU
-			float xx1 = std::max(dets[i].x - dets[i].w/2, dets[j].x - dets[j].w/2);
-			float yy1 = std::max(dets[i].y - dets[i].h/2, dets[j].y - dets[j].h/2);
-			float xx2 = std::min(dets[i].x + dets[i].w/2, dets[j].x + dets[j].w/2);
-			float yy2 = std::min(dets[i].y + dets[i].h/2, dets[j].y + dets[j].h/2);
+			float xx1 = std::max(dets[i].x - dets[i].w / 2, dets[j].x - dets[j].w / 2);
+			float yy1 = std::max(dets[i].y - dets[i].h / 2, dets[j].y - dets[j].h / 2);
+			float xx2 = std::min(dets[i].x + dets[i].w / 2, dets[j].x + dets[j].w / 2);
+			float yy2 = std::min(dets[i].y + dets[i].h / 2, dets[j].y + dets[j].h / 2);
 
 			float w = std::max(0.0f, xx2 - xx1);
 			float h = std::max(0.0f, yy2 - yy1);
@@ -185,7 +206,8 @@ std::vector<Detection> YOLOv5TRT::postprocess(const std::vector<float>& output, 
 			float area2 = dets[j].w * dets[j].h;
 			float ovr = inter / (area1 + area2 - inter);
 
-			if (ovr > nms_thresh) removed[j] = true;
+			if (ovr > nms_thresh)
+				removed[j] = true;
 		}
 	}
 	return result;
@@ -195,11 +217,13 @@ std::vector<Detection> YOLOv5TRT::postprocess(const std::vector<float>& output, 
  * @brief Função principal. Inicializa recursos, executa loop de inferência e exibe resultados.
  * @return 0 em caso de sucesso.
  */
-void YOLOv5TRT::process_image(const cv::Mat& frame) {
+void YOLOv5TRT::process_image(const cv::Mat &frame)
+{
 	auto output = infer(frame);
 	std::vector<Detection> dets = postprocess(output, num_classes, conf_thresh, nms_thresh);
 
-	for (const auto& det : dets) {
+	for (const auto &det : dets)
+	{
 		// Converter coordenadas normalizadas para absolutas
 		// Corrigir: tratar det.x, det.y, det.w, det.h como coordenadas absolutas (input 640x640)
 		float x_center = (det.x / 640.0f) * frame.cols;
@@ -220,14 +244,16 @@ void YOLOv5TRT::process_image(const cv::Mat& frame) {
 		y2 = std::max(0, std::min(y2, frame.rows - 1));
 
 		// Verificar se o retângulo é válido
-		if (x2 > x1 && y2 > y1) {
+		if (x2 > x1 && y2 > y1)
+		{
 			std::string className = labelManager.getLabel(det.class_id);
 			std::cout << "Object found: " << className << " at (" << x1 << "," << y1 << ")-(" << x2 << "," << y2 << ")" << std::endl;
 
 			auto now = std::chrono::steady_clock::now();
 			auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastNotificationTime).count();
 
-			if (className != lastClassName || elapsedMs > 2000) {  // Only notify again if different or 2s passed
+			if (className != lastClassName || elapsedMs > 2000)
+			{ // Only notify again if different or 2s passed
 				lastClassName = className;
 				lastNotificationTime = now;
 				Publisher::instance(5557)->publish("notification", className);

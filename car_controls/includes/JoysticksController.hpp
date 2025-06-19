@@ -5,7 +5,7 @@
  * @date 2025-02-12
  * @details This class is responsible for controlling the joysticks of the car.
  * @note This class is a subclass of QObject.
- * 
+ *
  * @author Félix LE BIHAN (@Fle-bihh)
  * @author Tiago Pereira (@t-pereira06)
  * @author Ricardo Melo (@reomelo)
@@ -37,8 +37,8 @@ private:
 
 public:
 	JoysticksController(std::function<void(int)> steeringCallback,
-											std::function<void(int)> speedCallback,
-											QObject *parent = nullptr);
+						std::function<void(int)> speedCallback,
+						QObject *parent = nullptr);
 	~JoysticksController();
 	bool init();
 	void requestStop();

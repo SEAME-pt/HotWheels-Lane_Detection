@@ -6,36 +6,37 @@
 #include <cstddef>
 #include <vector>
 
-class MPCPlanner {
+class MPCPlanner
+{
 
 private:
-  std::vector<Eigen::Vector2d>
-  _prepareReference(const VehicleState &state,
-                    const std::vector<Eigen::Vector2d> &global_waypoints) const;
+	std::vector<Eigen::Vector2d>
+	_prepareReference(const VehicleState &state,
+					  const std::vector<Eigen::Vector2d> &global_waypoints) const;
 
-  MPCConfig _config;
-  MPCOptimizer _optimizer;
+	MPCConfig _config;
+	MPCOptimizer _optimizer;
 
-  // Adicionar método para mapear comandos para hardware
-  ControlCommand _mapCommandsToHardware(double throttle, double steer) const;
+	// Adicionar método para mapear comandos para hardware
+	ControlCommand _mapCommandsToHardware(double throttle, double steer) const;
 
 public:
-  MPCPlanner(void);
-  MPCPlanner(const MPCPlanner &orign);
-  MPCPlanner &operator=(const MPCPlanner &orign);
-  ~MPCPlanner(void);
+	MPCPlanner(void);
+	MPCPlanner(const MPCPlanner &orign);
+	MPCPlanner &operator=(const MPCPlanner &orign);
+	~MPCPlanner(void);
 
-  MPCPlanner(const MPCConfig &config, const MPCOptimizer &optimizer);
+	MPCPlanner(const MPCConfig &config, const MPCOptimizer &optimizer);
 
-  ControlCommand plan(const VehicleState &current_state,
-                      const std::vector<Point2D> &global_waypoints,
-                      const LaneInfo *lane_info = NULL);
+	ControlCommand plan(const VehicleState &current_state,
+						const std::vector<Point2D> &global_waypoints,
+						const LaneInfo *lane_info = NULL);
 
-  std::vector<Point2D>
-  convertImagePointsToWorld(const std::vector<int> &center_x,
-                            const std::vector<int> &center_y,
-                            const VehicleTransform &vehicle_transform,
-                            int img_width, int img_height) const;
+	std::vector<Point2D>
+	convertImagePointsToWorld(const std::vector<int> &center_x,
+							  const std::vector<int> &center_y,
+							  const VehicleTransform &vehicle_transform,
+							  int img_width, int img_height) const;
 };
 
 #endif /* !MPCPlanner */
