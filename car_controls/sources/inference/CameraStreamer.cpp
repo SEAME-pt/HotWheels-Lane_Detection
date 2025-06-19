@@ -7,7 +7,7 @@ CameraStreamer::CameraStreamer(double scale)
 
 	// segmentationInferencer = std::make_shared<ONNXInferencer>(
 
-		segmentationInferencer = std::make_shared<TensorRTInferencer>("/home/jetson/models/lane-detection/model.engine");
+	segmentationInferencer = std::make_shared<TensorRTInferencer>("/home/jetson/models/lane-detection/model.engine");
 	yoloInferencer = std::make_shared<YOLOv5TRT>("/home/jetson/models/object-detection/yolov5m_updated.engine", "/home/jetson/models/object-detection/labels.txt");
 
 	// Define GStreamer pipeline for CSI camera
