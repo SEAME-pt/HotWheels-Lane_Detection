@@ -17,17 +17,17 @@
  */
 class LabelManager
 {
-private:
-  std::vector<std::string> labels; ///< Lista de labels
+  private:
+    std::vector<std::string> labels; ///< Lista de labels
 
-public:
-	/**
-	 * @brief Construtor que carrega as labels de um arquivo.
-	 * @param labelPath Caminho para o arquivo de labels.
-	 */
-	LabelManager(const std::string &labelPath);
+  public:
+    /**
+     * @brief Construtor que carrega as labels de um arquivo.
+     * @param labelPath Caminho para o arquivo de labels.
+     */
+    LabelManager(const std::string &labelPath);
 
-	void loadLabels(const std::string &labelPath);
-	std::string getLabel(int classId) const;
-	size_t getNumClasses() const;
+    void loadLabels(const std::string &labelPath);
+    std::string getLabel(int classId) const;
+    size_t getNumClasses() const;
 };

@@ -30,14 +30,15 @@ using ::testing::Throw;
  *
  * @see PeripheralController::set_servo_pwm
  */
-TEST(PeripheralControllerTest, TestServoPWM) {
-  MockPeripheralController mockController;
+TEST(PeripheralControllerTest, TestServoPWM)
+{
+    MockPeripheralController mockController;
 
-  EXPECT_CALL(mockController, set_servo_pwm(0, 1024, 2048)).Times(1);
-  EXPECT_CALL(mockController, set_servo_pwm(1, 0, 4096)).Times(1);
+    EXPECT_CALL(mockController, set_servo_pwm(0, 1024, 2048)).Times(1);
+    EXPECT_CALL(mockController, set_servo_pwm(1, 0, 4096)).Times(1);
 
-  mockController.set_servo_pwm(0, 1024, 2048);
-  mockController.set_servo_pwm(1, 0, 4096);
+    mockController.set_servo_pwm(0, 1024, 2048);
+    mockController.set_servo_pwm(1, 0, 4096);
 }
 
 /*!
@@ -49,14 +50,15 @@ TEST(PeripheralControllerTest, TestServoPWM) {
  *
  * @see PeripheralController::set_motor_pwm
  */
-TEST(PeripheralControllerTest, TestMotorPWM) {
-  MockPeripheralController mockController;
+TEST(PeripheralControllerTest, TestMotorPWM)
+{
+    MockPeripheralController mockController;
 
-  EXPECT_CALL(mockController, set_motor_pwm(0, 1500)).Times(1);
-  EXPECT_CALL(mockController, set_motor_pwm(1, 3000)).Times(1);
+    EXPECT_CALL(mockController, set_motor_pwm(0, 1500)).Times(1);
+    EXPECT_CALL(mockController, set_motor_pwm(1, 3000)).Times(1);
 
-  mockController.set_motor_pwm(0, 1500);
-  mockController.set_motor_pwm(1, 3000);
+    mockController.set_motor_pwm(0, 1500);
+    mockController.set_motor_pwm(1, 3000);
 }
 
 /*!
@@ -67,12 +69,13 @@ TEST(PeripheralControllerTest, TestMotorPWM) {
  *
  * @see PeripheralController::init_servo
  */
-TEST(PeripheralControllerTest, TestInitServo) {
-  MockPeripheralController mockController;
+TEST(PeripheralControllerTest, TestInitServo)
+{
+    MockPeripheralController mockController;
 
-  EXPECT_CALL(mockController, init_servo()).Times(1);
+    EXPECT_CALL(mockController, init_servo()).Times(1);
 
-  mockController.init_servo();
+    mockController.init_servo();
 }
 
 /*!
@@ -83,12 +86,13 @@ TEST(PeripheralControllerTest, TestInitServo) {
  *
  * @see PeripheralController::init_motors
  */
-TEST(PeripheralControllerTest, TestInitMotors) {
-  MockPeripheralController mockController;
+TEST(PeripheralControllerTest, TestInitMotors)
+{
+    MockPeripheralController mockController;
 
-  EXPECT_CALL(mockController, init_motors()).Times(1);
+    EXPECT_CALL(mockController, init_motors()).Times(1);
 
-  mockController.init_motors();
+    mockController.init_motors();
 }
 
 /*!
@@ -101,15 +105,15 @@ TEST(PeripheralControllerTest, TestInitMotors) {
  *
  * @see PeripheralController::i2c_smbus_write_byte_data
  */
-TEST(PeripheralControllerTest, TestI2CWriteByteData) {
-  MockPeripheralController mockController;
+TEST(PeripheralControllerTest, TestI2CWriteByteData)
+{
+    MockPeripheralController mockController;
 
-  EXPECT_CALL(mockController, i2c_smbus_write_byte_data(1, 0x10, 0x20))
-      .WillOnce(Return(0));
+    EXPECT_CALL(mockController, i2c_smbus_write_byte_data(1, 0x10, 0x20)).WillOnce(Return(0));
 
-  int result = mockController.i2c_smbus_write_byte_data(1, 0x10, 0x20);
+    int result = mockController.i2c_smbus_write_byte_data(1, 0x10, 0x20);
 
-  EXPECT_EQ(result, 0);
+    EXPECT_EQ(result, 0);
 }
 
 /*!
@@ -122,15 +126,15 @@ TEST(PeripheralControllerTest, TestI2CWriteByteData) {
  *
  * @see PeripheralController::i2c_smbus_read_byte_data
  */
-TEST(PeripheralControllerTest, TestI2CReadByteData) {
-  MockPeripheralController mockController;
+TEST(PeripheralControllerTest, TestI2CReadByteData)
+{
+    MockPeripheralController mockController;
 
-  EXPECT_CALL(mockController, i2c_smbus_read_byte_data(1, 0x10))
-      .WillOnce(Return(0x30));
+    EXPECT_CALL(mockController, i2c_smbus_read_byte_data(1, 0x10)).WillOnce(Return(0x30));
 
-  int result = mockController.i2c_smbus_read_byte_data(1, 0x10);
+    int result = mockController.i2c_smbus_read_byte_data(1, 0x10);
 
-  EXPECT_EQ(result, 0x30);
+    EXPECT_EQ(result, 0x30);
 }
 
 /*!
@@ -142,14 +146,14 @@ TEST(PeripheralControllerTest, TestI2CReadByteData) {
  *
  * @see PeripheralController::write_byte_data
  */
-TEST(PeripheralControllerTest, TestWriteByteDataException) {
-  MockPeripheralController mockController;
+TEST(PeripheralControllerTest, TestWriteByteDataException)
+{
+    MockPeripheralController mockController;
 
-  EXPECT_CALL(mockController, write_byte_data(_, _, _))
-      .WillOnce(Throw(std::runtime_error("I2C write failed")));
+    EXPECT_CALL(mockController, write_byte_data(_, _, _))
+        .WillOnce(Throw(std::runtime_error("I2C write failed")));
 
-  EXPECT_THROW(mockController.write_byte_data(1, 0x10, 0x20),
-               std::runtime_error);
+    EXPECT_THROW(mockController.write_byte_data(1, 0x10, 0x20), std::runtime_error);
 }
 
 /*!
@@ -161,11 +165,12 @@ TEST(PeripheralControllerTest, TestWriteByteDataException) {
  *
  * @see PeripheralController::read_byte_data
  */
-TEST(PeripheralControllerTest, TestReadByteDataException) {
-  MockPeripheralController mockController;
+TEST(PeripheralControllerTest, TestReadByteDataException)
+{
+    MockPeripheralController mockController;
 
-  EXPECT_CALL(mockController, read_byte_data(_, _))
-      .WillOnce(Throw(std::runtime_error("I2C read failed")));
+    EXPECT_CALL(mockController, read_byte_data(_, _))
+        .WillOnce(Throw(std::runtime_error("I2C read failed")));
 
-  EXPECT_THROW(mockController.read_byte_data(1, 0x10), std::runtime_error);
+    EXPECT_THROW(mockController.read_byte_data(1, 0x10), std::runtime_error);
 }
