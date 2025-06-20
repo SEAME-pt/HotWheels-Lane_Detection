@@ -4,13 +4,13 @@ BasedOnStyle:    LLVM
 UseTab:          ForIndentation
 TabWidth:        4
 IndentWidth:     4
-AccessModifierOffset: -4
-IndentAccessModifiers: false
+AccessModifierOffset: 0
+IndentAccessModifiers: true
 AlignAfterOpenBracket: Align
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: Empty
-BreakBeforeBraces: Allman
+BreakBeforeBraces: Attach
 ColumnLimit:     100
 IndentCaseLabels: false
 SpaceBeforeParens: Never
