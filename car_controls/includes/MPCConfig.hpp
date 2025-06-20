@@ -9,9 +9,9 @@ struct MPCConfig {
 		static constexpr double wheelbase = 0.15; // Entre-eixo real: 15cm
 
 		// Pesos padrão ajustados para escala pequena (para retas)
-		static constexpr double w_cte_straight = 12.0;   // Maior peso para tracking de trajetória
-		static constexpr double w_etheta_straight = 6.0; // Mais controle de orientação
-		static constexpr double w_vel_straight = 0.8;    // Menor peso na velocidade
+		static constexpr double w_cte_straight = 12.0;     // Maior peso para tracking de trajetória
+		static constexpr double w_etheta_straight = 6.0;   // Mais controle de orientação
+		static constexpr double w_vel_straight = 0.8;      // Menor peso na velocidade
 		static constexpr double w_throttle_straight = 0.2; // Suavidade de throttle
 		static constexpr double w_steer_straight = 0.15;   // Suavidade de steering
 		static constexpr double target_speed_straight =
