@@ -1,5 +1,6 @@
 !**/.deepsource.toml
 !**/.gitignore
+!**/.clang-format
 **.o
 **/*.txt
 **/.*
