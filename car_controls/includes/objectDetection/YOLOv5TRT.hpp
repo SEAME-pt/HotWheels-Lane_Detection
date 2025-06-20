@@ -78,8 +78,8 @@ private:
 	std::vector<void *> bindings;
 
   LabelManager labelManager;
-  float conf_thresh = 0.25f;
-  float nms_thresh = 0.45f;
+  float conf_thresh = 0.25F;
+  float nms_thresh = 0.45F;
   int num_classes;
 
 	void loadEngine(const std::string &enginePath);

@@ -203,8 +203,8 @@ std::vector<Detection> YOLOv5TRT::postprocess(const std::vector<float> &output, 
 			float xx2 = std::min(dets[i].x + dets[i].w / 2, dets[j].x + dets[j].w / 2);
 			float yy2 = std::min(dets[i].y + dets[i].h / 2, dets[j].y + dets[j].h / 2);
 
-      float w = std::max(0.0f, xx2 - xx1);
-      float h = std::max(0.0f, yy2 - yy1);
+      float w = std::max(0.0F, xx2 - xx1);
+      float h = std::max(0.0F, yy2 - yy1);
       float inter = w * h;
       float area1 = dets[i].w * dets[i].h;
       float area2 = dets[j].w * dets[j].h;
@@ -231,10 +231,10 @@ void YOLOv5TRT::process_image(const cv::Mat &frame)
 	{
 		// Converter coordenadas normalizadas para absolutas
 		// Corrigir: tratar det.x, det.y, det.w, det.h como coordenadas absolutas (input 640x640)
-		float x_center = (det.x / 640.0f) * frame.cols;
-		float y_center = (det.y / 640.0f) * frame.rows;
-		float width = (det.w / 640.0f) * frame.cols;
-		float height = (det.h / 640.0f) * frame.rows;
+		float x_center = (det.x / 640.0F) * frame.cols;
+		float y_center = (det.y / 640.0F) * frame.rows;
+		float width = (det.w / 640.0F) * frame.cols;
+		float height = (det.h / 640.0F) * frame.rows;
 
     // Calcular coordenadas do retângulo
     int x1 = static_cast<int>(x_center - width / 2);

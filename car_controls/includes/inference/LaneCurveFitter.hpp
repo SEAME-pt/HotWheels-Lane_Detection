@@ -20,7 +20,7 @@ public:
 		std::vector<cv::Point2f> c2;
 	};
 
-  LaneCurveFitter(float dbscanEps = 5.0f, int dbscanMinSamples = 20,
+  LaneCurveFitter(float dbscanEps = 5.0F, int dbscanMinSamples = 20,
                   int numWindows = 20, int laneWidthPx = 300);
 
 	std::vector<LaneCurve> fitLanes(const cv::Mat &binaryMask);
@@ -37,5 +37,5 @@ private:
 	std::pair<std::vector<float>, std::vector<float>> slidingWindowCentroids(const std::vector<cv::Point> &cluster, cv::Size imgSize, bool smooth);
 	std::vector<float> fitCurve(const std::vector<float> &y, const std::vector<float> &x, const std::vector<float> &yEval);
 	bool hasSignFlip(const std::vector<float> &xValues);
-	bool isStraightLine(const std::vector<float> &y, const std::vector<float> &x, float threshold = 0.98f);
+	bool isStraightLine(const std::vector<float> &y, const std::vector<float> &x, float threshold = 0.98F);
 };

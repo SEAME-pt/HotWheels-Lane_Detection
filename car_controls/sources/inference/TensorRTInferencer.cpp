@@ -47,8 +47,8 @@ TensorRTInferencer::TensorRTInferencer(const std::string &enginePath) : runtime(
 		throw std::runtime_error("Failed to create execution context");
 	}
 
-	lanePostProcessor = new LanePostProcessor(350, 260, 10.0f, 10.0f); // Initialize lane post-processor with parameters
-	laneCurveFitter = new LaneCurveFitter(5.0f, 20, 20, 300);		   // Initialize lane curve fitter with parameters
+	lanePostProcessor = new LanePostProcessor(350, 260, 10.0F, 10.0F); // Initialize lane post-processor with parameters
+	laneCurveFitter = new LaneCurveFitter(5.0F, 20, 20, 300);		   // Initialize lane curve fitter with parameters
 
 	for (int i = 0; i < engine->getNbBindings(); i++)
 	{ // Loop through all bindings

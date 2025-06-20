@@ -55,7 +55,7 @@ std::vector<LanePostProcessor::LaneInfo> LanePostProcessor::extractLaneInfo(cons
       cv::Vec4f line;
       cv::fitLine(cnt, line, cv::DIST_L2, 0, 0.01, 0.01);
       float vx = line[0], vy = line[1], x0 = line[2], y0 = line[3];
-      float angle = std::fmod(std::atan2(vy, vx) * 180.0 / CV_PI, 180.0f);
+      float angle = std::fmod(std::atan2(vy, vx) * 180.0 / CV_PI, 180.0F);
 
 			cv::Moments M = cv::moments(cnt);
 			if (M.m00 == 0)
@@ -99,7 +99,7 @@ std::vector<LanePostProcessor::LaneInfo> LanePostProcessor::extractLaneInfo(cons
 bool LanePostProcessor::shouldMerge(const LaneInfo &a, const LaneInfo &b) const
 {
 	float angleDiff = std::fabs(a.angle - b.angle);
-	angleDiff = std::min(angleDiff, 180.0f - angleDiff);
+	angleDiff = std::min(angleDiff, 180.0F - angleDiff);
 
 	if (angleDiff < angleThreshold)
 	{

@@ -64,7 +64,7 @@ TEST(TensorRTInferencerTest, RunInferenceThrowsOnWrongSize) {
   TensorRTInferencer inferencer(
       "/home/jetson/models/lane-detection/model.engine");
 
-  cv::Mat smallImg(100, 100, CV_32FC1, cv::Scalar(1.0f));
+  cv::Mat smallImg(100, 100, CV_32FC1, cv::Scalar(1.0F));
   cv::cuda::GpuMat gpuInput;
   gpuInput.upload(smallImg);
 
@@ -85,7 +85,7 @@ TEST(TensorRTInferencerTest, RunInferenceSucceedsOnValidInput) {
   TensorRTInferencer inferencer(
       "/home/jetson/models/lane-detection/model.engine");
 
-  cv::Mat validImg(208, 208, CV_32FC1, cv::Scalar(1.0f));
+  cv::Mat validImg(208, 208, CV_32FC1, cv::Scalar(1.0F));
   cv::cuda::GpuMat gpuInput;
   gpuInput.upload(validImg);
 
@@ -114,7 +114,7 @@ TEST(TensorRTInferencerTest, OutputHasNonZeroValuesAfterInference) {
   TensorRTInferencer inferencer(
       "/home/jetson/models/lane-detection/model.engine");
 
-  cv::Mat validImg(208, 208, CV_32FC1, cv::Scalar(1.0f));
+  cv::Mat validImg(208, 208, CV_32FC1, cv::Scalar(1.0F));
   cv::cuda::GpuMat gpuInput;
   gpuInput.upload(validImg);
 
@@ -246,7 +246,7 @@ TEST(TensorRTInferencerTest, PreprocessImageWithValidSizeAndInvalidType) {
   TensorRTInferencer inferencer(
       "/home/jetson/models/lane-detection/model.engine");
 
-  cv::Mat validImg(208, 208, CV_32FC1, cv::Scalar(0.5f));
+  cv::Mat validImg(208, 208, CV_32FC1, cv::Scalar(0.5F));
   cv::cuda::GpuMat gpuValidImg;
   gpuValidImg.upload(validImg);
 

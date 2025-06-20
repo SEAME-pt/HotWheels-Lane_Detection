@@ -26,12 +26,12 @@ TEST(YOLOv5TRTTest, PostprocessDetections) {
   YOLOv5TRT_Testable yolo;
 
   int num_classes = 3;
-  float conf_thresh = 0.25f;
-  float nms_thresh = 0.5f;
+  float conf_thresh = 0.25F;
+  float nms_thresh = 0.5F;
 
-  std::vector<float> output = {100.0f, 200.0f, 50.0f,  80.0f,  0.9f,  0.6f,
-                               0.3f,   0.1f,   150.0f, 210.0f, 48.0f, 75.0f,
-                               0.85f,  0.5f,   0.4f,   0.2f};
+  std::vector<float> output = {100.0F, 200.0F, 50.0F,  80.0F,  0.9F,  0.6F,
+                               0.3F,   0.1F,   150.0F, 210.0F, 48.0F, 75.0F,
+                               0.85F,  0.5F,   0.4F,   0.2F};
 
   auto detections =
       yolo.postprocess(output, num_classes, conf_thresh, nms_thresh);
@@ -42,8 +42,8 @@ TEST(YOLOv5TRTTest, PostprocessNoDetections) {
   YOLOv5TRT_Testable yolo;
 
   int num_classes = 3;
-  float conf_thresh = 0.25f;
-  float nms_thresh = 0.5f;
+  float conf_thresh = 0.25F;
+  float nms_thresh = 0.5F;
 
   std::vector<float> output = {}; // No detections
 
@@ -56,11 +56,11 @@ TEST(YOLOv5TRTTest, PostprocessSingleDetection) {
   YOLOv5TRT_Testable yolo;
 
   int num_classes = 3;
-  float conf_thresh = 0.25f;
-  float nms_thresh = 0.5f;
+  float conf_thresh = 0.25F;
+  float nms_thresh = 0.5F;
 
-  std::vector<float> output = {100.0f, 200.0f, 50.0f, 80.0f,
-                               0.9f,   0.6f,   0.3f,  0.1f};
+  std::vector<float> output = {100.0F, 200.0F, 50.0F, 80.0F,
+                               0.9F,   0.6F,   0.3F,  0.1F};
 
   auto detections =
       yolo.postprocess(output, num_classes, conf_thresh, nms_thresh);
@@ -72,11 +72,11 @@ TEST(YOLOv5TRTTest, PostprocessWithLowConfidence) {
   YOLOv5TRT_Testable yolo;
 
   int num_classes = 3;
-  float conf_thresh = 0.25f;
-  float nms_thresh = 0.5f;
+  float conf_thresh = 0.25F;
+  float nms_thresh = 0.5F;
 
   std::vector<float> output = {
-      100.0f, 200.0f, 50.0f, 80.0f, 0.2f, 0.6f, 0.3f, 0.1f // Low confidence
+      100.0F, 200.0F, 50.0F, 80.0F, 0.2F, 0.6F, 0.3F, 0.1F // Low confidence
   };
 
   auto detections =

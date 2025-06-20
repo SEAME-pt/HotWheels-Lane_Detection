@@ -26,7 +26,7 @@ std::vector<cv::Point> LaneCurveFitter::extractLanePoints(const cv::Mat &binaryM
 float interpolateXatY(const std::vector<cv::Point2f> &points, float y_query)
 {
 	if (points.empty())
-		return 0.0f;
+		return 0.0F;
 
 	for (size_t i = 1; i < points.size(); ++i)
 	{
@@ -35,7 +35,7 @@ float interpolateXatY(const std::vector<cv::Point2f> &points, float y_query)
 
 		if ((y1 <= y_query && y_query <= y2) || (y2 <= y_query && y_query <= y1))
 		{
-			float t = (y_query - y1) / (y2 - y1 + 1e-6f);
+			float t = (y_query - y1) / (y2 - y1 + 1e-6F);
 			float x1 = points[i - 1].x;
 			float x2 = points[i].x;
 			return x1 + t * (x2 - x1);
@@ -131,8 +131,8 @@ std::pair<std::vector<float>, std::vector<float>> LaneCurveFitter::slidingWindow
 
 		if (!xAcc.empty())
 		{
-			cx.push_back(std::accumulate(xAcc.begin(), xAcc.end(), 0.0f) / xAcc.size());
-			cy.push_back(std::accumulate(yAcc.begin(), yAcc.end(), 0.0f) / yAcc.size());
+			cx.push_back(std::accumulate(xAcc.begin(), xAcc.end(), 0.0F) / xAcc.size());
+			cy.push_back(std::accumulate(yAcc.begin(), yAcc.end(), 0.0F) / yAcc.size());
 		}
 	}
 
@@ -140,7 +140,7 @@ std::pair<std::vector<float>, std::vector<float>> LaneCurveFitter::slidingWindow
 	{
 		for (size_t i = 1; i + 1 < cx.size(); ++i)
 		{
-			cx[i] = (cx[i - 1] + cx[i] + cx[i + 1]) / 3.0f;
+			cx[i] = (cx[i - 1] + cx[i] + cx[i + 1]) / 3.0F;
 		}
 	}
 
@@ -152,10 +152,10 @@ bool LaneCurveFitter::isStraightLine(const std::vector<float> &y, const std::vec
 	if (x.size() < 4)
 		return false;
 
-  float mean_x = std::accumulate(x.begin(), x.end(), 0.0f) / x.size();
-  float mean_y = std::accumulate(y.begin(), y.end(), 0.0f) / y.size();
+  float mean_x = std::accumulate(x.begin(), x.end(), 0.0F) / x.size();
+  float mean_y = std::accumulate(y.begin(), y.end(), 0.0F) / y.size();
 
-	float num = 0.0f, den_x = 0.0f, den_y = 0.0f;
+	float num = 0.0F, den_x = 0.0F, den_y = 0.0F;
 	for (size_t i = 0; i < x.size(); ++i)
 	{
 		num += (x[i] - mean_x) * (y[i] - mean_y);
@@ -163,7 +163,7 @@ bool LaneCurveFitter::isStraightLine(const std::vector<float> &y, const std::vec
 		den_y += (y[i] - mean_y) * (y[i] - mean_y);
 	}
 
-  float corr = num / std::sqrt(den_x * den_y + 1e-6f);
+  float corr = num / std::sqrt(den_x * den_y + 1e-6F);
   return std::abs(corr) > threshold;
 }
 
@@ -184,7 +184,7 @@ std::vector<float> LaneCurveFitter::fitCurve(const std::vector<float> &y, const 
 	if (y.size() < 3 || x.size() < 3)
 	{
 		// Fallback: return a straight horizontal line
-		std::vector<float> fallback(yEval.size(), x.empty() ? 0.0f : x[0]);
+		std::vector<float> fallback(yEval.size(), x.empty() ? 0.0F : x[0]);
 		return fallback;
 	}
 
@@ -195,7 +195,7 @@ std::vector<float> LaneCurveFitter::fitCurve(const std::vector<float> &y, const 
 	{
 		A.at<float>(i, 0) = y[i] * y[i];
 		A.at<float>(i, 1) = y[i];
-		A.at<float>(i, 2) = 1.0f;
+		A.at<float>(i, 2) = 1.0F;
 	}
 
 	cv::Mat coeffs;
@@ -266,7 +266,7 @@ std::vector<LaneCurveFitter::LaneCurve> LaneCurveFitter::fitLanes(const cv::Mat 
     float y_min = *std::min_element(y_sorted.begin(), y_sorted.end());
     float y_max = *std::max_element(y_sorted.begin(), y_sorted.end());
     std::vector<float> y_plot(300);
-    float step = (y_max + 10 - (y_min - 30)) / 300.0f;
+    float step = (y_max + 10 - (y_min - 30)) / 300.0F;
     for (int i = 0; i < 300; ++i)
       y_plot[i] = y_max + 10 - i * step;
 
@@ -286,7 +286,7 @@ std::vector<LaneCurveFitter::LaneCurve> LaneCurveFitter::fitLanes(const cv::Mat 
 
 std::optional<LaneCurveFitter::CenterlineResult> LaneCurveFitter::computeVirtualCenterline(const std::vector<LaneCurve> &lanes, int imgWidth, int imgHeight)
 {
-	const float centerX = imgWidth / 2.0f;
+	const float centerX = imgWidth / 2.0F;
 	LaneCurve left, right;
 	std::vector<std::pair<float, LaneCurve>> candidates;
 
@@ -299,7 +299,7 @@ std::optional<LaneCurveFitter::CenterlineResult> LaneCurveFitter::computeVirtual
 		if (bottomXs.empty())
 			continue;
 
-    float avgX = std::accumulate(bottomXs.begin(), bottomXs.end(), 0.0f) /
+    float avgX = std::accumulate(bottomXs.begin(), bottomXs.end(), 0.0F) /
                  bottomXs.size();
     candidates.emplace_back(avgX, lane);
   }
@@ -321,7 +321,7 @@ std::optional<LaneCurveFitter::CenterlineResult> LaneCurveFitter::computeVirtual
 		std::vector<float> y_common(300);
 		float y_start = imgHeight - 1;
 		float y_end = std::max(left.curve.back().y, right.curve.back().y);
-		float dy = (y_start - y_end) / 299.0f;
+		float dy = (y_start - y_end) / 299.0F;
 		for (int i = 0; i < 300; ++i)
 			y_common[i] = y_start - i * dy;
 
@@ -334,8 +334,8 @@ std::optional<LaneCurveFitter::CenterlineResult> LaneCurveFitter::computeVirtual
 
 		for (int i = 0; i < 300; ++i)
 		{
-			float mid = (xl[i] + xr[i]) / 2.0f;
-			float w = static_cast<float>(i) / 299.0f;
+			float mid = (xl[i] + xr[i]) / 2.0F;
+			float w = static_cast<float>(i) / 299.0F;
 			float blendX = w * mid + (1 - w) * centerX;
 
       c1.emplace_back(mid, y_common[i]);
