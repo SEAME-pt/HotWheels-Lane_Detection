@@ -15,8 +15,8 @@ MPCPlanner &MPCPlanner::operator=(const MPCPlanner &origin) {
 
 MPCPlanner::~MPCPlanner(void) {}
 
-MPCPlanner::MPCPlanner(const MPCConfig &config, const MPCOptimizer &optimizer)
-    : _config(config), _optimizer(optimizer) {}
+MPCPlanner::MPCPlanner(const MPCOptimizer &optimizer)
+    : _optimizer(optimizer) {}
 
 ControlCommand MPCPlanner::plan(const VehicleState &current_state,
                                 const std::vector<Point2D> &global_waypoints,
@@ -118,14 +118,14 @@ MPCPlanner::_prepareReference(const VehicleState &state,
 		}
 
 		// Limita ao horizonte
-		if(local_points.size() >= static_cast<size_t>(_config.horizon))
+		if(local_points.size() >= static_cast<size_t>(MPCConfig::horizon))
 			break;
 	}
 
 	// Se não temos pontos suficientes, gerar referência reta
 	if(local_points.size() < 3) {
 		local_points.clear();
-		for(int i = 1; i <= _config.horizon; ++i) {
+		for(int i = 1; i <= MPCConfig::horizon; ++i) {
 			local_points.emplace_back(i * 2.0, 0.0); // Pontos a cada 2m à frente
 		}
 	}

@@ -1,13 +1,8 @@
 #include "MPCOptimizer.hpp"
 #include "Polyfitter.hpp"
 
-MPCOptimizer::MPCOptimizer(void) {
-	MPCConfig mpc_config;
-	_mpc = mpc_config;
-}
-
-MPCOptimizer::MPCOptimizer(const MPCConfig &config)
-    : _mpc(config), _current_state(), _current_reference(), _current_lane_info(nullptr) {}
+MPCOptimizer::MPCOptimizer()
+    : _current_state(), _current_reference(), _current_lane_info(nullptr) {}
 
 MPCOptimizer::MPCOptimizer(const MPCOptimizer &origin) {
 	*this = origin;
@@ -158,21 +153,21 @@ double MPCOptimizer::_costFunction(const std::vector<double> &u, const std::vect
 	// Seleção de pesos baseada na curvatura
 	double w_cte, w_etheta, w_velocity, w_throttle, w_steer, target_speed;
 	if(is_curve) {
-		w_cte = _mpc.w_cte_curve;
-		w_etheta = _mpc.w_etheta_curve;
-		w_velocity = _mpc.w_vel_curve;
-		w_throttle = _mpc.w_throttle_curve;
-		w_steer = _mpc.w_steer_curve;
-		target_speed = std::max(_mpc.target_speed_curve_base,
-		                        _mpc.target_speed_straight -
-		                            std::abs(curvature) * _mpc.target_speed_curve_factor);
+		w_cte = MPCConfig::w_cte_curve;
+		w_etheta = MPCConfig::w_etheta_curve;
+		w_velocity = MPCConfig::w_vel_curve;
+		w_throttle = MPCConfig::w_throttle_curve;
+		w_steer = MPCConfig::w_steer_curve;
+		target_speed = std::max(MPCConfig::target_speed_curve_base,
+		                        MPCConfig::target_speed_straight -
+		                            std::abs(curvature) * MPCConfig::target_speed_curve_factor);
 	} else {
-		w_cte = _mpc.w_cte_straight;
-		w_etheta = _mpc.w_etheta_straight;
-		w_velocity = _mpc.w_vel_straight;
-		w_throttle = _mpc.w_throttle_straight;
-		w_steer = _mpc.w_steer_straight;
-		target_speed = _mpc.target_speed_straight;
+		w_cte = MPCConfig::w_cte_straight;
+		w_etheta = MPCConfig::w_etheta_straight;
+		w_velocity = MPCConfig::w_vel_straight;
+		w_throttle = MPCConfig::w_throttle_straight;
+		w_steer = MPCConfig::w_steer_straight;
+		target_speed = MPCConfig::target_speed_straight;
 	}
 
 	for(int t = 0; t < MPCConfig::horizon; ++t) {

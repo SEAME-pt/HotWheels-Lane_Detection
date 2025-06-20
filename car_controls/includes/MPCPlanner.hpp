@@ -13,7 +13,6 @@ class MPCPlanner {
 		_prepareReference(const VehicleState &state,
 		                  const std::vector<Eigen::Vector2d> &global_waypoints) const;
 
-		MPCConfig _config;
 		MPCOptimizer _optimizer;
 
 		// Adicionar método para mapear comandos para hardware
@@ -25,7 +24,7 @@ class MPCPlanner {
 		MPCPlanner &operator=(const MPCPlanner &orign);
 		~MPCPlanner(void);
 
-		MPCPlanner(const MPCConfig &config, const MPCOptimizer &optimizer);
+		MPCPlanner(const MPCOptimizer &optimizer);
 
 		ControlCommand plan(const VehicleState &current_state,
 		                    const std::vector<Point2D> &global_waypoints,

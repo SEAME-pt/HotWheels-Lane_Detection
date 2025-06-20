@@ -1,7 +1,10 @@
 # Makefile for autonomous_jetson
 
 CXX = c++
-CXXFLAGS = -std=c++17 -Wall -Wextra -O2 -g -fopenmp
+CXXFLAGS = -std=c++17 -Wall -Wextra -g -fopenmp
+CXXFLAGS += -fprofile-arcs -ftest-coverage -O0 -g
+LDFLAGS  += -fprofile-arcs -ftest-coverage
+
 
 # CUDA paths for Jetson
 CUDA_PATH = /usr/local/cuda
@@ -103,7 +106,7 @@ main.moc: main.cpp
 
 # Main target with explicit MOC dependencies
 $(TARGET_BASIC): main.o $(INTEGRATED_OBJ) main.moc $(MOC_FILES)
-	$(CXX) $(CXXFLAGS) $(QT5_CFLAGS) main.o $(INTEGRATED_OBJ) -o $@ $(BASIC_LIBS) $(OPENCV_LIBS) $(QT5_LIBS) $(SDL_LIBS)
+	$(CXX) $(CXXFLAGS) $(QT5_CFLAGS) main.o $(INTEGRATED_OBJ) -o $@ $(LDFLAGS) $(BASIC_LIBS) $(OPENCV_LIBS) $(QT5_LIBS) $(SDL_LIBS)
 
 # Compilation rules
 main.o: main.cpp main.moc
@@ -201,5 +204,9 @@ show-flags:
 	@echo ""
 	@echo "=== Combined in compilation ==="
 	@echo "$(QT5_CFLAGS) $(INCLUDE_PATHS)"
+
+test:
+	@echo "Running tests..."
+	@echo "No tests defined in this Makefile. Please add your test commands here."
 
 .PHONY: all clean install-deps check-cuda check-libs debug-compile check-qt show-flags
