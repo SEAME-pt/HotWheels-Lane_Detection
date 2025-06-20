@@ -26,27 +26,26 @@
  * @details This class is responsible for controlling the joysticks of the car.
  */
 class JoysticksController : public QObject {
-  Q_OBJECT
+		Q_OBJECT
 
-private:
-  SDL_Joystick *m_joystick;
-  std::function<void(int)> m_updateSteering;
-  std::function<void(int)> m_updateSpeed;
-  bool m_running;
+	private:
+		SDL_Joystick *m_joystick;
+		std::function<void(int)> m_updateSteering;
+		std::function<void(int)> m_updateSpeed;
+		bool m_running;
 
-public:
-	JoysticksController(std::function<void(int)> steeringCallback,
-						std::function<void(int)> speedCallback,
-						QObject *parent = nullptr);
-	~JoysticksController();
-	bool init();
-	void requestStop();
+	public:
+		JoysticksController(std::function<void(int)> steeringCallback,
+		                    std::function<void(int)> speedCallback, QObject *parent = nullptr);
+		~JoysticksController();
+		bool init();
+		void requestStop();
 
-public slots:
-  void processInput();
+	public slots:
+		void processInput();
 
-signals:
-  void finished();
+	signals:
+		void finished();
 };
 
 #endif // JOYSTICKS_CONTROLLER_HPP

@@ -1,13 +1,19 @@
 ---
 Language:        Cpp
 BasedOnStyle:    LLVM
-IndentWidth:     4
+UseTab:          ForIndentation
 TabWidth:        4
-UseTab:          Never
+IndentWidth:     4
+AccessModifierOffset: 0
+IndentAccessModifiers: true
+AlignAfterOpenBracket: Align
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Empty
+BreakBeforeBraces: Attach
 ColumnLimit:     100
-AlignTrailingComments: true
-AllowShortFunctionsOnASingleLine: false
-SortIncludes:    false
-NamespaceIndentation: All
-BreakBeforeBraces: Allman
+IndentCaseLabels: false
+SpaceBeforeParens: Never
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
 ...

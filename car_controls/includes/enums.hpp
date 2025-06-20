@@ -19,38 +19,15 @@
 #include <QtCore/qmetatype.h>
 
 /*! @brief Enum class for the component status. */
-enum class ComponentStatus
-{
-	Idle,
-	Starting,
-	Operational,
-	Down
-};
+enum class ComponentStatus { Idle, Starting, Operational, Down };
 /*! @brief Enum class for the driving mode. */
-enum class DrivingMode
-{
-	Manual,
-	Automatic
-};
+enum class DrivingMode { Manual, Automatic };
 /*! @brief Enum class for the cluster theme. */
-enum class ClusterTheme
-{
-	Dark,
-	Light
-};
+enum class ClusterTheme { Dark, Light };
 /*! @brief Enum class for the cluster metrics. */
-enum class ClusterMetrics
-{
-	Miles,
-	Kilometers
-};
+enum class ClusterMetrics { Miles, Kilometers };
 /*! @brief Enum class for the car direction. */
-enum class CarDirection
-{
-	Drive,
-	Reverse,
-	Stop
-};
+enum class CarDirection { Drive, Reverse, Stop };
 
 Q_DECLARE_METATYPE(ComponentStatus)
 Q_DECLARE_METATYPE(DrivingMode)
