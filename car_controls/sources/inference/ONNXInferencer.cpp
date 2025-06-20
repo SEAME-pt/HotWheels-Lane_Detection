@@ -7,9 +7,9 @@
 #include <mlpack/core.hpp>
 #include <mlpack/methods/dbscan/dbscan.hpp>
 #include <numeric>
+#include <opencv2/dnn.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
-#include <opencv2/dnn.hpp>
 
 namespace fs = std::experimental::filesystem;
 
@@ -18,29 +18,23 @@ Polyfitter::Polyfitter() {}
 Polyfitter::~Polyfitter() {}
 
 std::vector<std::pair<std::string, cv::Mat>>
-Polyfitter::loadImagesFromFolder(const std::string &folderPath)
-{
+Polyfitter::loadImagesFromFolder(const std::string &folderPath) {
 	std::vector<std::pair<std::string, cv::Mat>> images;
 	std::vector<std::string> extensions = {".png", ".jpg", ".jpeg"};
 
-	if (!fs::exists(folderPath))
-	{
+	if(!fs::exists(folderPath)) {
 		std::cerr << "Folder does not exist: " << folderPath << std::endl;
 		return images;
 	}
 
 	std::vector<std::string> filenames;
-	for (const auto &entry : fs::directory_iterator(folderPath))
-	{
-		if (fs::is_regular_file(entry.path()))
-		{
+	for(const auto &entry : fs::directory_iterator(folderPath)) {
+		if(fs::is_regular_file(entry.path())) {
 			std::string filename = entry.path().filename().string();
 			std::string ext = entry.path().extension().string();
 			std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
-			if (std::find(extensions.begin(), extensions.end(), ext) !=
-				extensions.end())
-			{
+			if(std::find(extensions.begin(), extensions.end(), ext) != extensions.end()) {
 				filenames.push_back(filename);
 			}
 		}
@@ -48,12 +42,10 @@ Polyfitter::loadImagesFromFolder(const std::string &folderPath)
 
 	std::sort(filenames.begin(), filenames.end());
 
-	for (const auto &filename : filenames)
-	{
+	for(const auto &filename : filenames) {
 		std::string filepath = folderPath + "/" + filename;
 		cv::Mat img = cv::imread(filepath, cv::IMREAD_GRAYSCALE);
-		if (!img.empty())
-		{
+		if(!img.empty()) {
 			images.push_back({filename, img});
 		}
 	}
@@ -61,15 +53,11 @@ Polyfitter::loadImagesFromFolder(const std::string &folderPath)
 	return images;
 }
 
-std::vector<Point2D> Polyfitter::extractLanePoints(const cv::Mat &img)
-{
+std::vector<Point2D> Polyfitter::extractLanePoints(const cv::Mat &img) {
 	std::vector<Point2D> points;
-	for (int y = 0; y < img.rows; y++)
-	{
-		for (int x = 0; x < img.cols; x++)
-		{
-			if (img.at<uchar>(y, x) > 0)
-			{
+	for(int y = 0; y < img.rows; y++) {
+		for(int x = 0; x < img.cols; x++) {
+			if(img.at<uchar>(y, x) > 0) {
 				points.push_back(Point2D(x, y));
 			}
 		}
@@ -78,16 +66,14 @@ std::vector<Point2D> Polyfitter::extractLanePoints(const cv::Mat &img)
 }
 
 std::pair<std::vector<int>, std::vector<int>>
-Polyfitter::clusterLanePoints(const std::vector<Point2D> &pts)
-{
+Polyfitter::clusterLanePoints(const std::vector<Point2D> &pts) {
 	const size_t N = pts.size();
-	if (N == 0)
+	if(N == 0)
 		return {{}, {}};
 
 	// 2 x N matrix: each column is a point [x; y]
 	arma::mat dataset(2, N);
-	for (size_t i = 0; i < N; ++i)
-	{
+	for(size_t i = 0; i < N; ++i) {
 		dataset(0, i) = pts[i].x;
 		dataset(1, i) = pts[i].y;
 	}
@@ -100,14 +86,10 @@ Polyfitter::clusterLanePoints(const std::vector<Point2D> &pts)
 	// Convert to int and gather unique cluster IDs != SIZE_MAX
 	std::vector<int> intLabels(N);
 	std::set<int> uniqueIds;
-	for (size_t i = 0; i < N; ++i)
-	{
-		if (labels[i] == SIZE_MAX)
-		{
+	for(size_t i = 0; i < N; ++i) {
+		if(labels[i] == SIZE_MAX) {
 			intLabels[i] = -1;
-		}
-		else
-		{
+		} else {
 			intLabels[i] = (int)labels[i];
 			uniqueIds.insert(intLabels[i]);
 		}
@@ -118,47 +100,37 @@ Polyfitter::clusterLanePoints(const std::vector<Point2D> &pts)
 }
 
 std::pair<std::vector<double>, std::vector<double>>
-Polyfitter::slidingWindowCentroids(const std::vector<double> &x,
-								   const std::vector<double> &y,
-								   const cv::Size &imgShape, bool smooth)
-{
+Polyfitter::slidingWindowCentroids(const std::vector<double> &x, const std::vector<double> &y,
+                                   const cv::Size &imgShape, bool smooth) {
 
 	int h = imgShape.height / NUM_WINDOWS;
 	std::vector<double> cx, cy;
 
-	for (int i = 0; i < NUM_WINDOWS; i++)
-	{
+	for(int i = 0; i < NUM_WINDOWS; i++) {
 		int yLow = imgShape.height - (i + 1) * h;
 		int yHigh = imgShape.height - i * h;
 
 		std::vector<double> windowX;
 		std::vector<double> windowY;
 
-		for (size_t j = 0; j < y.size(); j++)
-		{
-			if (y[j] >= yLow && y[j] < yHigh)
-			{
+		for(size_t j = 0; j < y.size(); j++) {
+			if(y[j] >= yLow && y[j] < yHigh) {
 				windowX.push_back(x[j]);
 				windowY.push_back(y[j]);
 			}
 		}
 
-		if (!windowX.empty())
-		{
-			double meanX =
-				std::accumulate(windowX.begin(), windowX.end(), 0.0) / windowX.size();
-			double meanY =
-				std::accumulate(windowY.begin(), windowY.end(), 0.0) / windowY.size();
+		if(!windowX.empty()) {
+			double meanX = std::accumulate(windowX.begin(), windowX.end(), 0.0) / windowX.size();
+			double meanY = std::accumulate(windowY.begin(), windowY.end(), 0.0) / windowY.size();
 			cx.push_back(meanX);
 			cy.push_back(meanY);
 		}
 	}
 
-	if (smooth && cx.size() >= 3)
-	{
+	if(smooth && cx.size() >= 3) {
 		std::vector<double> smoothedCx = cx;
-		for (size_t i = 1; i < cx.size() - 1; i++)
-		{
+		for(size_t i = 1; i < cx.size() - 1; i++) {
 			smoothedCx[i] = (cx[i - 1] + cx[i] + cx[i + 1]) / 3.0;
 		}
 		cx = smoothedCx;
@@ -167,27 +139,22 @@ Polyfitter::slidingWindowCentroids(const std::vector<double> &x,
 	return {cy, cx};
 }
 
-bool Polyfitter::hasSignFlip(const std::vector<double> &curve)
-{
-	if (curve.size() < 3)
+bool Polyfitter::hasSignFlip(const std::vector<double> &curve) {
+	if(curve.size() < 3)
 		return false;
 
 	std::vector<double> firstDeriv(curve.size() - 1);
-	for (size_t i = 0; i < firstDeriv.size(); i++)
-	{
+	for(size_t i = 0; i < firstDeriv.size(); i++) {
 		firstDeriv[i] = curve[i + 1] - curve[i];
 	}
 
 	std::vector<double> secondDeriv(firstDeriv.size() - 1);
-	for (size_t i = 0; i < secondDeriv.size(); i++)
-	{
+	for(size_t i = 0; i < secondDeriv.size(); i++) {
 		secondDeriv[i] = firstDeriv[i + 1] - firstDeriv[i];
 	}
 
-	for (size_t i = 1; i < secondDeriv.size(); i++)
-	{
-		if ((secondDeriv[i] > 0) != (secondDeriv[i - 1] > 0))
-		{
+	for(size_t i = 1; i < secondDeriv.size(); i++) {
+		if((secondDeriv[i] > 0) != (secondDeriv[i - 1] > 0)) {
 			return true;
 		}
 	}
@@ -195,18 +162,15 @@ bool Polyfitter::hasSignFlip(const std::vector<double> &curve)
 	return false;
 }
 
-bool Polyfitter::isStraightLine(const std::vector<double> &y,
-								const std::vector<double> &x) const
-{
-	if (x.size() < 4)
+bool Polyfitter::isStraightLine(const std::vector<double> &y, const std::vector<double> &x) const {
+	if(x.size() < 4)
 		return false;
 
 	double meanX = std::accumulate(x.begin(), x.end(), 0.0) / x.size();
 	double meanY = std::accumulate(y.begin(), y.end(), 0.0) / y.size();
 
 	double num = 0, denX = 0, denY = 0;
-	for (size_t i = 0; i < x.size(); i++)
-	{
+	for(size_t i = 0; i < x.size(); i++) {
 		double dx = x[i] - meanX;
 		double dy = y[i] - meanY;
 		num += dx * dy;
@@ -214,26 +178,22 @@ bool Polyfitter::isStraightLine(const std::vector<double> &y,
 		denY += dy * dy;
 	}
 
-	if (denX == 0 || denY == 0)
+	if(denX == 0 || denY == 0)
 		return true;
 	double corr = num / std::sqrt(denX * denY);
 	return std::abs(corr) > STRAIGHT_LINE_THRESHOLD;
 }
 
-std::vector<double> Polyfitter::polyfit(const std::vector<double> &x,
-										const std::vector<double> &y,
-										int degree) const
-{
+std::vector<double> Polyfitter::polyfit(const std::vector<double> &x, const std::vector<double> &y,
+                                        int degree) const {
 	int n = x.size();
 	int m = degree + 1;
 
 	cv::Mat A(n, m, CV_64F);
 	cv::Mat B(n, 1, CV_64F);
 
-	for (int i = 0; i < n; i++)
-	{
-		for (int j = 0; j < m; j++)
-		{
+	for(int i = 0; i < n; i++) {
+		for(int j = 0; j < m; j++) {
 			A.at<double>(i, j) = std::pow(x[i], j);
 		}
 		B.at<double>(i, 0) = y[i];
@@ -243,8 +203,7 @@ std::vector<double> Polyfitter::polyfit(const std::vector<double> &x,
 	cv::solve(A, B, coeffs, cv::DECOMP_SVD);
 
 	std::vector<double> result(m);
-	for (int i = 0; i < m; i++)
-	{
+	for(int i = 0; i < m; i++) {
 		result[m - 1 - i] = coeffs.at<double>(i, 0);
 	}
 
@@ -252,16 +211,13 @@ std::vector<double> Polyfitter::polyfit(const std::vector<double> &x,
 }
 
 std::vector<double> Polyfitter::polyval(const std::vector<double> &coeffs,
-										const std::vector<double> &x)
-{
+                                        const std::vector<double> &x) {
 	std::vector<double> result(x.size());
 	int degree = coeffs.size() - 1;
 
-	for (size_t i = 0; i < x.size(); i++)
-	{
+	for(size_t i = 0; i < x.size(); i++) {
 		double val = 0;
-		for (int j = 0; j <= degree; j++)
-		{
+		for(int j = 0; j <= degree; j++) {
 			val += coeffs[j] * std::pow(x[i], degree - j);
 		}
 		result[i] = val;
@@ -271,13 +227,10 @@ std::vector<double> Polyfitter::polyval(const std::vector<double> &coeffs,
 }
 
 std::vector<double> Polyfitter::fitLaneCurve(const std::vector<double> &y,
-											 const std::vector<double> &x,
-											 int imgWidth,
-											 const std::vector<double> &yPlot)
-{
+                                             const std::vector<double> &x, int imgWidth,
+                                             const std::vector<double> &yPlot) {
 	(void)imgWidth; // Suppress unused parameter warning
-	if (isStraightLine(y, x))
-	{
+	if(isStraightLine(y, x)) {
 		auto coeffs = polyfit(y, x, 1);
 		return polyval(coeffs, yPlot);
 	}
@@ -285,8 +238,7 @@ std::vector<double> Polyfitter::fitLaneCurve(const std::vector<double> &y,
 	auto coeffs = polyfit(y, x, 2);
 	double a = coeffs[0];
 
-	if (std::abs(a) > CURVE_THRESHOLD && x.size() >= 4)
-	{
+	if(std::abs(a) > CURVE_THRESHOLD && x.size() >= 4) {
 		// Simple spline approximation using higher degree polynomial
 		auto splineCoeffs = polyfit(y, x, std::min(3, (int)x.size() - 1));
 		return polyval(splineCoeffs, yPlot);
@@ -295,70 +247,56 @@ std::vector<double> Polyfitter::fitLaneCurve(const std::vector<double> &y,
 	return polyval(coeffs, yPlot);
 }
 
-std::vector<Lane> Polyfitter::fitLanesInImage(const cv::Mat &img)
-{
+std::vector<Lane> Polyfitter::fitLanesInImage(const cv::Mat &img) {
 	auto points = extractLanePoints(img);
 	auto [labels, uniqueLabels] = clusterLanePoints(points);
 
 	std::vector<Lane> lanes;
 
-	for (int label : uniqueLabels)
-	{
+	for(int label : uniqueLabels) {
 		std::vector<double> x, y;
-		for (size_t i = 0; i < points.size(); i++)
-		{
-			if (labels[i] == label)
-			{
+		for(size_t i = 0; i < points.size(); i++) {
+			if(labels[i] == label) {
 				x.push_back(points[i].x);
 				y.push_back(points[i].y);
 			}
 		}
 
 		auto [centY, centX] = slidingWindowCentroids(x, y, img.size(), false);
-		if (centY.size() < 2)
+		if(centY.size() < 2)
 			continue;
 
 		// Sort by y coordinate
 		std::vector<size_t> indices(centY.size());
 		std::iota(indices.begin(), indices.end(), 0);
 		std::sort(indices.begin(), indices.end(),
-				  [&](size_t a, size_t b)
-				  { return centY[a] < centY[b]; });
+		          [&](size_t a, size_t b) { return centY[a] < centY[b]; });
 
 		std::vector<double> sortedCentY, sortedCentX;
-		for (size_t idx : indices)
-		{
+		for(size_t idx : indices) {
 			sortedCentY.push_back(centY[idx]);
 			sortedCentX.push_back(centX[idx]);
 		}
 
 		// Check for sign flip
-		try
-		{
+		try {
 			auto testCoeffs = polyfit(sortedCentY, sortedCentX, 2);
 			auto testCurve = polyval(testCoeffs, sortedCentY);
-			if (hasSignFlip(testCurve))
-			{
-				auto [newCentY, newCentX] =
-					slidingWindowCentroids(x, y, img.size(), true);
+			if(hasSignFlip(testCurve)) {
+				auto [newCentY, newCentX] = slidingWindowCentroids(x, y, img.size(), true);
 				std::vector<size_t> newIndices(newCentY.size());
 				std::iota(newIndices.begin(), newIndices.end(), 0);
-				std::sort(
-					newIndices.begin(), newIndices.end(),
-					[&](size_t a, size_t b)
-					{ return newCentY[a] < newCentY[b]; });
+				std::sort(newIndices.begin(), newIndices.end(),
+				          [&](size_t a, size_t b) { return newCentY[a] < newCentY[b]; });
 
 				sortedCentY.clear();
 				sortedCentX.clear();
-				for (size_t idx : newIndices)
-				{
+				for(size_t idx : newIndices) {
 					sortedCentY.push_back(newCentY[idx]);
 					sortedCentX.push_back(newCentX[idx]);
 				}
 			}
-		}
-		catch (...)
-		{
+		} catch(...) {
 			continue;
 		}
 
@@ -369,20 +307,17 @@ std::vector<Lane> Polyfitter::fitLanesInImage(const cv::Mat &img)
 		double yStart = std::max(0.0, yMin - 30);
 		double yEnd = std::min((double)img.rows, yMax + 10);
 
-		for (int i = 0; i < 300; i++)
-		{
+		for(int i = 0; i < 300; i++) {
 			yPlot.push_back(yStart + (yEnd - yStart) * i / 299.0);
 		}
 
 		auto xPlot = fitLaneCurve(sortedCentY, sortedCentX, img.cols, yPlot);
 
 		Lane lane;
-		for (size_t i = 0; i < sortedCentX.size(); i++)
-		{
+		for(size_t i = 0; i < sortedCentX.size(); i++) {
 			lane.centroids.push_back(Point2D(sortedCentX[i], sortedCentY[i]));
 		}
-		for (size_t i = 0; i < xPlot.size(); i++)
-		{
+		for(size_t i = 0; i < xPlot.size(); i++) {
 			lane.curve.push_back(Point2D(xPlot[i], yPlot[i]));
 		}
 
@@ -392,46 +327,35 @@ std::vector<Lane> Polyfitter::fitLanesInImage(const cv::Mat &img)
 	return lanes;
 }
 
-std::pair<Lane *, Lane *>
-Polyfitter::selectRelevantLanes(std::vector<Lane> &lanes, int imgWidth,
-								int imgHeight)
-{
+std::pair<Lane *, Lane *> Polyfitter::selectRelevantLanes(std::vector<Lane> &lanes, int imgWidth,
+                                                          int imgHeight) {
 	double imgCenter = imgWidth / 2.0;
 	Lane *leftLane = nullptr;
 	Lane *rightLane = nullptr;
 
 	std::vector<std::pair<double, Lane *>> laneInfos;
 
-	for (auto &lane : lanes)
-	{
+	for(auto &lane : lanes) {
 		std::vector<double> bottomHalfX;
-		for (const auto &point : lane.curve)
-		{
-			if (point.y >= imgHeight / 2.0)
-			{
+		for(const auto &point : lane.curve) {
+			if(point.y >= imgHeight / 2.0) {
 				bottomHalfX.push_back(point.x);
 			}
 		}
 
-		if (!bottomHalfX.empty())
-		{
+		if(!bottomHalfX.empty()) {
 			double avgX =
-				std::accumulate(bottomHalfX.begin(), bottomHalfX.end(), 0.0) /
-				bottomHalfX.size();
+			    std::accumulate(bottomHalfX.begin(), bottomHalfX.end(), 0.0) / bottomHalfX.size();
 			laneInfos.push_back({avgX, &lane});
 		}
 	}
 
 	std::sort(laneInfos.begin(), laneInfos.end());
 
-	for (const auto &[avgX, lane] : laneInfos)
-	{
-		if (avgX < imgCenter)
-		{
+	for(const auto &[avgX, lane] : laneInfos) {
+		if(avgX < imgCenter) {
 			leftLane = lane;
-		}
-		else if (avgX >= imgCenter && rightLane == nullptr)
-		{
+		} else if(avgX >= imgCenter && rightLane == nullptr) {
 			rightLane = lane;
 			break;
 		}
@@ -440,43 +364,31 @@ Polyfitter::selectRelevantLanes(std::vector<Lane> &lanes, int imgWidth,
 	return {leftLane, rightLane};
 }
 
-std::vector<double> Polyfitter::linspace(double start, double end, int num)
-{
+std::vector<double> Polyfitter::linspace(double start, double end, int num) {
 	std::vector<double> result(num);
 	double step = (end - start) / (num - 1);
-	for (int i = 0; i < num; i++)
-	{
+	for(int i = 0; i < num; i++) {
 		result[i] = start + i * step;
 	}
 	return result;
 }
 
 std::vector<double> Polyfitter::interp(const std::vector<double> &xNew,
-									   const std::vector<double> &x,
-									   const std::vector<double> &y,
-									   double leftVal, double rightVal)
-{
+                                       const std::vector<double> &x, const std::vector<double> &y,
+                                       double leftVal, double rightVal) {
 	std::vector<double> result(xNew.size());
 
-	for (size_t i = 0; i < xNew.size(); i++)
-	{
+	for(size_t i = 0; i < xNew.size(); i++) {
 		double xi = xNew[i];
 
-		if (xi <= x[0])
-		{
+		if(xi <= x[0]) {
 			result[i] = leftVal;
-		}
-		else if (xi >= x.back())
-		{
+		} else if(xi >= x.back()) {
 			result[i] = rightVal;
-		}
-		else
-		{
+		} else {
 			// Linear interpolation
-			for (size_t j = 0; j < x.size() - 1; j++)
-			{
-				if (xi >= x[j] && xi <= x[j + 1])
-				{
+			for(size_t j = 0; j < x.size() - 1; j++) {
+				if(xi >= x[j] && xi <= x[j + 1]) {
 					double t = (xi - x[j]) / (x[j + 1] - x[j]);
 					result[i] = y[j] + t * (y[j + 1] - y[j]);
 					break;
@@ -488,61 +400,49 @@ std::vector<double> Polyfitter::interp(const std::vector<double> &xNew,
 	return result;
 }
 
-CenterlineResult Polyfitter::computeVirtualCenterline(std::vector<Lane> &lanes,
-													  int imgWidth,
-													  int imgHeight)
-{
+CenterlineResult Polyfitter::computeVirtualCenterline(std::vector<Lane> &lanes, int imgWidth,
+                                                      int imgHeight) {
 	bool applyBlending = true;
 	auto [leftLane, rightLane] = selectRelevantLanes(lanes, imgWidth, imgHeight);
 	double carX = imgWidth / 2.0;
 
 	CenterlineResult result;
 
-	if (leftLane && rightLane)
-	{
+	if(leftLane && rightLane) {
 		// Midpoint method
 		std::vector<double> xLeft, yLeft, xRight, yRight;
-		for (const auto &point : leftLane->curve)
-		{
+		for(const auto &point : leftLane->curve) {
 			xLeft.push_back(point.x);
 			yLeft.push_back(point.y);
 		}
-		for (const auto &point : rightLane->curve)
-		{
+		for(const auto &point : rightLane->curve) {
 			xRight.push_back(point.x);
 			yRight.push_back(point.y);
 		}
 
 		double yMin = std::max(*std::min_element(yLeft.begin(), yLeft.end()),
-							   *std::min_element(yRight.begin(), yRight.end()));
+		                       *std::min_element(yRight.begin(), yRight.end()));
 		double yStart = imgHeight - 1;
 		auto yCommon = linspace(yStart, yMin, 300);
 
 		auto xLeftInterp = interp(yCommon, yLeft, xLeft, xLeft[0], xLeft.back());
-		auto xRightInterp =
-			interp(yCommon, yRight, xRight, xRight[0], xRight.back());
+		auto xRightInterp = interp(yCommon, yRight, xRight, xRight[0], xRight.back());
 
 		std::vector<double> xC1(yCommon.size());
 		std::vector<double> xC2(yCommon.size(), carX);
 
-		for (size_t i = 0; i < yCommon.size(); i++)
-		{
+		for(size_t i = 0; i < yCommon.size(); i++) {
 			xC1[i] = (xLeftInterp[i] + xRightInterp[i]) / 2.0;
 		}
 
-		if (!applyBlending)
-		{
-			for (size_t i = 0; i < yCommon.size(); i++)
-			{
+		if(!applyBlending) {
+			for(size_t i = 0; i < yCommon.size(); i++) {
 				result.blend.push_back(Point2D(xC1[i], yCommon[i]));
 				result.c1.push_back(Point2D(xC1[i], yCommon[i]));
 				result.c2.push_back(Point2D(xC2[i], yCommon[i]));
 			}
-		}
-		else
-		{
-			for (size_t i = 0; i < yCommon.size(); i++)
-			{
+		} else {
+			for(size_t i = 0; i < yCommon.size(); i++) {
 				double w = (yCommon[0] - yCommon[i]) / (yCommon[0] - yCommon.back());
 				double xBlend = w * xC1[i] + (1 - w) * xC2[i];
 
@@ -553,23 +453,19 @@ CenterlineResult Polyfitter::computeVirtualCenterline(std::vector<Lane> &lanes,
 		}
 
 		result.valid = true;
-	}
-	else if (leftLane || rightLane)
-	{
+	} else if(leftLane || rightLane) {
 		// Offset method
 		Lane *lane = leftLane ? leftLane : rightLane;
 		double direction = leftLane ? 1.0 : -1.0;
 
 		std::vector<double> xLane, yLane;
-		for (const auto &point : lane->curve)
-		{
+		for(const auto &point : lane->curve) {
 			xLane.push_back(point.x);
 			yLane.push_back(point.y);
 		}
 
 		std::vector<double> xC1;
-		for (double x : xLane)
-		{
+		for(double x : xLane) {
 			xC1.push_back(x + direction * LANE_WIDTH_PX / 2.0);
 		}
 
@@ -580,19 +476,14 @@ CenterlineResult Polyfitter::computeVirtualCenterline(std::vector<Lane> &lanes,
 		auto xC1Interp = interp(yCommon, yLane, xC1, xC1[0], xC1.back());
 		std::vector<double> xC2(yCommon.size(), carX);
 
-		if (!applyBlending)
-		{
-			for (size_t i = 0; i < yCommon.size(); i++)
-			{
+		if(!applyBlending) {
+			for(size_t i = 0; i < yCommon.size(); i++) {
 				result.blend.push_back(Point2D(xC1Interp[i], yCommon[i]));
 				result.c1.push_back(Point2D(xC1Interp[i], yCommon[i]));
 				result.c2.push_back(Point2D(xC2[i], yCommon[i]));
 			}
-		}
-		else
-		{
-			for (size_t i = 0; i < yCommon.size(); i++)
-			{
+		} else {
+			for(size_t i = 0; i < yCommon.size(); i++) {
 				double w = (yCommon[0] - yCommon[i]) / (yCommon[0] - yCommon.back());
 				double xBlend = w * xC1Interp[i] + (1 - w) * xC2[i];
 
@@ -609,9 +500,8 @@ CenterlineResult Polyfitter::computeVirtualCenterline(std::vector<Lane> &lanes,
 }
 
 void Polyfitter::displayImagesWithPolyfit(
-	const std::vector<std::pair<std::string, cv::Mat>> &images, int cols)
-{
-	if (images.empty())
+    const std::vector<std::pair<std::string, cv::Mat>> &images, int cols) {
+	if(images.empty())
 		return;
 
 	int numImages = images.size();
@@ -627,15 +517,14 @@ void Polyfitter::displayImagesWithPolyfit(
 	cv::Mat canvas = cv::Mat::zeros(canvasHeight, canvasWidth, CV_8UC3);
 
 	std::vector<cv::Scalar> colors = {
-		cv::Scalar(0, 0, 255),	 // Red
-		cv::Scalar(255, 0, 0),	 // Blue
-		cv::Scalar(0, 255, 255), // Yellow
-		cv::Scalar(128, 0, 128), // Purple
-		cv::Scalar(0, 255, 0)	 // Green
+	    cv::Scalar(0, 0, 255),   // Red
+	    cv::Scalar(255, 0, 0),   // Blue
+	    cv::Scalar(0, 255, 255), // Yellow
+	    cv::Scalar(128, 0, 128), // Purple
+	    cv::Scalar(0, 255, 0)    // Green
 	};
 
-	for (int idx = 0; idx < numImages; idx++)
-	{
+	for(int idx = 0; idx < numImages; idx++) {
 		int row = idx / cols;
 		int col = idx % cols;
 
@@ -657,18 +546,15 @@ void Polyfitter::displayImagesWithPolyfit(
 		auto lanes = fitLanesInImage(img);
 
 		// Draw lane curves
-		for (size_t i = 0; i < lanes.size(); i++)
-		{
+		for(size_t i = 0; i < lanes.size(); i++) {
 			const auto &lane = lanes[i];
 			cv::Scalar color = colors[i % colors.size()];
 
 			// Draw centroids
-			for (const auto &centroid : lane.centroids)
-			{
+			for(const auto &centroid : lane.centroids) {
 				int x = (int)(centroid.x * scaleX);
 				int y = (int)(centroid.y * scaleY);
-				if (x >= 0 && x < imgDisplayWidth && y >= 0 && y < imgDisplayHeight)
-				{
+				if(x >= 0 && x < imgDisplayWidth && y >= 0 && y < imgDisplayHeight) {
 					cv::circle(colorImg, cv::Point(x, y), 2, cv::Scalar(0, 255, 0), -1);
 					cv::circle(colorImg, cv::Point(x, y), 3, cv::Scalar(0, 0, 0), 1);
 				}
@@ -676,48 +562,41 @@ void Polyfitter::displayImagesWithPolyfit(
 
 			// Draw curve
 			std::vector<cv::Point> curvePoints;
-			for (const auto &point : lane.curve)
-			{
+			for(const auto &point : lane.curve) {
 				int x = (int)(point.x * scaleX);
 				int y = (int)(point.y * scaleY);
-				if (x >= 0 && x < imgDisplayWidth && y >= 0 && y < imgDisplayHeight)
-				{
+				if(x >= 0 && x < imgDisplayWidth && y >= 0 && y < imgDisplayHeight) {
 					curvePoints.push_back(cv::Point(x, y));
 				}
 			}
 
-			for (size_t j = 1; j < curvePoints.size(); j++)
-			{
+			for(size_t j = 1; j < curvePoints.size(); j++) {
 				cv::line(colorImg, curvePoints[j - 1], curvePoints[j], color, 2);
 			}
 		}
 
 		// Compute and draw centerline
 		auto centerlineResult = computeVirtualCenterline(lanes, img.cols, img.rows);
-		if (centerlineResult.valid)
-		{
+		if(centerlineResult.valid) {
 			// Draw blended centerline
 			std::vector<cv::Point> centerlinePoints;
-			for (const auto &point : centerlineResult.blend)
-			{
+			for(const auto &point : centerlineResult.blend) {
 				int x = (int)(point.x * scaleX);
 				int y = (int)(point.y * scaleY);
-				if (x >= 0 && x < imgDisplayWidth && y >= 0 && y < imgDisplayHeight)
-				{
+				if(x >= 0 && x < imgDisplayWidth && y >= 0 && y < imgDisplayHeight) {
 					centerlinePoints.push_back(cv::Point(x, y));
 				}
 			}
 
-			for (size_t j = 1; j < centerlinePoints.size(); j++)
-			{
+			for(size_t j = 1; j < centerlinePoints.size(); j++) {
 				cv::line(colorImg, centerlinePoints[j - 1], centerlinePoints[j],
-						 cv::Scalar(0, 165, 255), 2); // Orange
+				         cv::Scalar(0, 165, 255), 2); // Orange
 			}
 		}
 
 		// Add title
-		cv::putText(colorImg, filename, cv::Point(5, 20), cv::FONT_HERSHEY_SIMPLEX,
-					0.5, cv::Scalar(255, 255, 255), 1);
+		cv::putText(colorImg, filename, cv::Point(5, 20), cv::FONT_HERSHEY_SIMPLEX, 0.5,
+		            cv::Scalar(255, 255, 255), 1);
 
 		// Copy to canvas
 		int startX = col * imgDisplayWidth;
@@ -732,17 +611,15 @@ void Polyfitter::displayImagesWithPolyfit(
 	cv::destroyAllWindows();
 }
 
-double Polyfitter::calculateCTE(const std::vector<double> &polyCoeffs, double x, double y) const
-{
-	if (polyCoeffs.empty())
+double Polyfitter::calculateCTE(const std::vector<double> &polyCoeffs, double x, double y) const {
+	if(polyCoeffs.empty())
 		return 0.0;
 
 	// Avaliar polinômio no ponto x para obter y_ref
 	double y_ref = 0.0;
 	int degree = polyCoeffs.size() - 1;
 
-	for (int i = 0; i <= degree; i++)
-	{
+	for(int i = 0; i <= degree; i++) {
 		y_ref += polyCoeffs[i] * std::pow(x, degree - i);
 	}
 
@@ -750,9 +627,9 @@ double Polyfitter::calculateCTE(const std::vector<double> &polyCoeffs, double x,
 	return y - y_ref;
 }
 
-double Polyfitter::calculateEPSI(const std::vector<double> &polyCoeffs, double x, double psi) const
-{
-	if (polyCoeffs.size() < 2)
+double Polyfitter::calculateEPSI(const std::vector<double> &polyCoeffs, double x,
+                                 double psi) const {
+	if(polyCoeffs.size() < 2)
 		return 0.0;
 
 	// Calcular derivada do polinômio para obter psi_des
@@ -760,11 +637,9 @@ double Polyfitter::calculateEPSI(const std::vector<double> &polyCoeffs, double x
 	int degree = polyCoeffs.size() - 1;
 
 	// Derivada: d/dx[a*x^n + b*x^(n-1) + ... ] = n*a*x^(n-1) + (n-1)*b*x^(n-2) + ...
-	for (int i = 0; i < degree; i++)
-	{
+	for(int i = 0; i < degree; i++) {
 		int power = degree - i - 1;
-		if (power >= 0)
-		{
+		if(power >= 0) {
 			psi_des += (degree - i) * polyCoeffs[i] * std::pow(x, power);
 		}
 	}
@@ -776,37 +651,29 @@ double Polyfitter::calculateEPSI(const std::vector<double> &polyCoeffs, double x
 	return psi - psi_des;
 }
 
-std::vector<double> Polyfitter::getPolynomialCoeffs(const std::vector<Point2D> &trajectory) const
-{
-	if (trajectory.size() < 2)
+std::vector<double> Polyfitter::getPolynomialCoeffs(const std::vector<Point2D> &trajectory) const {
+	if(trajectory.size() < 2)
 		return {};
 
 	std::vector<double> x, y;
-	for (const auto &point : trajectory)
-	{
+	for(const auto &point : trajectory) {
 		x.push_back(point.x);
 		y.push_back(point.y);
 	}
 
 	// Determinar se é linha reta ou curva
-	if (isStraightLine(y, x))
-	{
+	if(isStraightLine(y, x)) {
 		return polyfit(x, y, 1); // Linha reta
-	}
-	else
-	{
+	} else {
 		return polyfit(x, y, 2); // Curva quadrática
 	}
 }
 
-std::vector<Point2D>
-Polyfitter::convertImagePointsToWorld(const std::vector<int> &center_x,
-									  const std::vector<int> &center_y,
-									  const VehicleTransform &vehicle_transform,
-									  int img_width, int img_height) const
-{
+std::vector<Point2D> Polyfitter::convertImagePointsToWorld(
+    const std::vector<int> &center_x, const std::vector<int> &center_y,
+    const VehicleTransform &vehicle_transform, int img_width, int img_height) const {
 	std::vector<Point2D> waypoints_world;
-	if (center_y.empty())
+	if(center_y.empty())
 		return waypoints_world;
 
 	int center_x_img = img_width / 2;
@@ -816,10 +683,8 @@ Polyfitter::convertImagePointsToWorld(const std::vector<int> &center_x,
 	// Encontrar ponto de partida (mais próximo do veículo)
 	int start_idx = 0;
 	int max_y = center_y[0];
-	for (size_t i = 1; i < center_y.size(); ++i)
-	{
-		if (center_y[i] > max_y)
-		{
+	for(size_t i = 1; i < center_y.size(); ++i) {
+		if(center_y[i] > max_y) {
 			max_y = center_y[i];
 			start_idx = i;
 		}
@@ -827,10 +692,9 @@ Polyfitter::convertImagePointsToWorld(const std::vector<int> &center_x,
 
 	// Converter pontos de imagem para coordenadas mundo
 	int N = std::min(10, (int)center_y.size()); // Limitar a 10 pontos
-	for (int i = 0; i < N; ++i)
-	{
+	for(int i = 0; i < N; ++i) {
 		int idx = start_idx - i;
-		if (idx < 0)
+		if(idx < 0)
 			break;
 
 		int x_img = center_x[idx];
@@ -844,10 +708,8 @@ Polyfitter::convertImagePointsToWorld(const std::vector<int> &center_x,
 		double cos_yaw = std::cos(vehicle_transform.yaw);
 		double sin_yaw = std::sin(vehicle_transform.yaw);
 
-		double world_x = vehicle_transform.x + distance_ahead * cos_yaw -
-						 lateral_offset * sin_yaw;
-		double world_y = vehicle_transform.y + distance_ahead * sin_yaw +
-						 lateral_offset * cos_yaw;
+		double world_x = vehicle_transform.x + distance_ahead * cos_yaw - lateral_offset * sin_yaw;
+		double world_y = vehicle_transform.y + distance_ahead * sin_yaw + lateral_offset * cos_yaw;
 
 		waypoints_world.emplace_back(world_x, world_y);
 	}

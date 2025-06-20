@@ -12,9 +12,8 @@ using ::testing::NiceMock;
 #include <opencv2/imgproc.hpp>
 
 class MockInferencer : public IInferencer {
-public:
-  MOCK_METHOD(cv::cuda::GpuMat, makePrediction, (const cv::cuda::GpuMat &),
-              (override));
+	public:
+		MOCK_METHOD(cv::cuda::GpuMat, makePrediction, (const cv::cuda::GpuMat &), (override));
 };
 
 #endif
