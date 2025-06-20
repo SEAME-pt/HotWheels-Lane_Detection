@@ -7,25 +7,24 @@
 #include <vector>
 #include <zmq.hpp>
 
-class Subscriber
-{
-  private:
-    zmq::context_t context;
-    zmq::socket_t subscriber;
-    bool running;
+class Subscriber {
+	private:
+		zmq::context_t context;
+		zmq::socket_t subscriber;
+		bool running;
 
-  public:
-    Subscriber();
-    ~Subscriber();
+	public:
+		Subscriber();
+		~Subscriber();
 
-    zmq::socket_t &getSocket();
+		zmq::socket_t &getSocket();
 
-    void subscribe(const std::string &topic);
-    // void listen();
-    // void listenFrames();
-    void connect(const std::string &address);
-    // void reconnect(const std::string& address);
-    void stop();
+		void subscribe(const std::string &topic);
+		// void listen();
+		// void listenFrames();
+		void connect(const std::string &address);
+		// void reconnect(const std::string& address);
+		void stop();
 };
 
 #endif // SUBSCRIBER_HPP
