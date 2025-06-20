@@ -21,35 +21,35 @@
 /*! @brief Enum class for the component status. */
 enum class ComponentStatus
 {
-    Idle,
-    Starting,
-    Operational,
-    Down
+	Idle,
+	Starting,
+	Operational,
+	Down
 };
 /*! @brief Enum class for the driving mode. */
 enum class DrivingMode
 {
-    Manual,
-    Automatic
+	Manual,
+	Automatic
 };
 /*! @brief Enum class for the cluster theme. */
 enum class ClusterTheme
 {
-    Dark,
-    Light
+	Dark,
+	Light
 };
 /*! @brief Enum class for the cluster metrics. */
 enum class ClusterMetrics
 {
-    Miles,
-    Kilometers
+	Miles,
+	Kilometers
 };
 /*! @brief Enum class for the car direction. */
 enum class CarDirection
 {
-    Drive,
-    Reverse,
-    Stop
+	Drive,
+	Reverse,
+	Stop
 };
 
 Q_DECLARE_METATYPE(ComponentStatus)
