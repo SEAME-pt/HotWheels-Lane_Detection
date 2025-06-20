@@ -15,8 +15,7 @@ MPCPlanner &MPCPlanner::operator=(const MPCPlanner &origin) {
 
 MPCPlanner::~MPCPlanner(void) {}
 
-MPCPlanner::MPCPlanner(const MPCOptimizer &optimizer)
-    : _optimizer(optimizer) {}
+MPCPlanner::MPCPlanner(const MPCOptimizer &optimizer) : _optimizer(optimizer) {}
 
 ControlCommand MPCPlanner::plan(const VehicleState &current_state,
                                 const std::vector<Point2D> &global_waypoints,
