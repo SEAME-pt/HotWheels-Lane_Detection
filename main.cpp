@@ -278,25 +278,29 @@ class MPCIntegratedApp : public QObject {
 								                         message.size());
 
 								if(!debug_printed) {
-									std::cout << "[DEBUG] ZeroMQ camera connected successfully" << std::endl;
+									std::cout << "[DEBUG] ZeroMQ camera connected successfully"
+									          << std::endl;
 									debug_printed = true;
 								}
 
 								// Try multiple topic formats
-								std::vector<std::string> topics = {"camera_frame ", "inference_frame ", "raw_frame "};
-								
-								for(const auto& topic : topics) {
+								std::vector<std::string> topics = {
+								    "camera_frame ", "inference_frame ", "raw_frame "};
+
+								for(const auto &topic : topics) {
 									if(received_msg.find(topic) == 0) {
 										std::string frame_data = received_msg.substr(topic.size());
-										
+
 										// Deserialize frame
-										std::vector<uchar> buffer(frame_data.begin(), frame_data.end());
-										m_currentCameraFrame = cv::imdecode(buffer, cv::IMREAD_COLOR);
+										std::vector<uchar> buffer(frame_data.begin(),
+										                          frame_data.end());
+										m_currentCameraFrame =
+										    cv::imdecode(buffer, cv::IMREAD_COLOR);
 
 										if(!m_currentCameraFrame.empty()) {
 											m_cameraFrameAvailable = true;
-											std::cout << "[DEBUG] ZeroMQ frame received: " 
-											          << m_currentCameraFrame.cols << "x" 
+											std::cout << "[DEBUG] ZeroMQ frame received: "
+											          << m_currentCameraFrame.cols << "x"
 											          << m_currentCameraFrame.rows << std::endl;
 											getLaneDetectionFrame();
 											return;
@@ -318,23 +322,25 @@ class MPCIntegratedApp : public QObject {
 
 				// Only try to reinitialize every 5 seconds to avoid spam
 				auto now = std::chrono::steady_clock::now();
-				if(!cap_initialized && 
-				   std::chrono::duration_cast<std::chrono::seconds>(now - last_attempt).count() > 5) {
-					
+				if(!cap_initialized &&
+				   std::chrono::duration_cast<std::chrono::seconds>(now - last_attempt).count() >
+				       5) {
+
 					last_attempt = now;
 					failed_attempts++;
-					
+
 					if(failed_attempts > 3) {
 						// After 3 failed attempts, create a synthetic camera feed
 						createSyntheticCameraFeed();
 						return;
 					}
 
-					std::cout << "[DEBUG] Attempting to initialize camera (attempt " << failed_attempts << "/3)" << std::endl;
+					std::cout << "[DEBUG] Attempting to initialize camera (attempt "
+					          << failed_attempts << "/3)" << std::endl;
 
 					// Try different camera backends in order of preference
 					std::vector<int> backends = {cv::CAP_V4L2, cv::CAP_GSTREAMER, cv::CAP_ANY};
-					
+
 					for(int backend : backends) {
 						try {
 							cap.open(0, backend);
@@ -344,11 +350,13 @@ class MPCIntegratedApp : public QObject {
 								cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
 								cap.set(cv::CAP_PROP_FPS, 15);
 								cap.set(cv::CAP_PROP_BUFFERSIZE, 1);
-								
+
 								// Test if we can actually read a frame
 								cv::Mat test_frame;
 								if(cap.read(test_frame) && !test_frame.empty()) {
-									std::cout << "[DEBUG] Camera initialized successfully with backend " << backend << std::endl;
+									std::cout
+									    << "[DEBUG] Camera initialized successfully with backend "
+									    << backend << std::endl;
 									cap_initialized = true;
 									failed_attempts = 0;
 									break;
@@ -357,7 +365,8 @@ class MPCIntegratedApp : public QObject {
 								}
 							}
 						} catch(const std::exception &e) {
-							std::cout << "[DEBUG] Backend " << backend << " failed: " << e.what() << std::endl;
+							std::cout << "[DEBUG] Backend " << backend << " failed: " << e.what()
+							          << std::endl;
 							cap.release();
 						}
 					}
@@ -404,24 +413,26 @@ class MPCIntegratedApp : public QObject {
 
 				// Create a 640x480 synthetic image
 				m_currentCameraFrame = cv::Mat::zeros(480, 640, CV_8UC3);
-				
+
 				// Add some dynamic content
-				cv::putText(m_currentCameraFrame, "SYNTHETIC CAMERA FEED", 
-							cv::Point(150, 50), cv::FONT_HERSHEY_SIMPLEX, 1.0, 
-							cv::Scalar(0, 255, 255), 2);
-				
-				cv::putText(m_currentCameraFrame, "Frame: " + std::to_string(frame_counter), 
-							cv::Point(250, 100), cv::FONT_HERSHEY_SIMPLEX, 0.8, 
-							cv::Scalar(255, 255, 255), 2);
+				cv::putText(m_currentCameraFrame, "SYNTHETIC CAMERA FEED", cv::Point(150, 50),
+				            cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 255, 255), 2);
+
+				cv::putText(m_currentCameraFrame, "Frame: " + std::to_string(frame_counter),
+				            cv::Point(250, 100), cv::FONT_HERSHEY_SIMPLEX, 0.8,
+				            cv::Scalar(255, 255, 255), 2);
 
 				// Add animated elements
 				int x_offset = (frame_counter * 2) % 640;
-				cv::circle(m_currentCameraFrame, cv::Point(x_offset, 200), 10, cv::Scalar(0, 255, 0), -1);
+				cv::circle(m_currentCameraFrame, cv::Point(x_offset, 200), 10,
+				           cv::Scalar(0, 255, 0), -1);
 
 				// Add fake road lines
-				cv::line(m_currentCameraFrame, cv::Point(200, 480), cv::Point(250, 200), cv::Scalar(255, 255, 255), 3);
-				cv::line(m_currentCameraFrame, cv::Point(390, 200), cv::Point(440, 480), cv::Scalar(255, 255, 255), 3);
-				
+				cv::line(m_currentCameraFrame, cv::Point(200, 480), cv::Point(250, 200),
+				         cv::Scalar(255, 255, 255), 3);
+				cv::line(m_currentCameraFrame, cv::Point(390, 200), cv::Point(440, 480),
+				         cv::Scalar(255, 255, 255), 3);
+
 				m_cameraFrameAvailable = true;
 
 				// Create test lane detection
@@ -450,10 +461,8 @@ class MPCIntegratedApp : public QObject {
 
 				// Add center dashed line
 				for(int y = frame.rows * 0.3; y < frame.rows; y += 40) {
-					cv::line(binary_mask, 
-							cv::Point(frame.cols * 0.5, y), 
-							cv::Point(frame.cols * 0.5, y + 20), 
-							cv::Scalar(255), 4);
+					cv::line(binary_mask, cv::Point(frame.cols * 0.5, y),
+					         cv::Point(frame.cols * 0.5, y + 20), cv::Scalar(255), 4);
 				}
 
 				if(!binary_mask.empty()) {
@@ -560,9 +569,9 @@ class MPCIntegratedApp : public QObject {
 			// Enhanced camera status with source indication
 			std::string camera_status;
 			if(m_cameraFrameAvailable && !m_currentCameraFrame.empty()) {
-				camera_status = "Connected (" + std::to_string(m_currentCameraFrame.cols) + "x" + 
-								std::to_string(m_currentCameraFrame.rows) + ")";
-				
+				camera_status = "Connected (" + std::to_string(m_currentCameraFrame.cols) + "x" +
+				                std::to_string(m_currentCameraFrame.rows) + ")";
+
 				// Detect if it's synthetic by checking for specific text
 				cv::Mat gray;
 				cv::cvtColor(m_currentCameraFrame, gray, cv::COLOR_BGR2GRAY);
