@@ -46,6 +46,7 @@ class JoysticksController : public QObject {
 
 	signals:
 		void finished();
+		void inputReceived(int value);
 };
 
 #endif // JOYSTICKS_CONTROLLER_HPP

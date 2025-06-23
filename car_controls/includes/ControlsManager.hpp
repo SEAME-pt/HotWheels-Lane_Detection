@@ -74,6 +74,10 @@ class ControlsManager : public QObject {
 		bool checkEmergencyObstacles();
 		std::string serializeMask(const cv::Mat &mask);
 		cv::Mat deserializeMask(const std::string &data);
+
+	signals:
+		void emergencyStop();
+		void modeChanged(DrivingMode mode);
 };
 
 #endif // CONTROLSMANAGER_HPP

@@ -4,7 +4,7 @@
 JETSON_USER="jetson"
 JETSON_HOST="hotwheels-car.netbird.cloud"
 PROJECT_PATH="/home/jetson/Documents/MPC"
-LOCAL_PATH="/home/michel/Documents/other"
+LOCAL_PATH="/home/michel-batista/Documents/SEA_ME/HotWheels-Lane_Detection"
 
 echo "Sincronizando apenas arquivos modificados..."
 rsync -avz --update --exclude='.git' --exclude='build/' --exclude='*.o' --exclude='*.sh' --exclude='*.tmp' --dry-run $LOCAL_PATH/ $JETSON_USER@$JETSON_HOST:$PROJECT_PATH/

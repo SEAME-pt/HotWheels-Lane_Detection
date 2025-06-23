@@ -56,6 +56,7 @@ class EngineController : public QObject {
 	signals:
 		void directionUpdated(CarDirection newDirection);
 		void steeringUpdated(int newAngle);
+		void speedUpdated(int newSpeed);
 };
 
 #endif // ENGINECONTROLLER_HPP

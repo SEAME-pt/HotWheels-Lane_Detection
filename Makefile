@@ -47,29 +47,36 @@ else
     $(info CUDA not found - compiling without CUDA support)
 endif
 
-# Source files
-INTEGRATED_SRC = car_controls/sources/MPCOptimizer.cpp \
-                 car_controls/sources/MPCPlanner.cpp \
-                 car_controls/sources/Polyfitter.cpp \
-                 car_controls/sources/ControlsManager.cpp \
-                 car_controls/sources/EngineController.cpp \
-                 car_controls/sources/JoysticksController.cpp \
-                 car_controls/sources/PeripheralController.cpp \
-                 car_controls/sources/inference/CameraStreamer.cpp \
-                 ZeroMQ/Publisher.cpp \
-                 ZeroMQ/Subscriber.cpp
+# All source files
+SOURCES = main.cpp \
+			ZeroMQ/Publisher.cpp \
+			ZeroMQ/Subscriber.cpp \
+			car_controls/sources/EngineController.cpp \
+			car_controls/sources/ControlsManager.cpp \
+			car_controls/sources/PeripheralController.cpp \
+			car_controls/sources/JoysticksController.cpp \
+			car_controls/sources/MPCPlanner.cpp \
+			car_controls/sources/Polyfitter.cpp \
+			car_controls/sources/inference/LaneCurveFitter.cpp \
+			car_controls/sources/inference/KerasInferencer.cpp \
+			car_controls/sources/inference/InferenceManager.cpp \
+			car_controls/sources/inference/TensorRTInferencer.cpp \
+			car_controls/sources/inference/CameraStreamer.cpp \
+			car_controls/sources/inference/LanePostProcessor.cpp \
+			car_controls/sources/inference/ONNXInferencer.cpp \
+			car_controls/sources/MPCOptimizer.cpp \
+			car_controls/sources/objectDetection/LabelManager.cpp \
+			car_controls/sources/objectDetection/YOLOv5TRT.cpp
 
-ifneq ($(wildcard car_controls/sources/objectDetection/*.cpp),)
-    INTEGRATED_SRC += $(wildcard car_controls/sources/objectDetection/*.cpp)
-endif
-
-INTEGRATED_OBJ = $(INTEGRATED_SRC:.cpp=.o)
+# Remove duplicates from SOURCES
+SOURCES := $(sort $(SOURCES))
+OBJECTS = $(SOURCES:.cpp=.o)
 
 # MOC files for Qt classes
-MOC_FILES = \
-    car_controls/sources/ControlsManager.moc \
-    car_controls/sources/EngineController.moc \
-    car_controls/sources/JoysticksController.moc
+MOC_FILES = main.moc \
+            car_controls/sources/ControlsManager.moc \
+            car_controls/sources/EngineController.moc \
+            car_controls/sources/JoysticksController.moc
 
 # Libraries
 OPENCV_LIBS = $(shell pkg-config --libs opencv4 || pkg-config --libs opencv)
@@ -78,8 +85,9 @@ FILESYSTEM_LIBS = -lstdc++fs
 ZMQ_LIBS = -lzmq
 
 ifeq ($(CUDA_AVAILABLE), yes)
-    ifneq ($(wildcard /usr/local/lib/libnvinfer.so),)
+	ifneq ($(wildcard /usr/local/lib/libnvinfer.so /usr/lib/aarch64-linux-gnu/libnvinfer.so),)
         TENSORRT_LIBS = -lnvinfer -lnvinfer_plugin -lnvonnxparser
+        CXXFLAGS += -DTENSORRT_AVAILABLE
         $(info TensorRT found - enabling TensorRT support)
     else
         TENSORRT_LIBS =
@@ -89,28 +97,27 @@ else
     TENSORRT_LIBS =
 endif
 
-BASIC_LIBS = -lnlopt -pthread $(CUDA_LIBS) $(MLPACK_LIBS) $(FILESYSTEM_LIBS) $(ZMQ_LIBS) $(TENSORRT_LIBS)
-SDL_LIBS = -lSDL2
+ALL_LIBS = -lnlopt -pthread $(CUDA_LIBS) $(MLPACK_LIBS) $(FILESYSTEM_LIBS) $(ZMQ_LIBS) $(TENSORRT_LIBS) $(OPENCV_LIBS) $(QT5_LIBS) -lSDL2
 
-# Targets
-TARGET_BASIC = main
+# Target
+TARGET = main
 
-all: $(TARGET_BASIC)
+all: $(TARGET)
 
-# MOC processing for Qt classes
+# MOC processing
+%.moc: %.cpp
+	$(shell pkg-config --variable=host_bins Qt5Core)/moc $< -o $@
+
 car_controls/sources/%.moc: car_controls/includes/%.hpp
 	$(shell pkg-config --variable=host_bins Qt5Core)/moc $< -o $@
 
-main.moc: main.cpp
-	$(shell pkg-config --variable=host_bins Qt5Core)/moc main.cpp -o main.moc
+# Main target
+$(TARGET): $(OBJECTS) $(MOC_FILES)
+	$(CXX) $(CXXFLAGS) $(QT5_CFLAGS) $(OBJECTS) -o $@ $(LDFLAGS) $(ALL_LIBS)
 
-# Main target with explicit MOC dependencies
-$(TARGET_BASIC): main.o $(INTEGRATED_OBJ) main.moc $(MOC_FILES)
-	$(CXX) $(CXXFLAGS) $(QT5_CFLAGS) main.o $(INTEGRATED_OBJ) -o $@ $(LDFLAGS) $(BASIC_LIBS) $(OPENCV_LIBS) $(QT5_LIBS) $(SDL_LIBS)
-
-# Compilation rules
+# Compilation rules with MOC dependencies
 main.o: main.cpp main.moc
-	$(CXX) $(CXXFLAGS) $(QT5_CFLAGS) $(INCLUDE_PATHS) -c main.cpp -o $@
+	$(CXX) $(CXXFLAGS) $(QT5_CFLAGS) $(INCLUDE_PATHS) -c $< -o $@
 
 car_controls/sources/ControlsManager.o: car_controls/sources/ControlsManager.cpp car_controls/sources/ControlsManager.moc
 	$(CXX) $(CXXFLAGS) $(QT5_CFLAGS) $(INCLUDE_PATHS) -c $< -o $@
@@ -121,18 +128,13 @@ car_controls/sources/EngineController.o: car_controls/sources/EngineController.c
 car_controls/sources/JoysticksController.o: car_controls/sources/JoysticksController.cpp car_controls/sources/JoysticksController.moc
 	$(CXX) $(CXXFLAGS) $(QT5_CFLAGS) $(INCLUDE_PATHS) -c $< -o $@
 
-car_controls/sources/inference/%.o: car_controls/sources/inference/%.cpp
-	$(CXX) $(CXXFLAGS) $(INCLUDE_PATHS) -c $< -o $@
-
-car_controls/sources/%.o: car_controls/sources/%.cpp
+# Generic rule for other cpp files that don't need MOC
+%.o: %.cpp
 	$(CXX) $(CXXFLAGS) $(QT5_CFLAGS) $(INCLUDE_PATHS) -c $< -o $@
-
-ZeroMQ/%.o: ZeroMQ/%.cpp
-	$(CXX) $(CXXFLAGS) $(INCLUDE_PATHS) -c $< -o $@
 
 # Clean
 clean:
-	rm -f $(INTEGRATED_OBJ) main.o main.moc $(MOC_FILES) $(TARGET_BASIC)
+	rm -f $(OBJECTS) $(MOC_FILES) $(TARGET)
 
 install-deps:
 	sudo apt update
@@ -194,19 +196,6 @@ debug-compile:
 	@echo "=== Testing individual file compilation ==="
 	$(CXX) $(CXXFLAGS) $(INCLUDE_PATHS) -c car_controls/sources/Polyfitter.cpp -o /tmp/test_polyfitter.o -v
 	@echo "Polyfitter compilation successful"
-
-# Show what flags are being used
-show-flags:
-	@echo "=== Include Paths Breakdown ==="
-	@echo "INCLUDE_PATHS: $(INCLUDE_PATHS)"
-	@echo ""
-	@echo "QT5_CFLAGS: $(QT5_CFLAGS)"
-	@echo ""
-	@echo "=== Combined in compilation ==="
-	@echo "$(QT5_CFLAGS) $(INCLUDE_PATHS)"
-
-test:
-	@echo "Running tests..."
 	@echo "No tests defined in this Makefile. Please add your test commands here."
-
-.PHONY: all clean install-deps check-cuda check-libs debug-compile check-qt show-flags
+# Show what flags are being used
+.PHONY: all clean install-deps check-cuda check-libs debug-compile check-qt show-flags test

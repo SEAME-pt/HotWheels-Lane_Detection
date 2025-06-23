@@ -495,3 +495,5 @@ void ControlsManager::showVisionDebug() {
 		std::cerr << "[showVisionDebug] Unknown error" << std::endl;
 	}
 }
+
+#include "ControlsManager.moc"

@@ -114,3 +114,5 @@ void JoysticksController::processInput() {
 	// qDebug() << "Joystick controller loop finished.";
 	emit finished();
 }
+
+#include "JoysticksController.moc"

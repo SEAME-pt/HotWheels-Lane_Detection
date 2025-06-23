@@ -169,3 +169,5 @@ void EngineController::set_steering(int angle) {
 	m_current_angle = angle;
 	emit this->steeringUpdated(angle);
 }
+
+#include "EngineController.moc"
