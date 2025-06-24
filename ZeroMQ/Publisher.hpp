@@ -3,6 +3,7 @@
 
 #include <chrono>
 #include <cuda_runtime.h>
+#include <errno.h>
 #include <iostream>
 #include <mutex>
 #include <opencv2/core/cuda.hpp>

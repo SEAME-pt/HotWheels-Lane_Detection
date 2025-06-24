@@ -6,7 +6,7 @@ echo "=== TESTE AUTOMÁTICO DOS DADOS DE PROJEÇÃO DO MPC ==="
 
 # Executar o sistema em background
 echo "Iniciando sistema MPC..."
-cd /home/michel-batista/Documents/SEA_ME/HotWheels-Lane_Detection
+cd /home/jetson/Documents/MPC
 
 # Usar expect para automatizar a interação
 expect << EOF

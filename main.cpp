@@ -13,6 +13,7 @@
 #include <numeric>
 #include <opencv2/opencv.hpp>
 #include <signal.h>
+#include <thread>
 
 // Global flag for graceful shutdown
 std::atomic<bool> g_running{true};
@@ -21,7 +22,14 @@ std::atomic<bool> g_running{true};
 void signalHandler(int signum) {
 	std::cout << "\nReceived signal " << signum << ". Shutting down gracefully..." << std::endl;
 	g_running = false;
-	QApplication::quit();
+
+	// Give some time for cleanup
+	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+	// Force quit if Qt is running
+	if(QApplication::instance()) {
+		QApplication::quit();
+	}
 }
 
 class MPCIntegratedApp : public QObject {
@@ -109,20 +117,44 @@ class MPCIntegratedApp : public QObject {
 		}
 
 		~MPCIntegratedApp() {
-			// Stop timers first
-			if(mpc_timer) {
-				mpc_timer->stop();
+			std::cout << "[~MPCIntegratedApp] Starting cleanup..." << std::endl;
+
+			try {
+				// Stop all timers first
+				if(mpc_timer) {
+					mpc_timer->stop();
+					mpc_timer = nullptr;
+				}
+
+				if(m_visualizationTimer) {
+					m_visualizationTimer->stop();
+					m_visualizationTimer = nullptr;
+				}
+
+				// Close OpenCV windows
+				cv::destroyAllWindows();
+
+				// Reset smart pointers (this will call destructors)
+				m_laneDetectionSubscriber.reset();
+				m_inferencer.reset();
+
+				// Delete MPC planner
+				if(mpc_planner) {
+					delete mpc_planner;
+					mpc_planner = nullptr;
+				}
+
+				// controls_manager is QObject child, will be deleted automatically
+				// but we can set it to nullptr for safety
+				controls_manager = nullptr;
+
+				std::cout << "[~MPCIntegratedApp] Cleanup complete" << std::endl;
+
+			} catch(const std::exception &e) {
+				std::cerr << "[~MPCIntegratedApp] Error during cleanup: " << e.what() << std::endl;
+			} catch(...) {
+				std::cerr << "[~MPCIntegratedApp] Unknown error during cleanup" << std::endl;
 			}
-
-			// Cleanup publishers before destroying anything else
-			Publisher::destroyAll();
-
-			// Delete in reverse order of creation
-			delete mpc_planner;
-			mpc_planner = nullptr;
-
-			// controls_manager is QObject child, will be deleted automatically
-			std::cout << "[~MPCIntegratedApp] Cleanup complete" << std::endl;
 		}
 
 	private slots:
@@ -1123,19 +1155,41 @@ int main(int argc, char *argv[]) {
 
 		int result = app.exec();
 
-		// Cleanup
-		integrated_app.reset(); // Explicit cleanup before destroying windows
-		cv::destroyAllWindows();
+		// Graceful cleanup sequence
+		std::cout << "[main] Starting application cleanup..." << std::endl;
 
-		// Final cleanup of singletons
-		Publisher::destroyAll();
+		try {
+			// 1. Reset the main application object first
+			integrated_app.reset();
+
+			// 2. Close all OpenCV windows
+			cv::destroyAllWindows();
+
+			// 3. Give time for threads to finish
+			std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+			// 4. Final cleanup of singletons (with error handling)
+			try {
+				Publisher::destroyAll();
+			} catch(const std::exception &e) {
+				std::cerr << "[main] Warning during Publisher cleanup: " << e.what() << std::endl;
+			}
+
+			std::cout << "[main] Application cleanup complete" << std::endl;
+		} catch(const std::exception &e) {
+			std::cerr << "[main] Error during cleanup: " << e.what() << std::endl;
+		}
 
 		return result;
 
 	} catch(const std::exception &e) {
 		std::cerr << "Erro: " << e.what() << std::endl;
-		cv::destroyAllWindows();
-		Publisher::destroyAll();
+		try {
+			cv::destroyAllWindows();
+			Publisher::destroyAll();
+		} catch(...) {
+			std::cerr << "[main] Additional errors during exception cleanup" << std::endl;
+		}
 		return 1;
 	}
 }

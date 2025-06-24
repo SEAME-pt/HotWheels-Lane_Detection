@@ -13,12 +13,20 @@ Publisher::~Publisher() {
 	std::lock_guard<std::mutex> lock(active_mtx);
 	isActive = false;
 	try {
-		publisher.unbind(boundAddress); // Use stored address
+		if(publisher.connected()) {
+			publisher.unbind(boundAddress); // Use stored address
+		}
 		publisher.close();
 		context.close();
-		std::cout << "[Publisher] Unbound from " << boundAddress << std::endl;
+		// Only log successful unbind to reduce noise
+		// std::cout << "[Publisher] Unbound from " << boundAddress << std::endl;
 	} catch(const zmq::error_t &e) {
-		std::cerr << "[Publisher] Failed to unbind: " << e.what() << std::endl;
+		// Silently handle unbind errors - they're not critical during shutdown
+		if(e.num() != ENOENT) { // Only log if it's not "No such file or directory"
+			std::cerr << "[Publisher] Unbind warning: " << e.what() << std::endl;
+		}
+	} catch(const std::exception &e) {
+		std::cerr << "[Publisher] Cleanup warning: " << e.what() << std::endl;
 	}
 }
 
@@ -32,14 +40,31 @@ Publisher *Publisher::instance(int port) {
 }
 
 void Publisher::destroyAll() {
-	for(auto &pair : instances) {
-		if(pair.second) {
-			std::lock_guard<std::mutex> lock(pair.second->active_mtx);
-			pair.second->isActive = false;
+	try {
+		// First mark all instances as inactive
+		for(auto &pair : instances) {
+			if(pair.second) {
+				std::lock_guard<std::mutex> lock(pair.second->active_mtx);
+				pair.second->isActive = false;
+			}
 		}
-		delete pair.second;
+
+		// Then delete them safely
+		for(auto &pair : instances) {
+			if(pair.second) {
+				try {
+					delete pair.second;
+				} catch(const std::exception &e) {
+					std::cerr << "[Publisher] Warning during destruction: " << e.what()
+					          << std::endl;
+				}
+			}
+		}
+		instances.clear();
+
+	} catch(const std::exception &e) {
+		std::cerr << "[Publisher] Error in destroyAll: " << e.what() << std::endl;
 	}
-	instances.clear();
 }
 
 void Publisher::publish(const std::string &topic, const std::string &message) {
