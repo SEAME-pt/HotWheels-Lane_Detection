@@ -2,11 +2,13 @@
 #include "car_controls/includes/ControlsManager.hpp"
 #include "car_controls/includes/MPCOptimizer.hpp"
 #include "car_controls/includes/MPCPlanner.hpp"
+#include "ZeroMQ/Subscriber.hpp"
 #include <QApplication>
 #include <QTimer>
 #include <chrono>
 #include <cmath>
 #include <iostream>
+#include <memory>
 #include <opencv2/opencv.hpp>
 #include <signal.h>
 
@@ -42,13 +44,18 @@ class MPCIntegratedApp : public QObject {
 		cv::Mat m_currentCameraFrame;
 		cv::Mat m_processedFrame;
 		bool m_cameraFrameAvailable = false;
+		
+		// Add persistent subscriber for lane detection
+		std::unique_ptr<Subscriber> m_laneDetectionSubscriber;
 
 	public:
-		MPCIntegratedApp(int argc, char **argv, QObject *parent = nullptr) : QObject(parent) {
-			// Setup signal handlers
-			signal(SIGINT, signalHandler);
-			signal(SIGTERM, signalHandler);
+	MPCIntegratedApp(int argc, char **argv, QObject *parent = nullptr) : QObject(parent),
+		controls_manager(nullptr), mpc_planner(nullptr), mpc_timer(nullptr) {
+		// Setup signal handlers
+		signal(SIGINT, signalHandler);
+		signal(SIGTERM, signalHandler);
 
+		try {
 			// Inicializar o sistema de controles existente
 			controls_manager = new ControlsManager(argc, argv, this);
 
@@ -72,11 +79,28 @@ class MPCIntegratedApp : public QObject {
 
 			// Setup visualization
 			setupVisualization();
+		} catch(const std::exception& e) {
+			std::cerr << "[MPCIntegratedApp] Initialization error: " << e.what() << std::endl;
+			throw;
 		}
+	}
 
-		~MPCIntegratedApp() {
-			delete mpc_planner;
+	~MPCIntegratedApp() {
+		// Stop timers first
+		if(mpc_timer) {
+			mpc_timer->stop();
 		}
+		
+		// Cleanup publishers before destroying anything else
+		Publisher::destroyAll();
+		
+		// Delete in reverse order of creation
+		delete mpc_planner;
+		mpc_planner = nullptr;
+		
+		// controls_manager is QObject child, will be deleted automatically
+		std::cout << "[~MPCIntegratedApp] Cleanup complete" << std::endl;
+	}
 
 	private slots:
 		void runMPCStep() {
@@ -160,18 +184,165 @@ class MPCIntegratedApp : public QObject {
 			}
 		}
 
+		void getCameraFrame() {
+            try {
+                // Only use ZeroMQ connection - don't try to access camera directly
+                static bool first_connection_attempt = true;
+                static std::chrono::time_point<std::chrono::steady_clock> last_zmq_attempt;
+                static bool zmq_connection_failed = false;
+
+                auto now = std::chrono::steady_clock::now();
+
+                // Try ZeroMQ connection periodically, but not too often
+                if(first_connection_attempt || 
+                   (!zmq_connection_failed && 
+                    std::chrono::duration_cast<std::chrono::seconds>(now - last_zmq_attempt).count() > 2)) {
+                    
+                    first_connection_attempt = false;
+                    last_zmq_attempt = now;
+
+                    try {
+                        // Try raw camera frames first (from port 5558)
+                        Subscriber camera_sub;
+                        camera_sub.connect("tcp://localhost:5558");
+                        camera_sub.subscribe("camera_frame");
+
+                        zmq::pollitem_t items[] = {
+                            {static_cast<void*>(camera_sub.getSocket()), 0, ZMQ_POLLIN, 0}};
+                        zmq::poll(items, 1, 200); // Longer timeout for connection attempt
+
+                        if(items[0].revents & ZMQ_POLLIN) {
+                            zmq::message_t message;
+                            if(camera_sub.getSocket().recv(&message, ZMQ_DONTWAIT)) {
+                                std::string received_msg(static_cast<char*>(message.data()), 
+                                                       message.size());
+
+                                if(received_msg.find("camera_frame ") == 0) {
+                                    std::string frame_data = received_msg.substr(13); // "camera_frame ".length()
+                                    
+                                    std::vector<uchar> buffer(frame_data.begin(), frame_data.end());
+                                    cv::Mat decoded_frame = cv::imdecode(buffer, cv::IMREAD_COLOR);
+
+                                    if(!decoded_frame.empty()) {
+                                        m_currentCameraFrame = decoded_frame.clone();
+                                        m_cameraFrameAvailable = true;
+                                        zmq_connection_failed = false;
+                                        
+                                        std::cout << "[DEBUG] Connected to raw camera feed: " 
+                                                  << decoded_frame.cols << "x" << decoded_frame.rows << std::endl;
+                                        
+                                        // Get inference results from port 5556
+                                        getLaneDetectionFrame();
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // If raw camera fails, try inference frames from port 5556
+                        Subscriber inference_sub;
+                        inference_sub.connect("tcp://localhost:5556");
+                        inference_sub.subscribe("inference_frame");
+
+                        zmq::poll(items, 1, 100);
+                        if(items[0].revents & ZMQ_POLLIN) {
+                            zmq::message_t message;
+                            if(inference_sub.getSocket().recv(&message, ZMQ_DONTWAIT)) {
+                                std::string received_msg(static_cast<char*>(message.data()), 
+                                                       message.size());
+                                
+                                if(received_msg.find("inference_frame ") == 0) {
+                                    std::cout << "[DEBUG] Found inference data from CameraStreamer" << std::endl;
+                                    zmq_connection_failed = false;
+                                }
+                            }
+                        }
+
+                        if(!zmq_connection_failed) {
+                            std::cout << "[DEBUG] CameraStreamer is running but no frames yet" << std::endl;
+                        }
+
+                    } catch(const std::exception& e) {
+                        if(!zmq_connection_failed) {
+                            std::cout << "[DEBUG] ZeroMQ connection failed: " << e.what() << std::endl;
+                            zmq_connection_failed = true;
+                        }
+                    }
+                }
+
+                // If ZeroMQ is not working, use synthetic feed
+                if(zmq_connection_failed || !m_cameraFrameAvailable) {
+                    // TODO: Implement createSyntheticCameraFeed();
+                    // std::cerr << "[getCameraFrame] Warning: Camera feed not available" << std::endl;
+                }
+
+            } catch(const std::exception& e) {
+                // std::cerr << "[getCameraFrame] Error: " << e.what() << std::endl;
+                // TODO: Implement createSyntheticCameraFeed();
+                // std::cerr << "[getCameraFrame] Warning: Falling back to synthetic feed not implemented" << std::endl;
+            }
+        }
+
+        void getLaneDetectionFrame() {
+            if(!m_laneDetectionSubscriber) {
+                // std::cout << "[DEBUG] Lane detection subscriber not initialized" << std::endl;
+                return;
+            }
+            
+            try {
+                zmq::pollitem_t items[] = {
+                    {static_cast<void*>(m_laneDetectionSubscriber->getSocket()), 0, ZMQ_POLLIN, 0}};
+                zmq::poll(items, 1, 5); // Short timeout to avoid blocking
+
+                if(items[0].revents & ZMQ_POLLIN) {
+                    zmq::message_t message;
+                    if(m_laneDetectionSubscriber->getSocket().recv(&message, ZMQ_DONTWAIT)) {
+                        std::cout << "[DEBUG] Received inference message, size: " << message.size() << std::endl;
+                        
+                        std::string received_msg(static_cast<char*>(message.data()), 
+                                               message.size());
+                    
+                        if(received_msg.find("inference_frame ") == 0) {
+                            std::cout << "[DEBUG] Found inference_frame header" << std::endl;
+                            std::string mask_data = received_msg.substr(16); // "inference_frame ".length()
+                            
+                            std::vector<uchar> buffer(mask_data.begin(), mask_data.end());
+                            cv::Mat binary_mask = cv::imdecode(buffer, cv::IMREAD_GRAYSCALE);
+
+                            if(!binary_mask.empty()) {
+                                std::cout << "[DEBUG] Successfully decoded lane detection mask: " 
+                                          << binary_mask.cols << "x" << binary_mask.rows << std::endl;
+                                createLaneVisualization(binary_mask);
+                                return;
+                            } else {
+                                std::cout << "[DEBUG] Failed to decode lane detection mask" << std::endl;
+                            }
+                        } else {
+                            std::cout << "[DEBUG] Received message but no inference_frame header found" << std::endl;
+                        }
+                    }
+                } else {
+                    // std::cout << "[DEBUG] No lane detection data available" << std::endl;
+                }
+                
+            } catch(const std::exception& e) {
+                std::cerr << "[getLaneDetectionFrame] Error: " << e.what() << std::endl;
+            }
+        }
+
 		void updateVisualization() {
 			if(!g_running) {
 				return;
 			}
 
 			try {
-				// Create main visualization frame (larger to accommodate camera feed)
-				m_visualizationFrame = cv::Mat::zeros(800, 1200, CV_8UC3);
+				// Adjust for 1024x600 screen - create smaller visualization (900x550)
+				m_visualizationFrame = cv::Mat::zeros(550, 900, CV_8UC3);
 
-				// Left side: Camera feed and processing
-				cv::Rect cameraRegion(10, 10, 580, 435);      // Camera feed area
-				cv::Rect trajectoryRegion(600, 10, 580, 580); // Trajectory visualization area
+				// Adjust regions for smaller window
+				cv::Rect cameraRegion(10, 10, 420, 240);        // Smaller camera feed
+				cv::Rect processedRegion(10, 260, 420, 240);    // Smaller processed view
+				cv::Rect trajectoryRegion(440, 10, 450, 450);   // Trajectory area
 
 				// Get camera frame from CameraStreamer
 				getCameraFrame();
@@ -179,31 +350,27 @@ class MPCIntegratedApp : public QObject {
 				// Draw camera feed
 				if(!m_currentCameraFrame.empty()) {
 					cv::Mat resizedCamera;
-					cv::resize(m_currentCameraFrame, resizedCamera, cv::Size(580, 435));
+					cv::resize(m_currentCameraFrame, resizedCamera, cv::Size(420, 240));
 
-					// Convert to BGR if needed
 					if(resizedCamera.channels() == 1) {
 						cv::cvtColor(resizedCamera, resizedCamera, cv::COLOR_GRAY2BGR);
 					}
 
 					resizedCamera.copyTo(m_visualizationFrame(cameraRegion));
 
-					// Add camera label
-					cv::putText(m_visualizationFrame, "Camera Feed", cv::Point(15, 35),
-					            cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 255), 2);
+					cv::putText(m_visualizationFrame, "Camera Feed", cv::Point(15, 30),
+					            cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
 				} else {
-					// No camera feed available
 					cv::rectangle(m_visualizationFrame, cameraRegion, cv::Scalar(50, 50, 50), -1);
 					cv::putText(m_visualizationFrame, "No Camera Feed",
-					            cv::Point(cameraRegion.x + 200, cameraRegion.y + 200),
-					            cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 0, 255), 2);
+					            cv::Point(cameraRegion.x + 140, cameraRegion.y + 120),
+					            cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 0, 255), 2);
 				}
 
 				// Draw processed frame (lane detection result)
-				cv::Rect processedRegion(10, 460, 580, 320);
 				if(!m_processedFrame.empty()) {
 					cv::Mat resizedProcessed;
-					cv::resize(m_processedFrame, resizedProcessed, cv::Size(580, 320));
+					cv::resize(m_processedFrame, resizedProcessed, cv::Size(420, 240));
 
 					if(resizedProcessed.channels() == 1) {
 						cv::cvtColor(resizedProcessed, resizedProcessed, cv::COLOR_GRAY2BGR);
@@ -211,21 +378,21 @@ class MPCIntegratedApp : public QObject {
 
 					resizedProcessed.copyTo(m_visualizationFrame(processedRegion));
 
-					cv::putText(m_visualizationFrame, "Lane Detection", cv::Point(15, 485),
-					            cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 255), 2);
+					cv::putText(m_visualizationFrame, "Lane Detection", cv::Point(15, 280),
+					            cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 255, 255), 1);
 				} else {
-					cv::rectangle(m_visualizationFrame, processedRegion, cv::Scalar(30, 30, 30),
-					              -1);
+					cv::rectangle(m_visualizationFrame, processedRegion, cv::Scalar(30, 30, 30), -1);
 					cv::putText(m_visualizationFrame, "No Lane Detection",
-					            cv::Point(processedRegion.x + 180, processedRegion.y + 150),
-					            cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(0, 0, 255), 2);
-				}
+					            cv::Point(processedRegion.x + 120, processedRegion.y + 120),
+					            cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 0, 255), 2);
+				}			// Right side: Trajectory visualization
+			// TODO: Implement drawTrajectoryVisualization(trajectoryRegion);
+			cv::putText(m_visualizationFrame, "Trajectory View", 
+			            cv::Point(trajectoryRegion.x + 10, trajectoryRegion.y + 30),
+			            cv::FONT_HERSHEY_SIMPLEX, 0.8, cv::Scalar(255, 255, 255), 2);
 
-				// Right side: Trajectory visualization (existing code)
-				drawTrajectoryVisualization(trajectoryRegion);
-
-				// Add system status
-				drawSystemStatus();
+				// Add compact system status
+				drawCompactSystemStatus();
 
 				// Display the frame
 				cv::imshow("MPC Integrated System", m_visualizationFrame);
@@ -252,352 +419,60 @@ class MPCIntegratedApp : public QObject {
 			}
 		}
 
-	private:
-		void getCameraFrame() {
-			try {
-				// Try multiple ZeroMQ topics and ports that CameraStreamer might use
-				static bool debug_printed = false;
-				static bool zmq_tried = false;
+        void drawCompactSystemStatus() {
+            // Compact system status for smaller screen
+            int status_x = 450;
+            int status_y = 470;
+            int line_height = 15;
 
-				// First try: ZeroMQ connection (only try once to avoid spam)
-				if(!zmq_tried) {
-					zmq_tried = true;
-					try {
-						Subscriber camera_sub;
-						camera_sub.connect("tcp://localhost:5556");
-						camera_sub.subscribe("inference_frame");
+            cv::putText(m_visualizationFrame,
+                        mpc_active ? "Mode: MPC" : "Mode: Manual",
+                        cv::Point(status_x, status_y), cv::FONT_HERSHEY_SIMPLEX, 0.5,
+                        mpc_active ? cv::Scalar(0, 255, 0) : cv::Scalar(0, 0, 255), 1);
 
-						zmq::pollitem_t items[] = {
-						    {static_cast<void *>(camera_sub.getSocket()), 0, ZMQ_POLLIN, 0}};
-						zmq::poll(items, 1, 50); // Longer timeout for first try
+            cv::putText(m_visualizationFrame,
+                        "WP: " + std::to_string(recorded_waypoints.size()),
+                        cv::Point(status_x, status_y + line_height), cv::FONT_HERSHEY_SIMPLEX, 0.4,
+                        cv::Scalar(255, 255, 255), 1);
 
-						if(items[0].revents & ZMQ_POLLIN) {
-							zmq::message_t message;
-							if(camera_sub.getSocket().recv(&message, 0)) {
-								std::string received_msg(static_cast<char *>(message.data()),
-								                         message.size());
+            cv::putText(m_visualizationFrame,
+                        "Pos: (" + std::to_string(current_state.x).substr(0, 4) + "," +
+                            std::to_string(current_state.y).substr(0, 4) + ")",
+                        cv::Point(status_x, status_y + 2*line_height), cv::FONT_HERSHEY_SIMPLEX, 0.4,
+                        cv::Scalar(255, 255, 255), 1);
 
-								if(!debug_printed) {
-									std::cout << "[DEBUG] ZeroMQ camera connected successfully"
-									          << std::endl;
-									debug_printed = true;
-								}
+            cv::putText(m_visualizationFrame,
+                        "Vel: " + std::to_string(current_state.velocity).substr(0, 4),
+                        cv::Point(status_x, status_y + 3*line_height), cv::FONT_HERSHEY_SIMPLEX, 0.4,
+                        cv::Scalar(255, 255, 255), 1);
 
-								// Try multiple topic formats
-								std::vector<std::string> topics = {
-								    "camera_frame ", "inference_frame ", "raw_frame "};
+            // Enhanced camera status
+            std::string camera_status;
+            if(m_cameraFrameAvailable && !m_currentCameraFrame.empty()) {
+                // Detect if it's synthetic
+                cv::Scalar mean_color = cv::mean(m_currentCameraFrame);
+                if(mean_color[0] < 30 && mean_color[1] < 30 && mean_color[2] < 30) {
+                    camera_status = "Cam: SYNTHETIC";
+                } else {
+                    camera_status = "Cam: REAL";
+                }
+            } else {
+                camera_status = "Cam: WAITING";
+            }
 
-								for(const auto &topic : topics) {
-									if(received_msg.find(topic) == 0) {
-										std::string frame_data = received_msg.substr(topic.size());
+            cv::putText(m_visualizationFrame, camera_status,
+                        cv::Point(status_x + 150, status_y), cv::FONT_HERSHEY_SIMPLEX, 0.4,
+                        m_cameraFrameAvailable ? cv::Scalar(0, 255, 0) : cv::Scalar(255, 255, 0), 1);
 
-										// Deserialize frame
-										std::vector<uchar> buffer(frame_data.begin(),
-										                          frame_data.end());
-										m_currentCameraFrame =
-										    cv::imdecode(buffer, cv::IMREAD_COLOR);
-
-										if(!m_currentCameraFrame.empty()) {
-											m_cameraFrameAvailable = true;
-											std::cout << "[DEBUG] ZeroMQ frame received: "
-											          << m_currentCameraFrame.cols << "x"
-											          << m_currentCameraFrame.rows << std::endl;
-											getLaneDetectionFrame();
-											return;
-										}
-									}
-								}
-							}
-						}
-					} catch(const std::exception &e) {
-						std::cout << "[DEBUG] ZeroMQ connection failed: " << e.what() << std::endl;
-					}
-				}
-
-				// Fallback: Use OpenCV VideoCapture with safer settings
-				static cv::VideoCapture cap;
-				static bool cap_initialized = false;
-				static int failed_attempts = 0;
-				static auto last_attempt = std::chrono::steady_clock::now();
-
-				// Only try to reinitialize every 5 seconds to avoid spam
-				auto now = std::chrono::steady_clock::now();
-				if(!cap_initialized &&
-				   std::chrono::duration_cast<std::chrono::seconds>(now - last_attempt).count() >
-				       5) {
-
-					last_attempt = now;
-					failed_attempts++;
-
-					if(failed_attempts > 3) {
-						// After 3 failed attempts, create a synthetic camera feed
-						createSyntheticCameraFeed();
-						return;
-					}
-
-					std::cout << "[DEBUG] Attempting to initialize camera (attempt "
-					          << failed_attempts << "/3)" << std::endl;
-
-					// Try different camera backends in order of preference
-					std::vector<int> backends = {cv::CAP_V4L2, cv::CAP_GSTREAMER, cv::CAP_ANY};
-
-					for(int backend : backends) {
-						try {
-							cap.open(0, backend);
-							if(cap.isOpened()) {
-								// Set safe parameters
-								cap.set(cv::CAP_PROP_FRAME_WIDTH, 640);
-								cap.set(cv::CAP_PROP_FRAME_HEIGHT, 480);
-								cap.set(cv::CAP_PROP_FPS, 15);
-								cap.set(cv::CAP_PROP_BUFFERSIZE, 1);
-
-								// Test if we can actually read a frame
-								cv::Mat test_frame;
-								if(cap.read(test_frame) && !test_frame.empty()) {
-									std::cout
-									    << "[DEBUG] Camera initialized successfully with backend "
-									    << backend << std::endl;
-									cap_initialized = true;
-									failed_attempts = 0;
-									break;
-								} else {
-									cap.release();
-								}
-							}
-						} catch(const std::exception &e) {
-							std::cout << "[DEBUG] Backend " << backend << " failed: " << e.what()
-							          << std::endl;
-							cap.release();
-						}
-					}
-				}
-
-				if(cap_initialized && cap.isOpened()) {
-					try {
-						cv::Mat frame;
-						if(cap.read(frame) && !frame.empty()) {
-							m_currentCameraFrame = frame.clone();
-							m_cameraFrameAvailable = true;
-
-							// Create a simple lane detection simulation for testing
-							createTestLaneDetection(frame);
-							return;
-						} else {
-							// Camera disconnected
-							cap_initialized = false;
-							cap.release();
-							std::cout << "[DEBUG] Camera disconnected, will retry..." << std::endl;
-						}
-					} catch(const std::exception &e) {
-						std::cout << "[DEBUG] Camera read error: " << e.what() << std::endl;
-						cap_initialized = false;
-						cap.release();
-					}
-				}
-
-				// If we get here, create synthetic feed
-				createSyntheticCameraFeed();
-
-			} catch(const std::exception &e) {
-				std::cerr << "[getCameraFrame] Error: " << e.what() << std::endl;
-				m_cameraFrameAvailable = false;
-				createSyntheticCameraFeed();
-			}
-		}
-
-		void createSyntheticCameraFeed() {
-			try {
-				// Create a synthetic camera feed for testing when no real camera is available
-				static int frame_counter = 0;
-				frame_counter++;
-
-				// Create a 640x480 synthetic image
-				m_currentCameraFrame = cv::Mat::zeros(480, 640, CV_8UC3);
-
-				// Add some dynamic content
-				cv::putText(m_currentCameraFrame, "SYNTHETIC CAMERA FEED", cv::Point(150, 50),
-				            cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 255, 255), 2);
-
-				cv::putText(m_currentCameraFrame, "Frame: " + std::to_string(frame_counter),
-				            cv::Point(250, 100), cv::FONT_HERSHEY_SIMPLEX, 0.8,
-				            cv::Scalar(255, 255, 255), 2);
-
-				// Add animated elements
-				int x_offset = (frame_counter * 2) % 640;
-				cv::circle(m_currentCameraFrame, cv::Point(x_offset, 200), 10,
-				           cv::Scalar(0, 255, 0), -1);
-
-				// Add fake road lines
-				cv::line(m_currentCameraFrame, cv::Point(200, 480), cv::Point(250, 200),
-				         cv::Scalar(255, 255, 255), 3);
-				cv::line(m_currentCameraFrame, cv::Point(390, 200), cv::Point(440, 480),
-				         cv::Scalar(255, 255, 255), 3);
-
-				m_cameraFrameAvailable = true;
-
-				// Create test lane detection
-				createTestLaneDetection(m_currentCameraFrame);
-
-			} catch(const std::exception &e) {
-				std::cerr << "[createSyntheticCameraFeed] Error: " << e.what() << std::endl;
-				m_cameraFrameAvailable = false;
-			}
-		}
-
-		void createTestLaneDetection(const cv::Mat &frame) {
-			try {
-				// Create a simple test lane detection for debugging
-				cv::Mat gray, binary_mask;
-				cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
-
-				// Simple threshold to create fake lane detection
-				cv::threshold(gray, binary_mask, 100, 255, cv::THRESH_BINARY);
-
-				// Add some fake lane lines that are more visible
-				cv::line(binary_mask, cv::Point(frame.cols * 0.25, frame.rows),
-				         cv::Point(frame.cols * 0.35, frame.rows * 0.3), cv::Scalar(255), 8);
-				cv::line(binary_mask, cv::Point(frame.cols * 0.65, frame.rows * 0.3),
-				         cv::Point(frame.cols * 0.75, frame.rows), cv::Scalar(255), 8);
-
-				// Add center dashed line
-				for(int y = frame.rows * 0.3; y < frame.rows; y += 40) {
-					cv::line(binary_mask, cv::Point(frame.cols * 0.5, y),
-					         cv::Point(frame.cols * 0.5, y + 20), cv::Scalar(255), 4);
-				}
-
-				if(!binary_mask.empty()) {
-					createLaneVisualization(binary_mask);
-				}
-			} catch(const std::exception &e) {
-				std::cerr << "[createTestLaneDetection] Error: " << e.what() << std::endl;
-			}
-		}
-
-		void drawTrajectoryVisualization(const cv::Rect &region) {
-			// Draw trajectory visualization in the specified region
-			cv::Mat trajectoryArea = m_visualizationFrame(region);
-			trajectoryArea.setTo(cv::Scalar(20, 20, 20));
-
-			// Draw coordinate system
-			cv::Point2f center(region.width / 2, region.height / 2);
-			cv::line(m_visualizationFrame, cv::Point(region.x + center.x, region.y + 50),
-			         cv::Point(region.x + center.x, region.y + region.height - 50),
-			         cv::Scalar(100, 100, 100), 1);
-			cv::line(m_visualizationFrame, cv::Point(region.x + 50, region.y + center.y),
-			         cv::Point(region.x + region.width - 50, region.y + center.y),
-			         cv::Scalar(100, 100, 100), 1);
-
-			// Draw current vehicle position (center)
-			cv::Point2f vehicle_pos(region.x + center.x, region.y + center.y);
-			cv::circle(m_visualizationFrame, vehicle_pos, 8, cv::Scalar(0, 255, 0), -1);
-			cv::putText(m_visualizationFrame, "Vehicle",
-			            cv::Point(vehicle_pos.x + 10, vehicle_pos.y + 5), cv::FONT_HERSHEY_SIMPLEX,
-			            0.5, cv::Scalar(0, 255, 0), 1);
-
-			// Draw recorded waypoints
-			if(!recorded_waypoints.empty()) {
-				for(size_t i = 0; i < recorded_waypoints.size(); ++i) {
-					cv::Point2f wp_pos(
-					    region.x + center.x + recorded_waypoints[i].x * 20, // Scale factor
-					    region.y + center.y - recorded_waypoints[i].y * 20  // Invert Y and scale
-					);
-
-					// Ensure points are within region
-					if(wp_pos.x >= region.x && wp_pos.x < region.x + region.width &&
-					   wp_pos.y >= region.y && wp_pos.y < region.y + region.height) {
-						cv::circle(m_visualizationFrame, wp_pos, 3, cv::Scalar(255, 0, 0), -1);
-
-						// Draw line between consecutive waypoints
-						if(i > 0) {
-							cv::Point2f prev_wp(
-							    region.x + center.x + recorded_waypoints[i - 1].x * 20,
-							    region.y + center.y - recorded_waypoints[i - 1].y * 20);
-							if(prev_wp.x >= region.x && prev_wp.x < region.x + region.width &&
-							   prev_wp.y >= region.y && prev_wp.y < region.y + region.height) {
-								cv::line(m_visualizationFrame, prev_wp, wp_pos,
-								         cv::Scalar(255, 0, 0), 2);
-							}
-						}
-					}
-				}
-			}
-
-			// Draw vehicle orientation
-			double yaw_vis = current_state.yaw;
-			cv::Point2f direction_end(vehicle_pos.x + 30 * cos(yaw_vis),
-			                          vehicle_pos.y - 30 * sin(yaw_vis) // Invert Y
-			);
-			cv::arrowedLine(m_visualizationFrame, vehicle_pos, direction_end,
-			                cv::Scalar(0, 255, 255), 2);
-
-			// Add trajectory label
-			cv::putText(m_visualizationFrame, "Trajectory Visualization",
-			            cv::Point(region.x + 10, region.y + 25), cv::FONT_HERSHEY_SIMPLEX, 0.6,
-			            cv::Scalar(255, 255, 255), 1);
-		}
-
-		void drawSystemStatus() {
-			// Draw system status on the right side
-			int status_x = 610;
-			int status_y = 620;
-
-			cv::putText(m_visualizationFrame,
-			            mpc_active ? "Mode: MPC (Autonomous)" : "Mode: Manual",
-			            cv::Point(status_x, status_y), cv::FONT_HERSHEY_SIMPLEX, 0.7,
-			            mpc_active ? cv::Scalar(0, 255, 0) : cv::Scalar(0, 0, 255), 2);
-
-			cv::putText(m_visualizationFrame,
-			            "Waypoints: " + std::to_string(recorded_waypoints.size()),
-			            cv::Point(status_x, status_y + 30), cv::FONT_HERSHEY_SIMPLEX, 0.6,
-			            cv::Scalar(255, 255, 255), 1);
-
-			cv::putText(m_visualizationFrame,
-			            "Position: (" + std::to_string(current_state.x).substr(0, 5) + ", " +
-			                std::to_string(current_state.y).substr(0, 5) + ")",
-			            cv::Point(status_x, status_y + 60), cv::FONT_HERSHEY_SIMPLEX, 0.6,
-			            cv::Scalar(255, 255, 255), 1);
-
-			cv::putText(m_visualizationFrame,
-			            "Velocity: " + std::to_string(current_state.velocity).substr(0, 5) + " m/s",
-			            cv::Point(status_x, status_y + 90), cv::FONT_HERSHEY_SIMPLEX, 0.6,
-			            cv::Scalar(255, 255, 255), 1);
-
-			cv::putText(m_visualizationFrame, "MPC Steps: " + std::to_string(step_counter),
-			            cv::Point(status_x, status_y + 120), cv::FONT_HERSHEY_SIMPLEX, 0.6,
-			            cv::Scalar(255, 255, 255), 1);
-
-			// Enhanced camera status with source indication
-			std::string camera_status;
-			if(m_cameraFrameAvailable && !m_currentCameraFrame.empty()) {
-				camera_status = "Connected (" + std::to_string(m_currentCameraFrame.cols) + "x" +
-				                std::to_string(m_currentCameraFrame.rows) + ")";
-
-				// Detect if it's synthetic by checking for specific text
-				cv::Mat gray;
-				cv::cvtColor(m_currentCameraFrame, gray, cv::COLOR_BGR2GRAY);
-				if(cv::mean(gray)[0] < 50) { // Mostly black = synthetic
-					camera_status += " [SYNTHETIC]";
-				}
-			} else {
-				camera_status = "Disconnected";
-			}
-
-			cv::putText(m_visualizationFrame, std::string("Camera: ") + camera_status,
-			            cv::Point(status_x, status_y + 150), cv::FONT_HERSHEY_SIMPLEX, 0.6,
-			            m_cameraFrameAvailable ? cv::Scalar(0, 255, 0) : cv::Scalar(0, 0, 255), 1);
-
-			// Add debug info
-			cv::putText(m_visualizationFrame, "ZMQ Port: 5556", cv::Point(status_x, status_y + 180),
-			            cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(150, 150, 150), 1);
-
-			// Instructions
-			cv::putText(
-			    m_visualizationFrame, "Commands: m(mode) r(record) c(clear) s(status) q(quit)",
-			    cv::Point(10, 790), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(200, 200, 200), 1);
-		}
+            // Compact instructions
+            cv::putText(m_visualizationFrame, 
+                        "m:mode r:rec c:clear s:status q:quit",
+                        cv::Point(10, 530), cv::FONT_HERSHEY_SIMPLEX, 0.4, 
+                        cv::Scalar(200, 200, 200), 1);
+        }
 
 		void setupVisualization() {
-			// Create larger OpenCV window for camera feed
+			// Create appropriately sized OpenCV window for 1024x600 screen
 			cv::namedWindow("MPC Integrated System", cv::WINDOW_AUTOSIZE);
 
 			// Setup visualization timer
@@ -605,6 +480,17 @@ class MPCIntegratedApp : public QObject {
 			connect(m_visualizationTimer, &QTimer::timeout, this,
 			        &MPCIntegratedApp::updateVisualization);
 			m_visualizationTimer->start(50); // 20 FPS
+			
+			// Initialize persistent lane detection subscriber
+			try {
+				m_laneDetectionSubscriber = std::make_unique<Subscriber>();
+				m_laneDetectionSubscriber->connect("tcp://localhost:5556");
+				m_laneDetectionSubscriber->subscribe("inference_frame");
+				std::cout << "[DEBUG] Lane detection subscriber initialized" << std::endl;
+			} catch(const std::exception& e) {
+				std::cerr << "[setupVisualization] Failed to initialize lane detection subscriber: " 
+				          << e.what() << std::endl;
+			}
 		}
 
 		void handleRecordCommand() {
@@ -708,22 +594,82 @@ class MPCIntegratedApp : public QObject {
 			std::cout << "MPC Steps: " << step_counter << std::endl;
 			std::cout << "===============\n" << std::endl;
 		}
+
+        void createLaneVisualization(const cv::Mat& binary_mask) {
+            try {
+                if(binary_mask.empty()) {
+                    return;
+                }
+
+                // Create a colored visualization from the binary mask
+                cv::Mat colored_lanes;
+                cv::cvtColor(binary_mask, colored_lanes, cv::COLOR_GRAY2BGR);
+
+                // Enhance lane lines with color overlay
+                cv::Mat lane_overlay = cv::Mat::zeros(binary_mask.size(), CV_8UC3);
+                
+                // Find contours to identify lane lines
+                std::vector<std::vector<cv::Point>> contours;
+                cv::findContours(binary_mask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+                // Draw lane lines in different colors
+                for(size_t i = 0; i < contours.size(); ++i) {
+                    if(cv::contourArea(contours[i]) > 100) { // Filter small noise
+                        cv::Scalar color;
+                        if(i % 3 == 0) color = cv::Scalar(0, 255, 0);      // Green
+                        else if(i % 3 == 1) color = cv::Scalar(255, 0, 0); // Blue
+                        else color = cv::Scalar(0, 255, 255);              // Yellow
+                        
+                        cv::drawContours(lane_overlay, contours, static_cast<int>(i), color, 2);
+                    }
+                }
+
+                // Blend the original mask with colored overlay
+                cv::addWeighted(colored_lanes, 0.7, lane_overlay, 0.3, 0, m_processedFrame);
+
+                // Add lane detection info text
+                cv::putText(m_processedFrame, "Lanes: " + std::to_string(contours.size()), 
+                           cv::Point(10, 30), cv::FONT_HERSHEY_SIMPLEX, 0.7, 
+                           cv::Scalar(255, 255, 255), 2);
+
+            } catch(const std::exception& e) {
+                std::cerr << "[createLaneVisualization] Error: " << e.what() << std::endl;
+                // Create a simple error visualization
+                m_processedFrame = cv::Mat::zeros(binary_mask.size(), CV_8UC3);
+                cv::putText(m_processedFrame, "Lane Processing Error", 
+                           cv::Point(50, binary_mask.rows/2), cv::FONT_HERSHEY_SIMPLEX, 
+                           0.8, cv::Scalar(0, 0, 255), 2);
+            }
+        }
 };
 
 int main(int argc, char *argv[]) {
+	// Initialize Qt application first
 	QApplication app(argc, argv);
 
 	std::cout << "Iniciando sistema integrado MPC + Car Controls..." << std::endl;
 
+	// Set up proper signal handling before creating objects
+	signal(SIGINT, signalHandler);
+	signal(SIGTERM, signalHandler);
+
 	try {
-		MPCIntegratedApp integrated_app(argc, argv);
+		// Create the integrated app with proper exception handling
+		std::unique_ptr<MPCIntegratedApp> integrated_app;
+		
+		try {
+			integrated_app = std::make_unique<MPCIntegratedApp>(argc, argv);
+		} catch(const std::exception& e) {
+			std::cerr << "Failed to initialize application: " << e.what() << std::endl;
+			return 1;
+		}
 
 		std::cout << "Sistema pronto! Use os comandos no terminal ou na janela OpenCV."
 		          << std::endl;
 		std::cout << "Pressione Ctrl+C ou 'q' para sair." << std::endl;
 
 		// Setup periodic check for global running flag
-		QTimer *shutdown_timer = new QTimer();
+		QTimer *shutdown_timer = new QTimer(&app);
 		QObject::connect(shutdown_timer, &QTimer::timeout, [&]() {
 			if(!g_running) {
 				cv::destroyAllWindows();
@@ -735,12 +681,18 @@ int main(int argc, char *argv[]) {
 		int result = app.exec();
 
 		// Cleanup
+		integrated_app.reset(); // Explicit cleanup before destroying windows
 		cv::destroyAllWindows();
+		
+		// Final cleanup of singletons
+		Publisher::destroyAll();
+		
 		return result;
 
 	} catch(const std::exception &e) {
 		std::cerr << "Erro: " << e.what() << std::endl;
 		cv::destroyAllWindows();
+		Publisher::destroyAll();
 		return 1;
 	}
 }

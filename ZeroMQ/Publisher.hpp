@@ -8,6 +8,7 @@
 #include <opencv2/core/cuda.hpp>
 #include <opencv2/opencv.hpp>
 #include <thread>
+#include <unordered_map>
 #include <zmq.hpp>
 
 class Publisher {

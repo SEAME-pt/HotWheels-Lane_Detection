@@ -7,7 +7,7 @@ PROJECT_PATH="/home/jetson/Documents/MPC"
 LOCAL_PATH="/home/michel-batista/Documents/SEA_ME/HotWheels-Lane_Detection"
 
 echo "Sincronizando apenas arquivos modificados..."
-rsync -avz --update --exclude='.git' --exclude='build/' --exclude='*.o' --exclude='*.sh' --exclude='*.tmp' --dry-run $LOCAL_PATH/ $JETSON_USER@$JETSON_HOST:$PROJECT_PATH/
+rsync -avz --update --exclude='.git' --exclude='build/' --exclude='*.o' --exclude='*.sh' --exclude='*.txt' --exclude='*.tmp' --dry-run $LOCAL_PATH/ $JETSON_USER@$JETSON_HOST:$PROJECT_PATH/
 
 read -p "Confirmar sincronização? (y/n): " -n 1 -r
 echo
