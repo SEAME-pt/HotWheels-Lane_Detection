@@ -79,8 +79,11 @@ class MPCIntegratedApp : public QObject {
 				std::cout << "Sistema iniciado com controle manual" << std::endl;
 				std::cout << "Comandos disponíveis:" << std::endl;
 				std::cout << "- Use joystick para mover e gravar trajetória" << std::endl;
-				std::cout << "- Pressione ENTER para alternar Manual/MPC" << std::endl;
+				std::cout << "- Pressione ENTER ou 'm' para alternar Manual/MPC" << std::endl;
 				std::cout << "- Pressione 'r' para iniciar/parar gravação" << std::endl;
+				std::cout << "- Pressione 'd' para ativar/desativar logs detalhados do MPC"
+				          << std::endl;
+				std::cout << "- Pressione 's' para mostrar status do sistema" << std::endl;
 				std::cout << "- Pressione 'q' para sair" << std::endl;
 
 				// Conectar stdin para comandos
@@ -173,12 +176,51 @@ class MPCIntegratedApp : public QObject {
 
 				// Por enquanto, apenas log
 				step_counter++;
-				if(step_counter % 20 == 0) {
-					std::cout << "MPC Step " << step_counter << " | Throttle: " << std::fixed
-					          << std::setprecision(3) << control.throttle
-					          << " | Steering: " << control.steer
-					          << " | Target Speed: " << mpc_speed
-					          << " | Target Steering: " << mpc_steering << std::endl;
+				if(step_counter % 10 == 0) { // More frequent logging for MPC data
+					std::cout << "\n=== MPC CONTROL STEP " << step_counter << " ===" << std::endl;
+					std::cout << "[MPC] Vehicle State:" << std::endl;
+					std::cout << "  Position: (" << std::fixed << std::setprecision(3)
+					          << current_state.x << ", " << current_state.y << ")" << std::endl;
+					std::cout << "  Velocity: " << current_state.velocity << " m/s" << std::endl;
+					std::cout << "  Yaw: " << current_state.yaw * 180 / M_PI << " degrees"
+					          << std::endl;
+
+					std::cout << "[MPC] Control Commands:" << std::endl;
+					std::cout << "  Throttle: " << std::fixed << std::setprecision(3)
+					          << control.throttle << " (Target Speed: " << mpc_speed << "%)"
+					          << std::endl;
+					std::cout << "  Steering: " << control.steer << " rad (Target: " << mpc_steering
+					          << " degrees)" << std::endl;
+
+					std::cout << "[MPC] Reference Trajectory:" << std::endl;
+					if(!m_predictedTrajectory.empty()) {
+						std::cout << "  Using LANE DETECTION trajectory ("
+						          << m_predictedTrajectory.size() << " points)" << std::endl;
+						// Show next 3 target points
+						std::cout << "  Next targets:" << std::endl;
+						for(size_t i = 0; i < std::min(size_t(3), m_predictedTrajectory.size());
+						    i++) {
+							std::cout << "    [" << i << "] x=" << std::fixed
+							          << std::setprecision(3) << m_predictedTrajectory[i].x
+							          << "m, y=" << m_predictedTrajectory[i].y << "m" << std::endl;
+						}
+					} else if(!recorded_waypoints.empty()) {
+						std::cout << "  Using RECORDED trajectory (" << recorded_waypoints.size()
+						          << " points)" << std::endl;
+					}
+
+					// Show MPC internal prediction
+					const auto &predicted_traj = mpc_planner->getPredictedTrajectory();
+					if(!predicted_traj.empty()) {
+						std::cout << "[MPC] Internal Prediction (" << predicted_traj.size()
+						          << " points):" << std::endl;
+						for(size_t i = 0; i < std::min(size_t(3), predicted_traj.size()); i++) {
+							std::cout << "    [" << i << "] x=" << std::fixed
+							          << std::setprecision(3) << predicted_traj[i].x
+							          << "m, y=" << predicted_traj[i].y << "m" << std::endl;
+						}
+					}
+					std::cout << "================================\n" << std::endl;
 				}
 
 				// Simular atualização do estado (em um sistema real,
@@ -217,12 +259,18 @@ class MPCIntegratedApp : public QObject {
 			} else if(input == "s") {
 				// Mostrar status
 				showStatus();
+			} else if(input == "d") {
+				// Toggle detailed MPC logs
+				static bool detailed_logs = false;
+				detailed_logs = !detailed_logs;
+				std::cout << "Logs detalhados do MPC: "
+				          << (detailed_logs ? "ATIVADOS" : "DESATIVADOS") << std::endl;
 			} else if(input == "q") {
 				// Sair
 				QApplication::quit();
 			} else {
 				std::cout << "Comando não reconhecido. Use: m(modo), r(gravar), c(limpar), "
-				             "s(status), q(sair)"
+				             "d(debug), s(status), q(sair)"
 				          << std::endl;
 			}
 		}
@@ -345,6 +393,28 @@ class MPCIntegratedApp : public QObject {
 				if(!mask.empty()) {
 					// Process the mask for MPC trajectory generation
 					createLaneVisualization(mask);
+
+					// Log lane detection data
+					static int inference_counter = 0;
+					if(++inference_counter % 30 == 0) { // Log every 30th inference
+						std::cout << "\n=== LANE DETECTION DATA ===" << std::endl;
+						std::cout << "[LaneDetection] Mask size: " << mask.cols << "x" << mask.rows
+						          << std::endl;
+
+						// Count white pixels (detected lanes)
+						int white_pixels = cv::countNonZero(mask);
+						double lane_coverage = (white_pixels * 100.0) / (mask.cols * mask.rows);
+						std::cout << "[LaneDetection] Lane pixels: " << white_pixels << " ("
+						          << std::fixed << std::setprecision(1) << lane_coverage
+						          << "% coverage)" << std::endl;
+
+						if(!m_predictedTrajectory.empty()) {
+							std::cout << "[LaneDetection] Generated "
+							          << m_predictedTrajectory.size()
+							          << " trajectory points for MPC" << std::endl;
+						}
+						std::cout << "===========================\n" << std::endl;
+					}
 				} else {
 					std::cerr << "[executeLocalInference] Warning: Empty mask from inference"
 					          << std::endl;
@@ -656,15 +726,39 @@ class MPCIntegratedApp : public QObject {
 		}
 
 		void showStatus() {
-			std::cout << "\n=== STATUS ===" << std::endl;
+			std::cout << "\n========== SYSTEM STATUS ==========" << std::endl;
 			std::cout << "Modo: " << (mpc_active ? "MPC (Autônomo)" : "Manual") << std::endl;
+			std::cout << "MPC Steps executados: " << step_counter << std::endl;
+
+			std::cout << "\n--- Trajetórias ---" << std::endl;
 			std::cout << "Waypoints gravados: " << recorded_waypoints.size() << std::endl;
+			std::cout << "Trajetória MPC (lane detection): " << m_predictedTrajectory.size()
+			          << " pontos" << std::endl;
+
+			std::cout << "\n--- Estado do Veículo ---" << std::endl;
 			std::cout << "Posição atual: (" << std::fixed << std::setprecision(2) << current_state.x
 			          << ", " << current_state.y << ")" << std::endl;
 			std::cout << "Velocidade: " << current_state.velocity << " m/s" << std::endl;
 			std::cout << "Orientação: " << current_state.yaw * 180 / M_PI << " graus" << std::endl;
-			std::cout << "MPC Steps: " << step_counter << std::endl;
-			std::cout << "===============\n" << std::endl;
+
+			std::cout << "\n--- Sistema de Visão ---" << std::endl;
+			std::cout << "Camera frame disponível: " << (m_cameraFrameAvailable ? "SIM" : "NÃO")
+			          << std::endl;
+			std::cout << "TensorRT inferencer: " << (m_inferencer ? "ATIVO" : "INATIVO")
+			          << std::endl;
+			std::cout << "Processed frame: " << (!m_processedFrame.empty() ? "SIM" : "NÃO")
+			          << std::endl;
+
+			if(!m_currentLaneMask.empty()) {
+				int white_pixels = cv::countNonZero(m_currentLaneMask);
+				double coverage =
+				    (white_pixels * 100.0) / (m_currentLaneMask.cols * m_currentLaneMask.rows);
+				std::cout << "Lane mask: " << m_currentLaneMask.cols << "x"
+				          << m_currentLaneMask.rows << " (" << std::fixed << std::setprecision(1)
+				          << coverage << "% cobertura)" << std::endl;
+			}
+
+			std::cout << "===================================\n" << std::endl;
 		}
 
 		void createLaneVisualization(const cv::Mat &binary_mask) {
@@ -786,11 +880,66 @@ class MPCIntegratedApp : public QObject {
 					// Smooth the trajectory using simple moving average
 					smoothTrajectory(m_predictedTrajectory);
 
-					// Only log occasionally to avoid spam
+					// Enhanced logging for MPC trajectory data
 					static int log_counter = 0;
-					if(++log_counter % 30 == 0) { // Log every 30th trajectory
+					if(++log_counter % 20 == 0) { // Log every 20th trajectory
+						std::cout << "\n=== MPC TRAJECTORY DATA ===" << std::endl;
 						std::cout << "[MPC] Generated trajectory with "
 						          << m_predictedTrajectory.size() << " points" << std::endl;
+						std::cout << "[MPC] Lane pixels detected: " << centerline_points.size()
+						          << " centerline points" << std::endl;
+
+						// Show first few trajectory points
+						std::cout << "[MPC] Trajectory preview (first 5 points):" << std::endl;
+						for(size_t i = 0; i < std::min(size_t(5), m_predictedTrajectory.size());
+						    i++) {
+							std::cout << "  Point " << i << ": x=" << std::fixed
+							          << std::setprecision(3) << m_predictedTrajectory[i].x
+							          << "m, y=" << m_predictedTrajectory[i].y << "m" << std::endl;
+						}
+
+						// Show trajectory curvature analysis
+						if(m_predictedTrajectory.size() >= 3) {
+							double total_curvature = 0.0;
+							for(size_t i = 1; i < m_predictedTrajectory.size() - 1; i++) {
+								double dx1 =
+								    m_predictedTrajectory[i].x - m_predictedTrajectory[i - 1].x;
+								double dy1 =
+								    m_predictedTrajectory[i].y - m_predictedTrajectory[i - 1].y;
+								double dx2 =
+								    m_predictedTrajectory[i + 1].x - m_predictedTrajectory[i].x;
+								double dy2 =
+								    m_predictedTrajectory[i + 1].y - m_predictedTrajectory[i].y;
+
+								double angle1 = atan2(dy1, dx1);
+								double angle2 = atan2(dy2, dx2);
+								double curvature = angle2 - angle1;
+
+								// Normalize angle difference
+								while(curvature > M_PI)
+									curvature -= 2.0 * M_PI;
+								while(curvature < -M_PI)
+									curvature += 2.0 * M_PI;
+
+								total_curvature += abs(curvature);
+							}
+
+							double avg_curvature =
+							    total_curvature / (m_predictedTrajectory.size() - 2);
+							std::cout << "[MPC] Average curvature: " << std::fixed
+							          << std::setprecision(4) << avg_curvature << " rad/point"
+							          << std::endl;
+
+							// Classify trajectory type
+							if(avg_curvature < 0.1) {
+								std::cout << "[MPC] Trajectory type: STRAIGHT" << std::endl;
+							} else if(avg_curvature < 0.3) {
+								std::cout << "[MPC] Trajectory type: GENTLE_CURVE" << std::endl;
+							} else {
+								std::cout << "[MPC] Trajectory type: SHARP_CURVE" << std::endl;
+							}
+						}
+						std::cout << "========================\n" << std::endl;
 					}
 				}
 

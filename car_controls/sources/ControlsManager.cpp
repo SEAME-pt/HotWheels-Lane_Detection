@@ -77,7 +77,7 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
 		try {
 			// Use video file instead of camera for testing
 			bool use_video = true;
-			std::string video_path = "/home/jetson/Videos/output_objdetect_train.avi";
+			std::string video_path = "/home/jetson/Videos/output_1803ok.avi";
 
 			m_cameraStreamerObject = new CameraStreamer(0.5, use_video, video_path);
 			m_cameraStreamerObject->start();

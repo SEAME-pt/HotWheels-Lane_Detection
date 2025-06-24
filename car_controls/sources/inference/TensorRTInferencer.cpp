@@ -246,12 +246,43 @@ cv::cuda::GpuMat TensorRTInferencer::makePrediction(const cv::cuda::GpuMat &gpuI
 
 	runInference(gpuInputFloat); // Run inference
 
-	int height = outputDims.d[1];
-	int width = outputDims.d[2];
+	// Extract output dimensions correctly based on the tensor shape
+	int height, width;
+	if(outputDims.nbDims == 4) {
+		// Format: [batch, height, width, channels] or [batch, channels, height, width]
+		// Based on the debug output, our model uses [batch, height, width, channels]
+		height = static_cast<int>(outputDims.d[1]);
+		width = static_cast<int>(outputDims.d[2]);
+	} else if(outputDims.nbDims == 3) {
+		// Format: [height, width, channels] or [channels, height, width]
+		height = static_cast<int>(outputDims.d[0]);
+		width = static_cast<int>(outputDims.d[1]);
+	} else {
+		std::cerr << "[TensorRTInferencer] Unsupported output dimensions: " << outputDims.nbDims << std::endl;
+		throw std::runtime_error("Unsupported output tensor dimensions");
+	}
+
+	// Debug: Check output dimensions
+	if(height <= 0 || width <= 0 || height > 10000 || width > 10000) {
+		std::cerr << "[TensorRTInferencer] Invalid output dimensions: " << width << "x" << height
+		          << std::endl;
+		std::cerr << "[TensorRTInferencer] OutputDims: nbDims=" << outputDims.nbDims;
+		for(int i = 0; i < outputDims.nbDims; i++) {
+			std::cerr << " d[" << i << "]=" << outputDims.d[i];
+		}
+		std::cerr << std::endl;
+		throw std::runtime_error("Invalid output dimensions detected");
+	}
 
 	// Allocate or resize the output mask on GPU if it's not allocated or has wrong size
 	if(outputMaskGpu.empty() || outputMaskGpu.rows != height || outputMaskGpu.cols != width) {
-		outputMaskGpu = cv::cuda::GpuMat(height, width, CV_32F);
+		try {
+			outputMaskGpu = cv::cuda::GpuMat(height, width, CV_32F);
+		} catch(const cv::Exception &e) {
+			std::cerr << "[TensorRTInferencer] Failed to create GpuMat with dimensions " << width
+			          << "x" << height << ": " << e.what() << std::endl;
+			throw;
+		}
 	}
 
 	// Copy the raw prediction output from TensorRT device memory to `outputMaskGpu`
@@ -303,6 +334,23 @@ void TensorRTInferencer::doInference(const cv::Mat &frame) {
 	// Log de monitoramento do frame recebido
 	std::cout << "[LaneDetection] Frame shape: " << frame.cols << "x" << frame.rows
 	          << ", type: " << frame.type() << ", sum: " << cv::sum(frame)[0] << std::endl;
+
+	// Debug: Log model dimensions
+	static bool first_run = true;
+	if(first_run) {
+		std::cout << "[TensorRTInferencer] Input dims: " << inputDims.nbDims;
+		for(int i = 0; i < inputDims.nbDims; i++) {
+			std::cout << " d[" << i << "]=" << inputDims.d[i];
+		}
+		std::cout << std::endl;
+
+		std::cout << "[TensorRTInferencer] Output dims: " << outputDims.nbDims;
+		for(int i = 0; i < outputDims.nbDims; i++) {
+			std::cout << " d[" << i << "]=" << outputDims.d[i];
+		}
+		std::cout << std::endl;
+		first_run = false;
+	}
 
 	// Redimensiona o frame para 1280x720 se necessário
 	cv::Mat resized_frame;
