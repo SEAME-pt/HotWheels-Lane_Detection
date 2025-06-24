@@ -23,7 +23,12 @@ class TensorRTInferencer : public IInferencer {
 		class Logger : public nvinfer1::ILogger {
 			public:
 				void log(Severity severity, const char *msg) noexcept override;
-		} logger;
+		};
+
+		static Logger &getLogger() {
+			static Logger instance;
+			return instance;
+		}
 
 		std::vector<char> engineData;
 		nvinfer1::IRuntime *runtime;
