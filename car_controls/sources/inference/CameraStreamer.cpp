@@ -81,12 +81,13 @@ void CameraStreamer::segmentationWorker() {
 	while(m_running) {
 		cv::Mat frame;
 		if(segmentationBuffer.getFrame(frame)) {
-			std::cout << "[DEBUG] Segmentation worker got frame: " << frame.cols << "x" << frame.rows << std::endl;
-			
+			std::cout << "[DEBUG] Segmentation worker got frame: " << frame.cols << "x"
+			          << frame.rows << std::endl;
+
 			// auto start = std::chrono::high_resolution_clock::now();
 
 			segmentationInferencer->doInference(frame);
-			
+
 			// Publishing is now handled directly by TensorRTInferencer::doInference()
 			// No need to publish here anymore
 
@@ -163,14 +164,13 @@ void CameraStreamer::captureLoop() {
 		auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
 
 		if(elapsed >= 10) { // Log every 10 seconds instead of every second
-			std::cout << "[CameraStreamer] Average FPS: " << frame_count / static_cast<double>(elapsed)
-			          << std::endl;
+			std::cout << "[CameraStreamer] Average FPS: "
+			          << frame_count / static_cast<double>(elapsed) << std::endl;
 			start_time = now;
 			frame_count = 0;
 		}
 	}
 }
-
 
 void CameraStreamer::stop() {
 	if(!m_running)

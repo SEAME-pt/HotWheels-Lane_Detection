@@ -87,9 +87,9 @@ class CameraStreamer {
 		bool m_running;
 
 		Publisher *m_publisherFrameObject;
-		
+
 		// ZeroMQ Publishers (raw pointers to singletons - we don't own them)
-		Publisher* m_rawFramePublisher;
+		Publisher *m_rawFramePublisher;
 		// Removed: m_inferencePublisher - now handled by TensorRTInferencer directly
 
 		std::shared_ptr<TensorRTInferencer> segmentationInferencer;

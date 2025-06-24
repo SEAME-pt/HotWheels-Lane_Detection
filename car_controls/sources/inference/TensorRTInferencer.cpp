@@ -320,9 +320,9 @@ void TensorRTInferencer::initUndistortMaps() {
 }
 
 void TensorRTInferencer::doInference(const cv::Mat &frame) {
-	std::cout << "[DEBUG] TensorRTInferencer::doInference called with frame size: " 
-	          << frame.cols << "x" << frame.rows << std::endl;
-	
+	std::cout << "[DEBUG] TensorRTInferencer::doInference called with frame size: " << frame.cols
+	          << "x" << frame.rows << std::endl;
+
 	if(frame.empty()) {
 		throw std::runtime_error("Input frame is empty");
 	}
