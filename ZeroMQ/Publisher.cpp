@@ -3,12 +3,15 @@
 std::unordered_map<int, Publisher *> Publisher::instances;
 
 Publisher::Publisher(int port)
-    : context(1), publisher(context, ZMQ_PUB), joytstick_value(true), running(false) {
+    : context(1), publisher(context, ZMQ_PUB), joytstick_value(true), running(false),
+      isActive(true) {
 	boundAddress = "tcp://*:" + std::to_string(port);
 	publisher.bind(boundAddress); // Dynamic port binding
 }
 
 Publisher::~Publisher() {
+	std::lock_guard<std::mutex> lock(active_mtx);
+	isActive = false;
 	try {
 		publisher.unbind(boundAddress); // Use stored address
 		publisher.close();
@@ -30,12 +33,24 @@ Publisher *Publisher::instance(int port) {
 
 void Publisher::destroyAll() {
 	for(auto &pair : instances) {
+		if(pair.second) {
+			std::lock_guard<std::mutex> lock(pair.second->active_mtx);
+			pair.second->isActive = false;
+		}
 		delete pair.second;
 	}
 	instances.clear();
 }
 
 void Publisher::publish(const std::string &topic, const std::string &message) {
+	{
+		std::lock_guard<std::mutex> lock(active_mtx);
+		if(!isActive) {
+			// Optionally log: std::cerr << "[Publisher] Skipped publish (inactive) for topic: " <<
+			// topic << std::endl;
+			return;
+		}
+	}
 	// Silent publishing - only log errors
 	std::string full_message = topic + " " + message;
 	zmq::message_t zmq_message(full_message.begin(), full_message.end());
@@ -61,10 +76,7 @@ void Publisher::setJoystickStatus(bool new_joytstick_value) {
 
 void Publisher::publishInferenceFrame(const std::string &topic, const cv::cuda::GpuMat &gpu_image) {
 	std::lock_guard<std::mutex> lock(frame_mtx); // Ensure thread safety
-	
-	std::cout << "[DEBUG] publishInferenceFrame called with topic: " << topic 
-	          << ", GPU image size: " << gpu_image.cols << "x" << gpu_image.rows << std::endl;
-	
+
 	try {
 		// Download GPU image to CPU
 		cv::Mat cpu_image;
@@ -74,9 +86,6 @@ void Publisher::publishInferenceFrame(const std::string &topic, const cv::cuda::
 			std::cerr << "[Publisher] Skipped: empty CPU image." << std::endl;
 			return;
 		}
-
-		std::cout << "[DEBUG] CPU image downloaded successfully, size: " 
-		          << cpu_image.cols << "x" << cpu_image.rows << std::endl;
 
 		// Encode to JPEG
 		std::vector<uchar> encoded;
@@ -95,8 +104,8 @@ void Publisher::publishInferenceFrame(const std::string &topic, const cv::cuda::
 		zmq::message_t zmq_message(messageData.data(), messageData.size());
 		publisher.send(zmq_message);
 
-		std::cout << "[DEBUG] Successfully sent inference frame to topic: " << topic 
-		          << ", message size: " << messageData.size() << " bytes" << std::endl;
+		// std::cout << "[Publisher] Sent image as single-part message. Size: " <<
+		// messageData.size() << std::endl;
 	} catch(const std::exception &e) {
 		std::cerr << "[Publisher] Failed to publish image: " << e.what() << std::endl;
 	}

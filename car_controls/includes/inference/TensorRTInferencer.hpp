@@ -61,6 +61,8 @@ class TensorRTInferencer : public IInferencer {
 
 		Publisher *m_publisherObject;
 
+		cv::Mat lastMask;
+
 		std::vector<char> readEngineFile(const std::string &enginePath);
 		void cleanupResources();
 
@@ -84,5 +86,8 @@ class TensorRTInferencer : public IInferencer {
 		}
 		cv::cuda::GpuMat getOutputMaskGpu() const {
 			return outputMaskGpu;
+		}
+		cv::Mat getLastMask() const {
+			return lastMask;
 		}
 };

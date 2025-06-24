@@ -54,6 +54,14 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
 	_current_lane_info = lane_info;
 	_current_poly_coeffs = poly_coeffs; // Store coefficients
 
+	// Prever trajetória ao longo do horizonte
+	_predicted_trajectory.clear();
+	double px = x0, py = y0, psi = yaw0, v = v0, cte = 0.0, epsi = 0.0;
+	for(int t = 0; t < MPCConfig::horizon; ++t) {
+		_kinematicModel(px, py, psi, v, cte, epsi, 0.0, 0.0, poly_coeffs);
+		_predicted_trajectory.emplace_back(px, py);
+	}
+
 	// Configuração do otimizador (melhor para MPC)
 	nlopt::opt optimizer(nlopt::LD_SLSQP, 2 * MPCConfig::horizon); // SLSQP é melhor para MPC
 

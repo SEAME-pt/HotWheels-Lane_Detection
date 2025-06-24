@@ -121,9 +121,7 @@ TensorRTInferencer::TensorRTInferencer(const std::string &enginePath)
 	bindings[inputBindingIndex] = deviceInput;   // Assign device input buffer
 	bindings[outputBindingIndex] = deviceOutput; // Assign device output buffer
 
-	Publisher::instance(5556); // Initialize publisher for inference results
-
-	initUndistortMaps();             // Initialize undistortion maps for camera calibration
+	Publisher::instance(5556);       // Initialize publisher for inference results
 	cudaStream = cv::cuda::Stream(); // CUDA stream for asynchronous operations
 }
 
@@ -296,43 +294,29 @@ cv::cuda::GpuMat TensorRTInferencer::makePrediction(const cv::cuda::GpuMat &gpuI
 	return outputMaskGpu;
 }
 
-void TensorRTInferencer::initUndistortMaps() {
-	cv::Mat cameraMatrix, distCoeffs;
-	cv::FileStorage fs("/home/jetson/models/lane-detection/camera_calibration.yml",
-	                   cv::FileStorage::READ); // Open calibration file
-
-	if(!fs.isOpened()) {
-		std::cerr << "[Error] Failed to open camera_calibration.yml" << std::endl;
-		return; // Handle file opening error
-	}
-
-	fs["camera_matrix"] >> cameraMatrix;         // Read camera matrix
-	fs["distortion_coefficients"] >> distCoeffs; // Read distortion coefficients
-	fs.release();                                // Close file
-
-	cv::Mat mapx, mapy;
-	cv::initUndistortRectifyMap(cameraMatrix, distCoeffs, cv::Mat(), cameraMatrix,
-	                            cv::Size(1280, 720), CV_32FC1, mapx,
-	                            mapy); // Compute undistortion mapping
-
-	d_mapx.upload(mapx); // Upload X map to GPU
-	d_mapy.upload(mapy); // Upload Y map to GPU
-}
-
 void TensorRTInferencer::doInference(const cv::Mat &frame) {
-	std::cout << "[DEBUG] TensorRTInferencer::doInference called with frame size: " 
-	          << frame.cols << "x" << frame.rows << std::endl;
-	
 	if(frame.empty()) {
 		throw std::runtime_error("Input frame is empty");
 	}
 
-	cv::cuda::GpuMat d_frame(frame); // Upload frame to GPU
-	cv::cuda::GpuMat d_undistorted;
-	cv::cuda::remap(d_frame, d_undistorted, d_mapx, d_mapy, cv::INTER_LINEAR, 0, cv::Scalar(),
-	                cudaStream); // Undistort frame
+	// Log de monitoramento do frame recebido
+	std::cout << "[LaneDetection] Frame shape: " << frame.cols << "x" << frame.rows
+	          << ", type: " << frame.type() << ", sum: " << cv::sum(frame)[0] << std::endl;
 
-	cv::cuda::GpuMat d_prediction_mask = makePrediction(d_undistorted); // Run model inference
+	// Redimensiona o frame para 1280x720 se necessário
+	cv::Mat resized_frame;
+	if(frame.cols != 1280 || frame.rows != 720) {
+		cv::resize(frame, resized_frame, cv::Size(1280, 720));
+	} else {
+		resized_frame = frame;
+	}
+	cv::cuda::GpuMat d_frame(resized_frame); // Upload frame to GPU
+	// Remover undistort
+	// cv::cuda::GpuMat d_undistorted;
+	// cv::cuda::remap(d_frame, d_undistorted, d_mapx, d_mapy, cv::INTER_LINEAR, 0, cv::Scalar(),
+	// cudaStream);
+
+	cv::cuda::GpuMat d_prediction_mask = makePrediction(d_frame); // Run model inference
 
 	// Convert to 8-bit (0 or 255) in a new GpuMat
 	cv::cuda::GpuMat d_mask_u8;
@@ -342,6 +326,15 @@ void TensorRTInferencer::doInference(const cv::Mat &frame) {
 	d_mask_u8.download(binary_mask_cpu, cudaStream);
 	cv::threshold(binary_mask_cpu, binary_mask_cpu, 128, 255, cv::THRESH_BINARY);
 	cudaStream.waitForCompletion(); // Ensure async operations are complete
+
+	// Salva a máscara binária para acesso externo
+	lastMask = binary_mask_cpu.clone();
+
+	// Publica a máscara binária para o MPC
+	std::vector<uchar> mask_buffer;
+	cv::imencode(".png", binary_mask_cpu, mask_buffer);
+	std::string mask_data(mask_buffer.begin(), mask_buffer.end());
+	Publisher::instance(5556)->publish("binary_mask", mask_data);
 
 	// Convert model output to 8-bit binary mask on GPU
 	cv::cuda::GpuMat d_visualization;

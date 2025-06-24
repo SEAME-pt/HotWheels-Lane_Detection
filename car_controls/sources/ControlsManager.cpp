@@ -75,7 +75,11 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
 	// **Running camera streamer**
 	m_cameraStreamerThread = QThread::create([this, argc, argv]() {
 		try {
-			m_cameraStreamerObject = new CameraStreamer(0.5);
+			// Use video file instead of camera for testing
+			bool use_video = true;
+			std::string video_path = "/home/jetson/Videos/output_objdetect_train.avi";
+
+			m_cameraStreamerObject = new CameraStreamer(0.5, use_video, video_path);
 			m_cameraStreamerObject->start();
 		} catch(const std::exception &e) {
 			std::cerr << "Error: " << e.what() << std::endl;

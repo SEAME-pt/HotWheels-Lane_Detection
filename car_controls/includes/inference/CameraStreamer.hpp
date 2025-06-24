@@ -29,21 +29,18 @@ class FrameBufferSegmentation {
 		void update(const cv::Mat &frame) {
 			std::lock_guard<std::mutex> lock(mutex_);
 			frame_ = frame.clone(); // deep copy
-			has_new_frame_ = true;
 		}
 
 		bool getFrame(cv::Mat &out) {
 			std::lock_guard<std::mutex> lock(mutex_);
-			if(!has_new_frame_)
+			if(frame_.empty())
 				return false;
 			out = frame_.clone();
-			has_new_frame_ = false;
 			return true;
 		}
 
 	private:
 		cv::Mat frame_;
-		bool has_new_frame_ = false;
 		std::mutex mutex_;
 };
 
@@ -72,7 +69,8 @@ class FrameBufferDetection {
 
 class CameraStreamer {
 	public:
-		CameraStreamer(double scale = 0.5);
+		CameraStreamer(double scale = 0.5, bool use_video = false,
+		               const std::string &video_path = "");
 		~CameraStreamer();
 
 		void start();
@@ -82,14 +80,21 @@ class CameraStreamer {
 		cv::VideoCapture cap;
 		double scale_factor;
 
+		// Video playback control
+		bool m_useVideo;
+		std::string m_videoPath;
+		bool m_videoLoop;
+		int m_currentFrame;
+		int m_totalFrames;
+
 		cudaGraphicsResource *cuda_resource;
 
 		bool m_running;
 
 		Publisher *m_publisherFrameObject;
-		
+
 		// ZeroMQ Publishers (raw pointers to singletons - we don't own them)
-		Publisher* m_rawFramePublisher;
+		Publisher *m_rawFramePublisher;
 		// Removed: m_inferencePublisher - now handled by TensorRTInferencer directly
 
 		std::shared_ptr<TensorRTInferencer> segmentationInferencer;

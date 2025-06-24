@@ -34,6 +34,9 @@ class MPCPlanner {
 		                                               const std::vector<int> &center_y,
 		                                               const VehicleTransform &vehicle_transform,
 		                                               int img_width, int img_height) const;
+
+		// Novo método para acessar a trajetória prevista do MPC
+		const std::vector<Point2D>& getPredictedTrajectory() const { return _optimizer.getPredictedTrajectory(); }
 };
 
 #endif /* !MPCPlanner */

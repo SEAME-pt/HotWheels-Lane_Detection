@@ -132,6 +132,15 @@ car_controls/sources/JoysticksController.o: car_controls/sources/JoysticksContro
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) $(QT5_CFLAGS) $(INCLUDE_PATHS) -c $< -o $@
 
+# Lane detection video test (mínimo, sem Qt)
+lane_detection_video_test: lane_detection_video_test.cpp \
+	car_controls/sources/inference/TensorRTInferencer.cpp \
+	car_controls/sources/inference/LanePostProcessor.cpp \
+	car_controls/sources/inference/LaneCurveFitter.cpp \
+	car_controls/sources/inference/ONNXInferencer.cpp \
+	ZeroMQ/Publisher.cpp
+	$(CXX) $(CXXFLAGS) $(INCLUDE_PATHS) $^ -o $@ $(LDFLAGS) $(ALL_LIBS)
+
 # Clean
 clean:
 	rm -f $(OBJECTS) $(MOC_FILES) $(TARGET)
@@ -198,4 +207,4 @@ debug-compile:
 	@echo "Polyfitter compilation successful"
 	@echo "No tests defined in this Makefile. Please add your test commands here."
 # Show what flags are being used
-.PHONY: all clean install-deps check-cuda check-libs debug-compile check-qt show-flags test
+.PHONY: all clean install-deps check-cuda check-libs debug-compile check-qt show-flags test lane_detection_video_test

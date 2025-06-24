@@ -1,35 +1,51 @@
 #include "../../includes/inference/CameraStreamer.hpp"
 
 // Constructor: initializes camera capture, inference reference, and settings
-CameraStreamer::CameraStreamer(double scale)
+CameraStreamer::CameraStreamer(double scale, bool use_video, const std::string &video_path)
     : scale_factor(scale), m_publisherFrameObject(nullptr), m_running(true),
-      m_rawFramePublisher(nullptr) {
-
-	// segmentationInferencer = std::make_shared<ONNXInferencer>(
+      m_rawFramePublisher(nullptr), m_useVideo(use_video), m_videoPath(video_path),
+      m_videoLoop(true), m_currentFrame(0), m_totalFrames(0) {
 
 	segmentationInferencer =
 	    std::make_shared<TensorRTInferencer>("/home/jetson/models/lane-detection/model.engine");
-	yoloInferencer =
-	    std::make_shared<YOLOv5TRT>("/home/jetson/models/object-detection/yolov5m_updated.engine",
-	                                "/home/jetson/models/object-detection/labels.txt");
+	// yoloInferencer =
+	//     std::make_shared<YOLOv5TRT>("/home/jetson/models/object-detection/yolov5m_updated.engine",
+	//                                 "/home/jetson/models/object-detection/labels.txt");
 
-	// Define GStreamer pipeline for CSI camera
-	std::string pipeline = "nvarguscamerasrc sensor-mode=4 ! "
-	                       "video/x-raw(memory:NVMM), width=1280, height=720, "
-	                       "format=(string)NV12, framerate=30/1 ! "
-	                       "nvvidconv ! video/x-raw, format=(string)BGRx ! "
-	                       "videoconvert ! video/x-raw, format=(string)BGR ! "
-	                       "appsink drop=1 buffers=1";
+	if(m_useVideo && !m_videoPath.empty()) {
+		// Use video file
+		std::cout << "[CameraStreamer] Using video file: " << m_videoPath << std::endl;
+		cap.open(m_videoPath);
 
-	std::cout << "[CameraStreamer] Using GStreamer pipeline: " << pipeline << std::endl;
+		if(!cap.isOpened()) {
+			std::cerr << "Error: Could not open video file: " << m_videoPath << std::endl;
+			exit(-1);
+		}
 
-	cap.open(pipeline, cv::CAP_GSTREAMER); // Open camera stream with GStreamer
+		// Get video properties
+		m_totalFrames = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_COUNT));
+		double fps = cap.get(cv::CAP_PROP_FPS);
+		int width = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
+		int height = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
 
-	std::cout << "[CameraStreamer] Camera opened." << std::endl;
+		std::cout << "[CameraStreamer] Video properties: " << width << "x" << height << " @ " << fps
+		          << " FPS, " << m_totalFrames << " frames" << std::endl;
+	} else {
+		// Use camera (original code)
+		std::string pipeline = "nvarguscamerasrc sensor-mode=4 ! "
+		                       "video/x-raw(memory:NVMM), width=1280, height=720, "
+		                       "format=(string)NV12, framerate=30/1 ! "
+		                       "nvvidconv ! video/x-raw, format=(string)BGRx ! "
+		                       "videoconvert ! video/x-raw, format=(string)BGR ! "
+		                       "appsink drop=1 buffers=1";
 
-	if(!cap.isOpened()) { // Check if camera opened successfully
-		std::cerr << "Error: Could not open CSI camera" << std::endl;
-		exit(-1); // Terminate if failed
+		std::cout << "[CameraStreamer] Using GStreamer pipeline: " << pipeline << std::endl;
+		cap.open(pipeline, cv::CAP_GSTREAMER);
+
+		if(!cap.isOpened()) {
+			std::cerr << "Error: Could not open CSI camera" << std::endl;
+			exit(-1);
+		}
 	}
 
 	// Initialize ZeroMQ publishers (singletons - just store raw pointers)
@@ -54,8 +70,8 @@ CameraStreamer::~CameraStreamer() {
 		captureThread.join();
 	if(segmentationThread.joinable())
 		segmentationThread.join();
-	if(detectionThread.joinable())
-		detectionThread.join();
+	// if(detectionThread.joinable())
+	// 	detectionThread.join();
 
 	if(cap.isOpened()) {
 		cap.release(); // Release camera
@@ -81,37 +97,26 @@ void CameraStreamer::segmentationWorker() {
 	while(m_running) {
 		cv::Mat frame;
 		if(segmentationBuffer.getFrame(frame)) {
-			std::cout << "[DEBUG] Segmentation worker got frame: " << frame.cols << "x" << frame.rows << std::endl;
-			
-			// auto start = std::chrono::high_resolution_clock::now();
-
 			segmentationInferencer->doInference(frame);
-			
+
 			// Publishing is now handled directly by TensorRTInferencer::doInference()
 			// No need to publish here anymore
-
-			// auto end = std::chrono::high_resolution_clock::now();
-			// auto duration_ms =
-			// std::chrono::duration_cast<std::chrono::milliseconds>(end -
-			// start).count();
-
-			// std::cout << "[Segmentation] Inference time: " << duration_ms << " ms" << std::endl;
 		} else {
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 		}
 	}
 }
 
-void CameraStreamer::detectionWorker() {
-	while(m_running) {
-		cv::Mat frame;
-		if(detectionBuffer.getFrame(frame)) {
-			yoloInferencer->process_image(frame);
-		} else {
-			std::this_thread::sleep_for(std::chrono::milliseconds(1));
-		}
-	}
-}
+// void CameraStreamer::detectionWorker() {
+//     while(m_running) {
+//         cv::Mat frame;
+//         if(detectionBuffer.getFrame(frame)) {
+//             yoloInferencer->process_image(frame);
+//         } else {
+//             std::this_thread::sleep_for(std::chrono::milliseconds(1));
+//         }
+//     }
+// }
 
 // Main loop: capture, undistort, predict, visualize and render frames
 void CameraStreamer::start() {
@@ -119,26 +124,53 @@ void CameraStreamer::start() {
 
 	captureThread = std::thread(&CameraStreamer::captureLoop, this);
 	segmentationThread = std::thread(&CameraStreamer::segmentationWorker, this);
-	detectionThread = std::thread(&CameraStreamer::detectionWorker, this);
+	// detectionThread = std::thread(&CameraStreamer::detectionWorker, this); // YOLO paused
 }
 
 void CameraStreamer::captureLoop() {
 	auto start_time = std::chrono::high_resolution_clock::now();
 	int frame_count = 0;
-	const int framesToSkip = 1; // Skip frames to reduce processing load
+	const int framesToSkip = m_useVideo ? 0 : 1; // Don't skip frames for video
 	cv::Mat frame;
 
 	while(m_running) {
 		auto frame_start = std::chrono::high_resolution_clock::now();
 
-		for(int i = 0; i < framesToSkip; ++i) {
-			cap.grab(); // Grab frames without decoding
-		}
-		cap >> frame; // Read one frame (decoded)
+		if(m_useVideo) {
+			// Video playback logic
+			cap >> frame;
 
-		if(frame.empty()) {
-			std::cerr << "Empty frame, exiting" << std::endl;
-			break;
+			if(frame.empty()) {
+				if(m_videoLoop && m_totalFrames > 0) {
+					// Reset to beginning for loop
+					cap.set(cv::CAP_PROP_POS_FRAMES, 0);
+					m_currentFrame = 0;
+					cap >> frame;
+					std::cout << "[CameraStreamer] Video looped back to start" << std::endl;
+				}
+
+				if(frame.empty()) {
+					std::cerr << "Empty frame, exiting" << std::endl;
+					break;
+				}
+			}
+
+			m_currentFrame++;
+
+			std::this_thread::sleep_for(
+			    std::chrono::milliseconds(33)); // 33ms = 30 FPS and 60 fps =
+
+		} else {
+			// Camera capture logic (original)
+			for(int i = 0; i < framesToSkip; ++i) {
+				cap.grab(); // Grab frames without decoding
+			}
+			cap >> frame; // Read one frame (decoded)
+
+			if(frame.empty()) {
+				std::cerr << "Empty frame, exiting" << std::endl;
+				break;
+			}
 		}
 
 		// Publish raw camera frame for testing/debugging
@@ -155,22 +187,38 @@ void CameraStreamer::captureLoop() {
 		}
 
 		// Update buffers for inference threads INSIDE the loop
-		segmentationBuffer.update(frame);
-		detectionBuffer.update(frame);
+		// segmentationBuffer.update(frame);
+		// detectionBuffer.update(frame);
+
+		// Chamada direta da inferência para lane detection
+		if(segmentationInferencer) {
+			try {
+				// Removido debug de frame
+				segmentationInferencer->doInference(frame);
+			} catch(const std::exception &e) {
+				std::cerr << "[CameraStreamer] Lane detection error: " << e.what() << std::endl;
+			}
+		}
 
 		frame_count++;
 		auto now = std::chrono::high_resolution_clock::now();
 		auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
 
 		if(elapsed >= 10) { // Log every 10 seconds instead of every second
-			std::cout << "[CameraStreamer] Average FPS: " << frame_count / static_cast<double>(elapsed)
-			          << std::endl;
+			if(m_useVideo) {
+				std::cout << "[CameraStreamer] Video playback: Frame " << m_currentFrame << "/"
+				          << m_totalFrames
+				          << " (FPS: " << frame_count / static_cast<double>(elapsed) << ")"
+				          << std::endl;
+			} else {
+				std::cout << "[CameraStreamer] Average FPS: "
+				          << frame_count / static_cast<double>(elapsed) << std::endl;
+			}
 			start_time = now;
 			frame_count = 0;
 		}
 	}
 }
-
 
 void CameraStreamer::stop() {
 	if(!m_running)
