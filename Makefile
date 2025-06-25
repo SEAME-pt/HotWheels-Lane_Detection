@@ -207,4 +207,21 @@ debug-compile:
 	@echo "Polyfitter compilation successful"
 	@echo "No tests defined in this Makefile. Please add your test commands here."
 # Show what flags are being used
-.PHONY: all clean install-deps check-cuda check-libs debug-compile check-qt show-flags test lane_detection_video_test
+.PHONY: all clean install-deps check-cuda check-libs debug-compile check-qt show-flags test lane_detection_video_test jetson
+
+# Simple jetson cross-compilation target
+jetson:
+	@echo "=== Building for Jetson (ARM64) ==="
+	@which aarch64-linux-gnu-g++ > /dev/null || (echo "❌ Cross-compiler not found! Install with: sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu" && exit 1)
+	@test -d /home/michel/new_qtjetson/sysroot || (echo "❌ Sysroot not found at /home/michel/new_qtjetson/sysroot" && exit 1)
+	@echo "✅ Cross-compiler and sysroot found"
+	$(MAKE) CXX=aarch64-linux-gnu-g++ \
+		CXXFLAGS="$(CXXFLAGS) --sysroot=/home/michel/new_qtjetson/sysroot" \
+		LDFLAGS="$(LDFLAGS) --sysroot=/home/michel/new_qtjetson/sysroot" \
+		INCLUDE_PATHS="-I. -IZeroMQ -Icar_controls/includes -Icar_controls/includes/inference -Icar_controls/includes/objectDetection -I/home/michel/new_qtjetson/sysroot/usr/include/eigen3 -I/home/michel/new_qtjetson/sysroot/usr/include/opencv4" \
+		CUDA_PATH="/home/michel/new_qtjetson/sysroot/usr/local/cuda-10.2" \
+		CUDA_INCLUDE="/home/michel/new_qtjetson/sysroot/usr/local/cuda-10.2/include" \
+		CUDA_LIB="/home/michel/new_qtjetson/sysroot/usr/local/cuda-10.2/lib64" \
+		all
+	@echo "✅ Jetson build complete! Binary: main (ARM64)"
+	@file main | grep -q ARM && echo "✅ Confirmed ARM64 binary" || echo "⚠️  Warning: Binary architecture verification failed"

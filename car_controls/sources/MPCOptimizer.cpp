@@ -54,10 +54,12 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
 	_current_lane_info = lane_info;
 	_current_poly_coeffs = poly_coeffs; // Store coefficients
 
-	// Prever trajetória ao longo do horizonte
+	// Prever trajetória ao longo do horizonte (INITIAL PREDICTION - will be updated after
+	// optimization)
 	_predicted_trajectory.clear();
 	double px = x0, py = y0, psi = yaw0, v = v0, cte = 0.0, epsi = 0.0;
 	for(int t = 0; t < MPCConfig::horizon; ++t) {
+		// Use simple forward prediction with zero controls for initial trajectory
 		_kinematicModel(px, py, psi, v, cte, epsi, 0.0, 0.0, poly_coeffs);
 		_predicted_trajectory.emplace_back(px, py);
 	}
@@ -103,6 +105,22 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
 	} catch(const std::exception &e) {
 		// Fallback: retornar controles seguros
 		return {0.2, 0.0};
+	}
+
+	// Update predicted trajectory with optimized controls
+	_predicted_trajectory.clear();
+	px = state_with_latency[0];
+	py = state_with_latency[1];
+	psi = state_with_latency[2];
+	v = state_with_latency[3];
+	cte = state_with_latency[4];
+	epsi = state_with_latency[5];
+
+	for(int t = 0; t < MPCConfig::horizon; ++t) {
+		double throttle = (t < MPCConfig::horizon) ? u0[2 * t] : 0.0;
+		double steer = (t < MPCConfig::horizon) ? u0[2 * t + 1] : 0.0;
+		_kinematicModel(px, py, psi, v, cte, epsi, throttle, steer, poly_coeffs);
+		_predicted_trajectory.emplace_back(px, py);
 	}
 
 	return {u0[0], u0[1]}; // Retorna primeiro par de controles

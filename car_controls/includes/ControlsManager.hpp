@@ -54,6 +54,10 @@ class ControlsManager : public QObject {
 		std::atomic<bool> m_autonomousMode;
 		QThread *m_autonomousControlThread;
 
+		// Track applied controls for state estimation
+		std::atomic<double> m_lastThrottle{0.0};
+		std::atomic<double> m_lastSteering{0.0};
+
 	public:
 		explicit ControlsManager(int argc, char **argv, QObject *parent = nullptr);
 		~ControlsManager();
@@ -67,8 +71,10 @@ class ControlsManager : public QObject {
 		// Exibe a imagem da câmera com as lanes e centerline desenhadas
 		void showVisionDebug();
 
-	private:
+		// Make this public so main.cpp can access it
 		VehicleState getCurrentVehicleState();
+
+	private:
 		std::vector<Point2D> getWaypointsFromVision();
 		LaneInfo getLaneInfoFromVision();
 		bool checkEmergencyObstacles();

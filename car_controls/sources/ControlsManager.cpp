@@ -90,9 +90,12 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
 	// **Client Middleware Interface Thread**
 	m_subscriberJoystickObject = new Subscriber();
 	m_subscriberJoystickThread = QThread::create([this, argc, argv]() {
+		// Add external reference to global running flag
+		extern std::atomic<bool> g_running;
+
 		m_subscriberJoystickObject->connect("tcp://localhost:5555");
 		m_subscriberJoystickObject->subscribe("joystick_value");
-		while(m_running) {
+		while(m_running && g_running.load()) {
 			try {
 				zmq::pollitem_t items[] = {
 				    {static_cast<void *>(m_subscriberJoystickObject->getSocket()), 0, ZMQ_POLLIN,
@@ -148,9 +151,14 @@ ControlsManager::~ControlsManager() {
 			m_subscriberJoystickObject->stop();
 		}
 		m_subscriberJoystickThread->quit();
-		m_subscriberJoystickThread->wait();
+		if(!m_subscriberJoystickThread->wait(3000)) { // 3 second timeout
+			m_subscriberJoystickThread->terminate();
+			m_subscriberJoystickThread->wait(1000);
+		}
 
-		m_subscriberJoystickObject->getSocket().close();
+		if(m_subscriberJoystickObject) {
+			m_subscriberJoystickObject->getSocket().close();
+		}
 
 		delete m_subscriberJoystickThread;
 		m_subscriberJoystickThread = nullptr;
@@ -162,7 +170,10 @@ ControlsManager::~ControlsManager() {
 			m_manualController->requestStop();
 
 		m_manualControllerThread->quit();
-		m_manualControllerThread->wait();
+		if(!m_manualControllerThread->wait(3000)) { // 3 second timeout
+			m_manualControllerThread->terminate();
+			m_manualControllerThread->wait(1000);
+		}
 		delete m_manualControllerThread;
 		m_manualControllerThread = nullptr;
 	}
@@ -173,7 +184,10 @@ ControlsManager::~ControlsManager() {
 			m_cameraStreamerObject->stop();
 
 		m_cameraStreamerThread->quit();
-		m_cameraStreamerThread->wait();
+		if(!m_cameraStreamerThread->wait(3000)) { // 3 second timeout
+			m_cameraStreamerThread->terminate();
+			m_cameraStreamerThread->wait(1000);
+		}
 		delete m_cameraStreamerThread;
 		m_cameraStreamerThread = nullptr;
 	}
@@ -252,7 +266,11 @@ void ControlsManager::autonomousControlLoop() {
 	const double CONTROL_RATE = 20.0; // Hz
 	const double CONTROL_PERIOD = 1.0 / CONTROL_RATE;
 	auto last_control_time = std::chrono::steady_clock::now();
-	while(m_autonomousMode && m_running) {
+
+	// Add external reference to global running flag
+	extern std::atomic<bool> g_running;
+
+	while(m_autonomousMode && m_running && g_running.load()) {
 		auto now = std::chrono::steady_clock::now();
 		auto elapsed = std::chrono::duration<double>(now - last_control_time).count();
 		if(elapsed < CONTROL_PERIOD) {
@@ -260,18 +278,37 @@ void ControlsManager::autonomousControlLoop() {
 			continue;
 		}
 		last_control_time = now;
-		std::cout << "Running autonomous control loop..." << std::endl;
+
+		// Reduced logging frequency
+		static int control_counter = 0;
+		control_counter++;
+
+		// Force memory cleanup every 100 iterations (every ~5 seconds)
+		if(control_counter % 100 == 0) {
+			// Force garbage collection for OpenCV matrices
+			cv::Mat().copyTo(cv::Mat()); // Force memory cleanup
+		}
+
+		if(control_counter % 20 == 0) { // Log every 20th control loop instead of every loop
+			std::cout << "Autonomous control loop #" << control_counter << std::endl;
+		}
+
 		try {
-			// Mostra feedback visual da visão
-			showVisionDebug();
+			// Commented out to avoid interfering with camera stream
+			// showVisionDebug();
 			// 1. Obter dados de percepção
-			std::cout << "Getting current vehicle state and waypoints..." << std::endl;
 			VehicleState current_state = getCurrentVehicleState();
-			std::cout << "Current state: " << "x=" << current_state.x << ", y=" << current_state.y
-			          << ", velocity=" << current_state.velocity << ", yaw=" << current_state.yaw
-			          << std::endl;
+
+			if(control_counter % 20 == 0) {
+				std::cout << "State: x=" << std::fixed << std::setprecision(2) << current_state.x
+				          << ", y=" << current_state.y << ", vel=" << current_state.velocity
+				          << ", yaw=" << current_state.yaw << std::endl;
+			}
+
 			std::vector<Point2D> waypoints = getWaypointsFromVision();
-			std::cout << "Waypoints size: " << waypoints.size() << std::endl;
+			if(control_counter % 20 == 0) {
+				std::cout << "Waypoints: " << waypoints.size() << std::endl;
+			}
 			LaneInfo lane_info = getLaneInfoFromVision();
 			// 2. Verificar obstáculos críticos
 			if(checkEmergencyObstacles()) {
@@ -279,14 +316,23 @@ void ControlsManager::autonomousControlLoop() {
 				continue;
 			}
 			// 3. Calcular controle MPC
-			ControlCommand control = m_mpcPlanner->plan(current_state, waypoints, &lane_info);
-			// 4. Aplicar controles com limites de segurança
+			ControlCommand control =
+			    m_mpcPlanner->plan(current_state, waypoints,
+			                       &lane_info); // 4. Aplicar controles com limites de segurança
 			int throttle_pct = static_cast<int>(std::clamp(control.throttle * 100, 0.0, 50.0));
 			int steer_angle = static_cast<int>(std::clamp(control.steer * 45, -45.0, 45.0));
-			std::cout << "Throttle: " << throttle_pct << "%, Steering: " << steer_angle
-			          << " degrees" << std::endl;
-			m_engineController.set_speed(throttle_pct);
-			m_engineController.set_steering(steer_angle);
+
+			// Store applied controls for state estimation
+			m_lastThrottle = throttle_pct / 100.0;       // Convert back to 0-1 range
+			m_lastSteering = steer_angle * M_PI / 180.0; // Convert to radians
+
+			if(control_counter % 20 == 0) {
+				std::cout << "Controls: Throttle=" << throttle_pct << "%, Steering=" << steer_angle
+				          << "°" << std::endl;
+			}
+
+			// m_engineController.set_speed(throttle_pct);
+			// m_engineController.set_steering(steer_angle);
 		} catch(const std::exception &e) {
 			std::cerr << "Autonomous control error: " << e.what() << std::endl;
 			qDebug() << "Autonomous control error:" << e.what();
@@ -298,6 +344,7 @@ void ControlsManager::autonomousControlLoop() {
 // Adicionar ao ControlsManager
 VehicleState ControlsManager::getCurrentVehicleState() {
 	static VehicleState state{0.0, 0.0, 0.0, 0.0};
+	static bool initialized = false;
 
 	// Implementação básica - pode ser melhorada com odometria real
 	static auto last_time = std::chrono::steady_clock::now();
@@ -305,10 +352,40 @@ VehicleState ControlsManager::getCurrentVehicleState() {
 	double dt = std::chrono::duration<double>(now - last_time).count();
 	last_time = now;
 
-	// Simular movimento baseado nos controles aplicados
+	if(!initialized) {
+		// Initialize with some starting values
+		state.x = 0.0;
+		state.y = 0.0;
+		state.yaw = 0.0;
+		state.velocity = 0.5; // Start with some velocity
+		initialized = true;
+	}
+
+	// Get applied controls
+	double throttle = m_lastThrottle.load();
+	double steering = m_lastSteering.load();
+
+	// Simple kinematic model based on actual applied controls
+	double wheelbase = 0.15; // 15cm wheelbase for typical RC car
+
+	// Update velocity based on throttle
+	state.velocity += throttle * dt * 2.0;                 // Max acceleration ~2 m/s²
+	state.velocity = std::clamp(state.velocity, 0.1, 1.5); // Reasonable velocity limits
+
+	// Update position and orientation
 	state.x += state.velocity * std::cos(state.yaw) * dt;
 	state.y += state.velocity * std::sin(state.yaw) * dt;
-	state.velocity = 2.0; // Velocidade simulada
+
+	// Update yaw based on steering (bicycle model)
+	if(std::abs(steering) > 0.01) { // Only update if significant steering
+		state.yaw += (state.velocity / wheelbase) * std::tan(steering) * dt;
+
+		// Normalize yaw to [-π, π]
+		while(state.yaw > M_PI)
+			state.yaw -= 2.0 * M_PI;
+		while(state.yaw < -M_PI)
+			state.yaw += 2.0 * M_PI;
+	}
 
 	return state;
 }

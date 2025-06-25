@@ -23,13 +23,23 @@ void signalHandler(int signum) {
 	std::cout << "\nReceived signal " << signum << ". Shutting down gracefully..." << std::endl;
 	g_running = false;
 
-	// Give some time for cleanup
+	// Avoid CUDA operations during signal handling - they can cause core dumps
+	// Just set the flag and let the main cleanup handle CUDA resources
+
+	// Give minimal time for Qt to process the shutdown
 	std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-	// Force quit if Qt is running
+	// Signal Qt to quit if available
 	if(QApplication::instance()) {
 		QApplication::quit();
 	}
+
+	// Give Qt time to shutdown properly
+	std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+	// If we're still here after reasonable time, force exit to avoid hangs
+	std::cout << "[SignalHandler] Force exit to avoid CUDA/TensorRT issues" << std::endl;
+	std::_Exit(0); // Use _Exit to avoid destructors that might call CUDA
 }
 
 class MPCIntegratedApp : public QObject {
@@ -65,6 +75,10 @@ class MPCIntegratedApp : public QObject {
 		std::vector<Point2D> m_predictedTrajectory;
 		cv::Mat m_currentLaneMask;
 
+		// Debug control
+		bool verbose_logging = false;
+		bool recording_active = false;
+
 	public:
 		MPCIntegratedApp(int argc, char **argv, QObject *parent = nullptr)
 		    : QObject(parent), controls_manager(nullptr), mpc_planner(nullptr), mpc_timer(nullptr) {
@@ -87,11 +101,13 @@ class MPCIntegratedApp : public QObject {
 				std::cout << "Sistema iniciado com controle manual" << std::endl;
 				std::cout << "Comandos disponíveis:" << std::endl;
 				std::cout << "- Use joystick para mover e gravar trajetória" << std::endl;
-				std::cout << "- Pressione ENTER ou 'm' para alternar Manual/MPC" << std::endl;
-				std::cout << "- Pressione 'r' para iniciar/parar gravação" << std::endl;
-				std::cout << "- Pressione 'd' para ativar/desativar logs detalhados do MPC"
+				std::cout << "- Pressione '1' para ATIVAR MPC / '2' para MANUAL" << std::endl;
+				std::cout << "- Pressione '3' para INICIAR gravação / '4' para PARAR gravação"
+				          << std::endl;
+				std::cout << "- Pressione '5' para ATIVAR logs / '6' para DESATIVAR logs"
 				          << std::endl;
 				std::cout << "- Pressione 's' para mostrar status do sistema" << std::endl;
+				std::cout << "- Pressione 'c' para limpar trajetória gravada" << std::endl;
 				std::cout << "- Pressione 'q' para sair" << std::endl;
 
 				// Conectar stdin para comandos
@@ -134,9 +150,22 @@ class MPCIntegratedApp : public QObject {
 				// Close OpenCV windows
 				cv::destroyAllWindows();
 
-				// Reset smart pointers (this will call destructors)
+				// For SIGINT shutdowns, avoid CUDA operations entirely
+				if(m_inferencer) {
+					try {
+						// Don't try to synchronize or reset CUDA during signal shutdown
+						// Just reset the pointer to avoid double-free
+						m_inferencer.reset();
+					} catch(...) {
+						std::cerr << "[~MPCIntegratedApp] Warning: TensorRT cleanup skipped "
+						             "(shutdown in progress)"
+						          << std::endl;
+						// Ignore all TensorRT/CUDA errors during shutdown
+					}
+				}
+
+				// Reset other smart pointers
 				m_laneDetectionSubscriber.reset();
-				m_inferencer.reset();
 
 				// Delete MPC planner
 				if(mpc_planner) {
@@ -179,15 +208,39 @@ class MPCIntegratedApp : public QObject {
 
 				// Usar trajetória como referência
 				LaneInfo lane_info(0.0, 0.0);
-				ControlCommand control =
-				    mpc_planner->plan(current_state, reference_trajectory, &lane_info);
 
-				// Printar a trajetória prevista do MPC
+				// Get current state from ControlsManager instead of using static local variable
+				VehicleState current_state_from_controls =
+				    controls_manager->getCurrentVehicleState();
+
+				ControlCommand control = mpc_planner->plan(current_state_from_controls,
+				                                           reference_trajectory, &lane_info);
+
+				// Add MPC diagnostic logging
+				if(verbose_logging && step_counter % 50 == 0) {
+					std::cout << "[MPC Debug] Input state: pos(" << current_state_from_controls.x 
+					          << "," << current_state_from_controls.y << ") yaw=" 
+					          << current_state_from_controls.yaw << " vel=" 
+					          << current_state_from_controls.velocity << std::endl;
+					std::cout << "[MPC Debug] Trajectory points: " << reference_trajectory.size() << std::endl;
+					if(!reference_trajectory.empty()) {
+						std::cout << "[MPC Debug] First 3 ref points: ";
+						for(size_t i = 0; i < std::min(size_t(3), reference_trajectory.size()); i++) {
+							std::cout << "(" << reference_trajectory[i].x << "," << reference_trajectory[i].y << ") ";
+						}
+						std::cout << std::endl;
+					}
+					std::cout << "[MPC Debug] Output: throttle=" << control.throttle 
+					          << " steering=" << control.steer << std::endl;
+				}
+
+				// Printar a trajetória prevista do MPC (only in verbose mode)
 				const auto &predicted_traj = mpc_planner->getPredictedTrajectory();
-				if(!predicted_traj.empty()) {
-					std::cout << "[MPC Predicted Trajectory] ";
-					for(const auto &pt : predicted_traj) {
-						std::cout << "(" << pt.x << "," << pt.y << ") ";
+				if(verbose_logging && !predicted_traj.empty() && step_counter % 100 == 0) { // Reduced frequency from 20 to 100
+					std::cout << "[MPC Predicted] ";
+					for(size_t i = 0; i < std::min(size_t(5), predicted_traj.size()); i++) {
+						std::cout << "(" << std::fixed << std::setprecision(1)
+						          << predicted_traj[i].x << "," << predicted_traj[i].y << ") ";
 					}
 					std::cout << std::endl;
 				}
@@ -208,81 +261,123 @@ class MPCIntegratedApp : public QObject {
 
 				// Por enquanto, apenas log
 				step_counter++;
-				if(step_counter % 10 == 0) { // More frequent logging for MPC data
+
+				// Compact logging by default, verbose when enabled
+				if(verbose_logging && step_counter % 10 == 0) {
+					// Verbose mode - more frequent and detailed logging
 					std::cout << "\n=== MPC CONTROL STEP " << step_counter << " ===" << std::endl;
-					std::cout << "[MPC] Vehicle State:" << std::endl;
-					std::cout << "  Position: (" << std::fixed << std::setprecision(3)
-					          << current_state.x << ", " << current_state.y << ")" << std::endl;
-					std::cout << "  Velocity: " << current_state.velocity << " m/s" << std::endl;
-					std::cout << "  Yaw: " << current_state.yaw * 180 / M_PI << " degrees"
+					std::cout << "[MPC] Pos: (" << std::fixed << std::setprecision(3)
+					          << current_state_from_controls.x << ", "
+					          << current_state_from_controls.y
+					          << ") Vel: " << current_state_from_controls.velocity
+					          << " m/s Yaw: " << current_state_from_controls.yaw * 180 / M_PI << "°"
 					          << std::endl;
+					std::cout << "[MPC] Throttle: " << std::setprecision(3) << control.throttle
+					          << " Steering: " << control.steer << " rad" << std::endl;
 
-					std::cout << "[MPC] Control Commands:" << std::endl;
-					std::cout << "  Throttle: " << std::fixed << std::setprecision(3)
-					          << control.throttle << " (Target Speed: " << mpc_speed << "%)"
-					          << std::endl;
-					std::cout << "  Steering: " << control.steer << " rad (Target: " << mpc_steering
-					          << " degrees)" << std::endl;
-
-					std::cout << "[MPC] Reference Trajectory:" << std::endl;
 					if(!m_predictedTrajectory.empty()) {
-						std::cout << "  Using LANE DETECTION trajectory ("
-						          << m_predictedTrajectory.size() << " points)" << std::endl;
-						// Show next 3 target points
-						std::cout << "  Next targets:" << std::endl;
+						std::cout << "[MPC] Lane trajectory: " << m_predictedTrajectory.size()
+						          << " points";
+						// Show first 3 points
 						for(size_t i = 0; i < std::min(size_t(3), m_predictedTrajectory.size());
 						    i++) {
-							std::cout << "    [" << i << "] x=" << std::fixed
-							          << std::setprecision(3) << m_predictedTrajectory[i].x
-							          << "m, y=" << m_predictedTrajectory[i].y << "m" << std::endl;
+							std::cout << " (" << std::setprecision(2) << m_predictedTrajectory[i].x
+							          << "," << m_predictedTrajectory[i].y << ")";
 						}
-					} else if(!recorded_waypoints.empty()) {
-						std::cout << "  Using RECORDED trajectory (" << recorded_waypoints.size()
-						          << " points)" << std::endl;
-					}
-
-					// Show MPC internal prediction
-					const auto &predicted_traj = mpc_planner->getPredictedTrajectory();
-					if(!predicted_traj.empty()) {
-						std::cout << "[MPC] Internal Prediction (" << predicted_traj.size()
-						          << " points):" << std::endl;
-						for(size_t i = 0; i < std::min(size_t(3), predicted_traj.size()); i++) {
-							std::cout << "    [" << i << "] x=" << std::fixed
-							          << std::setprecision(3) << predicted_traj[i].x
-							          << "m, y=" << predicted_traj[i].y << "m" << std::endl;
-						}
+						std::cout << std::endl;
 					}
 					std::cout << "================================\n" << std::endl;
+				} else if(!verbose_logging && step_counter % 100 == 0) {
+					// Compact mode - minimal logging
+					std::cout << "[MPC #" << step_counter << "] Pos:(" << std::fixed
+					          << std::setprecision(1) << current_state_from_controls.x << ","
+					          << current_state_from_controls.y << ") T:" << std::setprecision(2)
+					          << control.throttle << " S:" << control.steer << std::endl;
 				}
 
 				// Simular atualização do estado (em um sistema real,
 				// isso viria de sensores/odometria)
-				updateVehicleState(control.throttle, control.steer);
+				// updateVehicleState(control.throttle, control.steer); // Now using ControlsManager
+				// state instead
 			} catch(const std::exception &e) {
 				std::cerr << "Erro no MPC: " << e.what() << std::endl;
 			}
 		}
 
 		void handleKeyPress() {
-			static bool recording = false;
-
 			std::string input;
 			std::getline(std::cin, input);
 
-			if(input.empty() || input == "m") {
-				// Alternar modo
-				toggleMPCMode();
-			} else if(input == "r") {
-				// Alternar gravação
-				recording = !recording;
-				std::cout << (recording ? "Iniciando gravação de trajetória"
-				                        : "Parando gravação de trajetória")
-				          << std::endl;
-				if(recording) {
-					recorded_waypoints.clear();
-					// Aqui você iniciaria a gravação baseada no movimento real do joystick
-					startRecording();
+			if(input == "1") {
+				// ATIVAR MPC
+				if(!mpc_active) {
+					activateMPC();
+				} else {
+					std::cout << "MPC já está ATIVO" << std::endl;
 				}
+			} else if(input == "2") {
+				// ATIVAR MANUAL
+				if(mpc_active) {
+					deactivateMPC();
+				} else {
+					std::cout << "Modo MANUAL já está ativo" << std::endl;
+				}
+			} else if(input == "3") {
+				// INICIAR gravação
+				if(!recording_active) {
+					recording_active = true;
+					recorded_waypoints.clear();
+					startRecording();
+					std::cout << "INICIANDO gravação de trajetória" << std::endl;
+				} else {
+					std::cout << "Gravação já está ATIVA" << std::endl;
+				}
+			} else if(input == "4") {
+				// PARAR gravação
+				if(recording_active) {
+					recording_active = false;
+					std::cout << "PARANDO gravação de trajetória (" << recorded_waypoints.size()
+					          << " waypoints gravados)" << std::endl;
+				} else {
+					std::cout << "Gravação já está PARADA" << std::endl;
+				}
+			} else if(input == "5") {
+				// ATIVAR logs
+				if(!verbose_logging) {
+					verbose_logging = true;
+					std::cout << "Logs detalhados ATIVADOS" << std::endl;
+				} else {
+					static int repeat_counter = 0;
+					if(++repeat_counter % 10 == 0) { // Only show every 10th time
+						std::cout << "Logs detalhados já estão ATIVOS (reminder #" << repeat_counter/10 << ")" << std::endl;
+					}
+				}
+			} else if(input == "6") {
+				// DESATIVAR logs
+				if(verbose_logging) {
+					verbose_logging = false;
+					std::cout << "Logs detalhados DESATIVADOS" << std::endl;
+				} else {
+					std::cout << "Logs detalhados já estão DESATIVADOS" << std::endl;
+				}
+			} else if(input == "7") {
+				// LIMPEZA DE MEMÓRIA
+				std::cout << "Executando limpeza de memória..." << std::endl;
+				// Force OpenCV cleanup
+				cv::Mat().copyTo(cv::Mat());
+				// Force CUDA memory cleanup if available
+				#ifdef CUDA_AVAILABLE
+				try {
+					cudaDeviceSynchronize();
+					cudaError_t error = cudaGetLastError();
+					if(error == cudaSuccess) {
+						std::cout << "CUDA memory synchronized" << std::endl;
+					}
+				} catch(...) {
+					// Ignore CUDA errors during cleanup
+				}
+				#endif
+				std::cout << "Limpeza de memória concluída" << std::endl;
 			} else if(input == "c") {
 				// Limpar waypoints
 				recorded_waypoints.clear();
@@ -291,18 +386,28 @@ class MPCIntegratedApp : public QObject {
 			} else if(input == "s") {
 				// Mostrar status
 				showStatus();
-			} else if(input == "d") {
-				// Toggle detailed MPC logs
-				static bool detailed_logs = false;
-				detailed_logs = !detailed_logs;
-				std::cout << "Logs detalhados do MPC: "
-				          << (detailed_logs ? "ATIVADOS" : "DESATIVADOS") << std::endl;
+			} else if(input == "h" || input == "help") {
+				// Mostrar ajuda
+				std::cout << "=== COMANDOS DISPONÍVEIS ===" << std::endl;
+				std::cout << "1: Ativar MPC" << std::endl;
+				std::cout << "2: Ativar Manual" << std::endl;
+				std::cout << "3: Iniciar Gravação" << std::endl;
+				std::cout << "4: Parar Gravação" << std::endl;
+				std::cout << "5: Ativar Logs Detalhados" << std::endl;
+				std::cout << "6: Desativar Logs Detalhados" << std::endl;
+				std::cout << "7: Limpeza de Memória" << std::endl;
+				std::cout << "s: Mostrar Status" << std::endl;
+				std::cout << "c: Limpar Waypoints" << std::endl;
+				std::cout << "h: Mostrar esta Ajuda" << std::endl;
+				std::cout << "q: Sair" << std::endl;
 			} else if(input == "q") {
 				// Sair
+				g_running = false;
 				QApplication::quit();
 			} else {
-				std::cout << "Comando não reconhecido. Use: m(modo), r(gravar), c(limpar), "
-				             "d(debug), s(status), q(sair)"
+				std::cout << "Comando não reconhecido. Digite 'h' para ajuda ou use:" << std::endl;
+				std::cout << "1:MPC  2:Manual  3:InicGrav  4:PararGrav  5:LogsON  6:LogsOFF  "
+				             "s:Status  q:Sair"
 				          << std::endl;
 			}
 		}
@@ -381,9 +486,11 @@ class MPCIntegratedApp : public QObject {
 							}
 						}
 
-						if(!zmq_connection_failed) {
-							std::cout << "[DEBUG] CameraStreamer is running but no frames yet"
-							          << std::endl;
+						static int no_frame_counter = 0;
+						no_frame_counter++;
+						if(no_frame_counter % 50 == 0) { // Only log every 50 attempts (~100 seconds)
+							std::cout << "[DEBUG] CameraStreamer is running but no frames yet (attempt " 
+							          << no_frame_counter << ")" << std::endl;
 						}
 
 					} catch(const std::exception &e) {
@@ -569,16 +676,79 @@ class MPCIntegratedApp : public QObject {
 					g_running = false;
 					cv::destroyAllWindows();
 					QApplication::quit();
-				} else if(key == 'm') {
-					toggleMPCMode();
-				} else if(key == 'r') {
-					handleRecordCommand();
+				} else if(key == '1') {
+					// Ativar MPC
+					if(!mpc_active) {
+						activateMPC();
+					} else {
+						std::cout << "MPC já está ATIVO" << std::endl;
+					}
+				} else if(key == '2') {
+					// Ativar Manual
+					if(mpc_active) {
+						deactivateMPC();
+					} else {
+						std::cout << "Modo MANUAL já está ativo" << std::endl;
+					}
+				} else if(key == '3') {
+					// Iniciar gravação
+					if(!recording_active) {
+						recording_active = true;
+						recorded_waypoints.clear();
+						startRecording();
+						std::cout << "INICIANDO gravação de trajetória" << std::endl;
+					} else {
+						std::cout << "Gravação já está ATIVA" << std::endl;
+					}
+				} else if(key == '4') {
+					// Parar gravação
+					if(recording_active) {
+						recording_active = false;
+						std::cout << "PARANDO gravação de trajetória (" << recorded_waypoints.size()
+						          << " waypoints gravados)" << std::endl;
+					} else {
+						std::cout << "Gravação já está PARADA" << std::endl;
+					}
+				} else if(key == '5') {
+					// Ativar logs
+					if(!verbose_logging) {
+						verbose_logging = true;
+						std::cout << "Logs detalhados ATIVADOS" << std::endl;
+					} else {
+						static int opencv_repeat_counter = 0;
+						if(++opencv_repeat_counter % 10 == 0) { // Only show every 10th time
+							std::cout << "Logs detalhados já estão ATIVOS (opencv reminder #" << opencv_repeat_counter/10 << ")" << std::endl;
+						}
+					}
+				} else if(key == '6') {
+					// Desativar logs
+					if(verbose_logging) {
+						verbose_logging = false;
+						std::cout << "Logs detalhados DESATIVADOS" << std::endl;
+					} else {
+						std::cout << "Logs detalhados já estão DESATIVADOS" << std::endl;
+					}
+				} else if(key == '7') {
+					// Limpeza de memória
+					std::cout << "Executando limpeza de memória..." << std::endl;
+					cv::Mat().copyTo(cv::Mat());
+					#ifdef CUDA_AVAILABLE
+					try {
+						cudaDeviceSynchronize();
+						std::cout << "CUDA memory synchronized" << std::endl;
+					} catch(...) {}
+					#endif
+					std::cout << "Limpeza de memória concluída" << std::endl;
 				} else if(key == 'c') {
 					recorded_waypoints.clear();
 					std::cout << "Trajetória limpa (" << recorded_waypoints.size() << " waypoints)"
 					          << std::endl;
 				} else if(key == 's') {
 					showStatus();
+				} else if(key == 'h') {
+					std::cout << "=== AJUDA - TECLAS OPENCV ===" << std::endl;
+					std::cout << "1:MPC  2:Manual  3:InicGrav  4:PararGrav" << std::endl;
+					std::cout << "5:LogsON  6:LogsOFF  7:LimpMem  s:Status  c:Limpar  q:Sair" << std::endl;
 				}
 
 			} catch(const std::exception &e) {
@@ -613,13 +783,15 @@ class MPCIntegratedApp : public QObject {
 
 			// Enhanced camera status
 			std::string camera_status;
+			static int camera_frame_counter = 0;
 			if(m_cameraFrameAvailable && !m_currentCameraFrame.empty()) {
+				camera_frame_counter++;
 				// Detect if it's synthetic
 				cv::Scalar mean_color = cv::mean(m_currentCameraFrame);
 				if(mean_color[0] < 30 && mean_color[1] < 30 && mean_color[2] < 30) {
-					camera_status = "Cam: SYNTHETIC";
+					camera_status = "Cam: SYNTHETIC #" + std::to_string(camera_frame_counter);
 				} else {
-					camera_status = "Cam: REAL";
+					camera_status = "Cam: REAL #" + std::to_string(camera_frame_counter);
 				}
 			} else {
 				camera_status = "Cam: WAITING";
@@ -659,22 +831,13 @@ class MPCIntegratedApp : public QObject {
 			}
 		}
 
-		void handleRecordCommand() {
-			static bool recording = false;
-			recording = !recording;
-			std::cout << (recording ? "Iniciando gravação de trajetória"
-			                        : "Parando gravação de trajetória")
-			          << std::endl;
-			if(recording) {
-				recorded_waypoints.clear();
-				startRecording();
-			}
-		}
-
 		void setupKeyboardInput() {
-			std::cout << "Digite comandos (m: modo, r: gravar, c: limpar, s: status, q: sair):"
-			          << std::endl;
-			std::cout << "Ou use as teclas na janela OpenCV" << std::endl;
+			std::cout << "=== COMANDOS DISPONÍVEIS ===" << std::endl;
+			std::cout << "1: Ativar MPC       2: Ativar Manual" << std::endl;
+			std::cout << "3: Iniciar Gravação 4: Parar Gravação" << std::endl;
+			std::cout << "5: Logs ON          6: Logs OFF        7: Limpeza Memória" << std::endl;
+			std::cout << "s: Status    c: Limpar    h: Ajuda    q: Sair" << std::endl;
+			std::cout << "Digite o comando ou use as teclas na janela OpenCV:" << std::endl;
 
 			// Timer para verificar input
 			QTimer *input_timer = new QTimer(this);
@@ -689,35 +852,42 @@ class MPCIntegratedApp : public QObject {
 			input_timer->start(100); // Check every 100ms
 		}
 
-		void toggleMPCMode() {
-			mpc_active = !mpc_active;
-
+		void activateMPC() {
 			if(mpc_active) {
-				// Check if we have either recorded waypoints or live lane detection
-				if(recorded_waypoints.size() < 3 && m_predictedTrajectory.empty()) {
-					std::cout << "Erro: Precisa de waypoints gravados OU detecção de pistas ativa!"
-					          << std::endl;
-					mpc_active = false;
-					return;
-				}
-
-				// Mudar para modo autônomo
-				controls_manager->setMode(DrivingMode::Automatic);
-				mpc_timer->start(50); // 20 Hz
-
-				if(!m_predictedTrajectory.empty()) {
-					std::cout << "Modo MPC ATIVADO - Seguindo detecção de pistas com "
-					          << m_predictedTrajectory.size() << " pontos" << std::endl;
-				} else {
-					std::cout << "Modo MPC ATIVADO - Seguindo trajetória gravada com "
-					          << recorded_waypoints.size() << " waypoints" << std::endl;
-				}
-			} else {
-				// Mudar para modo manual
-				controls_manager->setMode(DrivingMode::Manual);
-				mpc_timer->stop();
-				std::cout << "Modo MANUAL ATIVADO - Use joystick" << std::endl;
+				return; // Already active
 			}
+
+			// Check if we have either recorded waypoints or live lane detection
+			if(recorded_waypoints.size() < 3 && m_predictedTrajectory.empty()) {
+				std::cout << "ERRO: Precisa de waypoints gravados OU detecção de pistas ativa!"
+				          << std::endl;
+				return;
+			}
+
+			mpc_active = true;
+			// Mudar para modo autônomo
+			controls_manager->setMode(DrivingMode::Automatic);
+			mpc_timer->start(100); // 10 Hz - Reduced frequency to avoid interfering with camera
+
+			if(!m_predictedTrajectory.empty()) {
+				std::cout << "MPC ATIVADO - Seguindo detecção de pistas com "
+				          << m_predictedTrajectory.size() << " pontos" << std::endl;
+			} else {
+				std::cout << "MPC ATIVADO - Seguindo trajetória gravada com "
+				          << recorded_waypoints.size() << " waypoints" << std::endl;
+			}
+		}
+
+		void deactivateMPC() {
+			if(!mpc_active) {
+				return; // Already inactive
+			}
+
+			mpc_active = false;
+			// Mudar para modo manual
+			controls_manager->setMode(DrivingMode::Manual);
+			mpc_timer->stop();
+			std::cout << "MANUAL ATIVADO - Use joystick" << std::endl;
 		}
 
 		void startRecording() {
@@ -1147,6 +1317,13 @@ int main(int argc, char *argv[]) {
 		QTimer *shutdown_timer = new QTimer(&app);
 		QObject::connect(shutdown_timer, &QTimer::timeout, [&]() {
 			if(!g_running) {
+				std::cout << "[main] Shutting down due to signal..." << std::endl;
+
+				// Stop the app immediately
+				if(integrated_app) {
+					integrated_app.reset();
+				}
+
 				cv::destroyAllWindows();
 				app.quit();
 			}

@@ -1,10 +1,11 @@
 #include "../../includes/inference/CameraStreamer.hpp"
+#include <atomic>
 
 // Constructor: initializes camera capture, inference reference, and settings
 CameraStreamer::CameraStreamer(double scale, bool use_video, const std::string &video_path)
-    : scale_factor(scale), m_publisherFrameObject(nullptr), m_running(true),
-      m_rawFramePublisher(nullptr), m_useVideo(use_video), m_videoPath(video_path),
-      m_videoLoop(true), m_currentFrame(0), m_totalFrames(0) {
+    : scale_factor(scale), m_useVideo(use_video), m_videoPath(video_path), m_videoLoop(true),
+      m_currentFrame(0), m_totalFrames(0), m_running(true), m_publisherFrameObject(nullptr),
+      m_rawFramePublisher(nullptr) {
 
 	segmentationInferencer =
 	    std::make_shared<TensorRTInferencer>("/home/jetson/models/lane-detection/model.engine");
@@ -128,12 +129,15 @@ void CameraStreamer::start() {
 }
 
 void CameraStreamer::captureLoop() {
+	// Add external reference to global running flag
+	extern std::atomic<bool> g_running;
+
 	auto start_time = std::chrono::high_resolution_clock::now();
 	int frame_count = 0;
 	const int framesToSkip = m_useVideo ? 0 : 1; // Don't skip frames for video
 	cv::Mat frame;
 
-	while(m_running) {
+	while(m_running && g_running.load()) {
 		auto frame_start = std::chrono::high_resolution_clock::now();
 
 		if(m_useVideo) {
@@ -176,9 +180,10 @@ void CameraStreamer::captureLoop() {
 		// Publish raw camera frame for testing/debugging
 		try {
 			if(m_rawFramePublisher &&
-			   frame_count % 5 == 0) { // Publish every 5th frame to reduce bandwidth
+			   frame_count % 10 == 0) { // Publish every 10th frame to reduce bandwidth and memory
 				std::vector<uchar> buffer;
-				cv::imencode(".jpg", frame, buffer, {cv::IMWRITE_JPEG_QUALITY, 70});
+				cv::imencode(".jpg", frame, buffer,
+				             {cv::IMWRITE_JPEG_QUALITY, 50}); // Lower quality to save memory
 				std::string encoded_frame(buffer.begin(), buffer.end());
 				m_rawFramePublisher->publish("camera_frame", encoded_frame);
 			}
@@ -204,7 +209,7 @@ void CameraStreamer::captureLoop() {
 		auto now = std::chrono::high_resolution_clock::now();
 		auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
 
-		if(elapsed >= 10) { // Log every 10 seconds instead of every second
+		if(elapsed >= 30) { // Log every 30 seconds to reduce console spam
 			if(m_useVideo) {
 				std::cout << "[CameraStreamer] Video playback: Frame " << m_currentFrame << "/"
 				          << m_totalFrames

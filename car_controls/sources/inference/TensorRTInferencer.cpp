@@ -331,10 +331,6 @@ void TensorRTInferencer::doInference(const cv::Mat &frame) {
 		throw std::runtime_error("Input frame is empty");
 	}
 
-	// Log de monitoramento do frame recebido
-	std::cout << "[LaneDetection] Frame shape: " << frame.cols << "x" << frame.rows
-	          << ", type: " << frame.type() << ", sum: " << cv::sum(frame)[0] << std::endl;
-
 	// Debug: Log model dimensions
 	static bool first_run = true;
 	if(first_run) {
