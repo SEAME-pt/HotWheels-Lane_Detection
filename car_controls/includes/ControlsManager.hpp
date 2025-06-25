@@ -26,6 +26,11 @@
 #include <QObject>
 #include <QProcess>
 #include <QThread>
+#include <memory>
+#include <mutex>
+#include <condition_variable>
+#include <queue>
+#include <chrono>
 
 /*!
  * @brief The ControlsManager class.
@@ -35,28 +40,60 @@ class ControlsManager : public QObject {
 		Q_OBJECT
 
 	private:
+		// Core controllers
 		EngineController m_engineController;
 		JoysticksController *m_manualController;
 		DrivingMode m_currentMode;
 
+		// Subscriber objects
 		Subscriber *m_subscriberJoystickObject;
 		CameraStreamer *m_cameraStreamerObject;
 
+		// Thread management
 		std::atomic<bool> m_running;
 		QThread *m_cameraStreamerThread;
-
 		QThread *m_manualControllerThread;
 		QThread *m_joystickControlThread;
-
 		QThread *m_subscriberJoystickThread;
+		QThread *m_autonomousControlThread;
+
+		// MPC components
 		MPCPlanner *m_mpcPlanner;
 		Polyfitter *m_polyfitter;
 		std::atomic<bool> m_autonomousMode;
-		QThread *m_autonomousControlThread;
 
 		// Track applied controls for state estimation
 		std::atomic<double> m_lastThrottle{0.0};
 		std::atomic<double> m_lastSteering{0.0};
+
+		// === NEW: Persistent ZMQ connections and data caching ===
+		// Persistent ZMQ subscribers to avoid repeated connection overhead
+		std::unique_ptr<Subscriber> m_visionSubscriber;
+		std::unique_ptr<Subscriber> m_obstacleSubscriber;
+		QThread *m_visionDataThread;
+		QThread *m_obstacleDataThread;
+
+		// Cached data structures with thread-safe access
+		struct CachedVisionData {
+			std::vector<Point2D> waypoints;
+			LaneInfo lane_info;
+			std::chrono::steady_clock::time_point timestamp;
+			bool valid = false;
+			std::mutex mutex;
+		} m_cachedVisionData;
+
+		struct CachedObstacleData {
+			bool emergency_stop = false;
+			std::chrono::steady_clock::time_point timestamp;
+			bool valid = false;
+			std::mutex mutex;
+		} m_cachedObstacleData;
+
+		// Control loop timing
+		static constexpr double CONTROL_RATE = 20.0; // Hz
+		static constexpr double DATA_TIMEOUT_MS = 200.0; // Max age for cached data
+		static constexpr double VISION_UPDATE_RATE = 10.0; // Hz - Lower rate for vision processing
+		static constexpr double OBSTACLE_UPDATE_RATE = 20.0; // Hz - Higher rate for safety
 
 	public:
 		explicit ControlsManager(int argc, char **argv, QObject *parent = nullptr);
@@ -75,9 +112,21 @@ class ControlsManager : public QObject {
 		VehicleState getCurrentVehicleState();
 
 	private:
+		// === NEW: Thread-safe data access methods ===
+		std::vector<Point2D> getCachedWaypoints();
+		LaneInfo getCachedLaneInfo();
+		bool getCachedEmergencyStop();
+
+		// === NEW: Background data update threads ===
+		void visionDataUpdateLoop();
+		void obstacleDataUpdateLoop();
+
+		// === REFACTORED: Direct ZMQ methods (now used only by background threads) ===
 		std::vector<Point2D> getWaypointsFromVision();
 		LaneInfo getLaneInfoFromVision();
 		bool checkEmergencyObstacles();
+
+		// Utility methods
 		std::string serializeMask(const cv::Mat &mask);
 		cv::Mat deserializeMask(const std::string &data);
 

@@ -52,7 +52,7 @@ ControlCommand MPCPlanner::plan(const VehicleState &current_state,
 	double cte0 = 0.0, epsi0 = 0.0;
 	if(!poly_coeffs.empty()) {
 		cte0 = polyfitter.calculateCTE(poly_coeffs, 0.0, 0.0);
-		epsi0 = polyfitter.calculateEPSI(poly_coeffs, 0.0, current_state.yaw);
+		epsi0 = polyfitter.calculateEPSI(poly_coeffs, 0.0, 0.0); // Use 0.0 for local vehicle yaw
 	}
 
 	// Tratar latência

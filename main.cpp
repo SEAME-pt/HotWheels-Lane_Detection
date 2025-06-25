@@ -136,19 +136,44 @@ class MPCIntegratedApp : public QObject {
 			std::cout << "[~MPCIntegratedApp] Starting cleanup..." << std::endl;
 
 			try {
+				// Set global flag first to stop all operations
+				g_running = false;
+
 				// Stop all timers first
 				if(mpc_timer) {
 					mpc_timer->stop();
+					mpc_timer->deleteLater();
 					mpc_timer = nullptr;
 				}
 
 				if(m_visualizationTimer) {
 					m_visualizationTimer->stop();
+					m_visualizationTimer->deleteLater();
 					m_visualizationTimer = nullptr;
 				}
 
-				// Close OpenCV windows
-				cv::destroyAllWindows();
+				// Close OpenCV windows safely
+				try {
+					cv::destroyAllWindows();
+					cv::waitKey(1); // Process any pending events
+					
+					// Clean up member matrices explicitly
+					if (!m_currentLaneMask.empty()) {
+						m_currentLaneMask.release();
+					}
+					if (!m_processedFrame.empty()) {
+						m_processedFrame.release();
+					}
+					
+					// Force release of any global OpenCV matrices
+					cv::Mat().copyTo(cv::Mat()); // Force cleanup
+					std::this_thread::sleep_for(std::chrono::milliseconds(50));
+					
+				} catch(const cv::Exception &e) {
+					std::cerr << "[~MPCIntegratedApp] OpenCV cleanup warning: " << e.what() << std::endl;
+				} catch(...) {
+					// Ignore other OpenCV cleanup errors
+				}
 
 				// For SIGINT shutdowns, avoid CUDA operations entirely
 				if(m_inferencer) {
@@ -164,12 +189,20 @@ class MPCIntegratedApp : public QObject {
 					}
 				}
 
-				// Reset other smart pointers
-				m_laneDetectionSubscriber.reset();
+				// Reset other smart pointers safely
+				try {
+					m_laneDetectionSubscriber.reset();
+				} catch(...) {
+					// Ignore subscriber cleanup errors
+				}
 
-				// Delete MPC planner
+				// Delete MPC planner safely
 				if(mpc_planner) {
-					delete mpc_planner;
+					try {
+						delete mpc_planner;
+					} catch(...) {
+						// Ignore MPC cleanup errors
+					}
 					mpc_planner = nullptr;
 				}
 

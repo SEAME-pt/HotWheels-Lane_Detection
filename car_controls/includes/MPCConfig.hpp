@@ -9,20 +9,20 @@ struct MPCConfig {
 		static constexpr double wheelbase = 0.15; // Entre-eixo real: 15cm
 
 		// Pesos padrão ajustados para escala pequena (para retas)
-		static constexpr double w_cte_straight = 12.0;     // Maior peso para tracking de trajetória
-		static constexpr double w_etheta_straight = 6.0;   // Mais controle de orientação
+		static constexpr double w_cte_straight = 15.0;     // Maior peso para tracking de trajetória
+		static constexpr double w_etheta_straight = 8.0;   // Mais controle de orientação
 		static constexpr double w_vel_straight = 0.8;      // Menor peso na velocidade
 		static constexpr double w_throttle_straight = 0.2; // Suavidade de throttle
-		static constexpr double w_steer_straight = 0.15;   // Suavidade de steering
+		static constexpr double w_steer_straight = 0.05;   // Muito baixo para permitir steering
 		static constexpr double target_speed_straight =
 		    1.0; // Velocidade reduzida: 1 m/s (3.6 km/h)
 
 		// Pesos para curvas ajustados para Jetracer
-		static constexpr double w_cte_curve = 20.0;     // Muito importante para curvas apertadas
-		static constexpr double w_etheta_curve = 12.0;  // Controle crítico de orientação
+		static constexpr double w_cte_curve = 25.0;     // Muito importante para curvas apertadas
+		static constexpr double w_etheta_curve = 15.0;  // Controle crítico de orientação
 		static constexpr double w_vel_curve = 0.2;      // Velocidade muito controlada em curvas
 		static constexpr double w_throttle_curve = 0.1; // Throttle suave
-		static constexpr double w_steer_curve = 0.05;   // Steering muito suave
+		static constexpr double w_steer_curve = 0.02;   // Steering muito livre para curvas
 		static constexpr double target_speed_curve_base =
 		    0.3; // Velocidade mínima em curvas: 0.3 m/s
 		static constexpr double target_speed_curve_factor = 15.0; // Fator de redução por curvatura
