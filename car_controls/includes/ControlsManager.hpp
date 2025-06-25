@@ -26,11 +26,11 @@
 #include <QObject>
 #include <QProcess>
 #include <QThread>
+#include <chrono>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
-#include <condition_variable>
 #include <queue>
-#include <chrono>
 
 /*!
  * @brief The ControlsManager class.
@@ -66,6 +66,31 @@ class ControlsManager : public QObject {
 		std::atomic<double> m_lastThrottle{0.0};
 		std::atomic<double> m_lastSteering{0.0};
 
+		// === NEW: Enhanced vehicle state estimation ===
+		struct VehicleStateEstimator {
+				// External data integration (vision-based measurements, manual input, etc.)
+				std::atomic<bool> m_useRealSensors{false};
+				std::atomic<double> m_realVelocity{0.0}; // External velocity measurement
+				std::atomic<double> m_realYawRate{0.0};  // External yaw rate measurement
+
+				// Kalman filter state
+				VehicleState m_estimatedState{0.0, 0.0, 0.0, 0.0};
+				std::chrono::steady_clock::time_point m_lastUpdate;
+
+				// State covariance and noise parameters
+				static constexpr double PROCESS_NOISE_POS = 0.1;
+				static constexpr double PROCESS_NOISE_VEL = 0.05;
+				static constexpr double PROCESS_NOISE_YAW = 0.02;
+				static constexpr double MEASUREMENT_NOISE_VEL = 0.1;
+
+				std::mutex m_stateMutex;
+				bool m_initialized = false;
+
+				VehicleStateEstimator() {
+					m_lastUpdate = std::chrono::steady_clock::now();
+				}
+		} m_stateEstimator;
+
 		// === NEW: Persistent ZMQ connections and data caching ===
 		// Persistent ZMQ subscribers to avoid repeated connection overhead
 		std::unique_ptr<Subscriber> m_visionSubscriber;
@@ -75,23 +100,23 @@ class ControlsManager : public QObject {
 
 		// Cached data structures with thread-safe access
 		struct CachedVisionData {
-			std::vector<Point2D> waypoints;
-			LaneInfo lane_info;
-			std::chrono::steady_clock::time_point timestamp;
-			bool valid = false;
-			std::mutex mutex;
+				std::vector<Point2D> waypoints;
+				LaneInfo lane_info{0.0, 0.0}; // Explicit initialization to avoid ambiguity
+				std::chrono::steady_clock::time_point timestamp;
+				bool valid = false;
+				std::mutex mutex;
 		} m_cachedVisionData;
 
 		struct CachedObstacleData {
-			bool emergency_stop = false;
-			std::chrono::steady_clock::time_point timestamp;
-			bool valid = false;
-			std::mutex mutex;
+				bool emergency_stop = false;
+				std::chrono::steady_clock::time_point timestamp;
+				bool valid = false;
+				std::mutex mutex;
 		} m_cachedObstacleData;
 
 		// Control loop timing
-		static constexpr double CONTROL_RATE = 20.0; // Hz
-		static constexpr double DATA_TIMEOUT_MS = 200.0; // Max age for cached data
+		static constexpr double CONTROL_RATE = 20.0;       // Hz
+		static constexpr double DATA_TIMEOUT_MS = 200.0;   // Max age for cached data
 		static constexpr double VISION_UPDATE_RATE = 10.0; // Hz - Lower rate for vision processing
 		static constexpr double OBSTACLE_UPDATE_RATE = 20.0; // Hz - Higher rate for safety
 
@@ -105,11 +130,17 @@ class ControlsManager : public QObject {
 		void startAutonomousControl();
 		void stopAutonomousControl();
 		void autonomousControlLoop();
-		// Exibe a imagem da câmera com as lanes e centerline desenhadas
 		void showVisionDebug();
-
-		// Make this public so main.cpp can access it
 		VehicleState getCurrentVehicleState();
+
+		// === NEW: Enhanced sensor integration interface ===
+		void enableRealSensors(bool enable = true);
+		void updateRealVelocity(
+		    double velocity); // For external velocity measurements (vision-based, etc.)
+		void updateRealYawRate(
+		    double yaw_rate); // For external yaw rate measurements (vision-based, etc.)
+		VehicleState getVehicleStateWithDiagnostics();
+		void resetVehicleState(const VehicleState &initial_state = {0.0, 0.0, 0.0, 0.0});
 
 	private:
 		// === NEW: Thread-safe data access methods ===
@@ -120,6 +151,12 @@ class ControlsManager : public QObject {
 		// === NEW: Background data update threads ===
 		void visionDataUpdateLoop();
 		void obstacleDataUpdateLoop();
+
+		// === NEW: Enhanced vehicle state estimation ===
+		void updateVehicleStateEstimation(double applied_throttle, double applied_steering,
+		                                  double dt);
+		void integrateRealSensorData(); // For future sensor integration
+		VehicleState getEnhancedVehicleState();
 
 		// === REFACTORED: Direct ZMQ methods (now used only by background threads) ===
 		std::vector<Point2D> getWaypointsFromVision();
