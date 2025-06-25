@@ -1,6 +1,6 @@
 ## Micro::bit V2
 
-![Micro:bit V2](https://kitronik.co.uk/cdn/shop/products/56100_large-micro-bit-v2-board-only_800x.jpg?v=1607514556)
+<img src="https://kitronik.co.uk/cdn/shop/products/56100_large-micro-bit-v2-board-only_800x.jpg?v=1607514556" alt="Micro:bit V2" style="width:40%;">
 
 #### Hardware Overview
 - Features a 5×5 red LED matrix display for visual output (can show text, icons, animations)
@@ -48,7 +48,7 @@ Programs are uploaded via USB or Bluetooth, and it starts running them immediate
 
 ## Kitronik STOP:bit
 
-![Kitronik STOP:bit](https://kitronik.co.uk/cdn/shop/products/5642_large-stop-bit-bbc-microbit-pedestrian-crossing-traffic-light_f8cf5103-c02d-42f3-86df-059e4afe8764_800x.jpg?v=1582131763)
+<img src="https://kitronik.co.uk/cdn/shop/products/5642_large-stop-bit-bbc-microbit-pedestrian-crossing-traffic-light_f8cf5103-c02d-42f3-86df-059e4afe8764_800x.jpg?v=1582131763" alt="Kitronik STOP:bit" style="width:40%;">
 
 #### Hardware Overview
 - Features three large 10 mm LEDs in red, yellow, and green—perfectly sized and spaced like a pedestrian crossing light
@@ -74,8 +74,7 @@ Programs are uploaded via USB or Bluetooth, and it starts running them immediate
 ----------------------------------------------------------
 
 ## Kitronik ACCESS:bit
-
-![Kitronik ACCESS:bit](https://kitronik.co.uk/cdn/shop/products/5646_large-access-bit-microbit-transportation-pedestrian-crossing-projects_53f05acd-fcfe-486e-b843-cd909d027dbf_800x.jpg?v=1582131993)
+<img src="https://kitronik.co.uk/cdn/shop/products/5646_large-access-bit-microbit-transportation-pedestrian-crossing-projects_53f05acd-fcfe-486e-b843-cd909d027dbf_800x.jpg?v=1582131993" alt="Kitronik ACCESS:bit" style="width:40%;">
 
 #### Hardware Overview
 - Features a servo-controlled barrier arm that swings up and down like a real access gate
