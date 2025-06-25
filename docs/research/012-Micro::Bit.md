@@ -1,4 +1,54 @@
+## Micro::bit V2
+
+![Micro:bit V2](https://kitronik.co.uk/cdn/shop/products/56100_large-micro-bit-v2-board-only_800x.jpg?v=1607514556)
+
+#### Hardware Overview
+- Features a 5×5 red LED matrix display for visual output (can show text, icons, animations)
+- Includes two onboard programmable buttons (A and B) for user interaction
+- Equipped with a built-in microphone and speaker for sound input/output
+- Contains motion sensors: accelerometer and magnetometer (compass)
+- Edge connector with 25 exposed GPIO pads, including 3 main rings for easy clip-on connections
+- Built-in 2.4 GHz radio and Bluetooth Low Energy (BLE) for wireless communication
+- Touch-sensitive logo and power/reset button
+- Powered via micro-USB or 2×AAA battery pack (with JST connector)
+
+#### How it works
+
+The micro:bit V2 is a compact, all-in-one microcontroller board designed for easy physical computing, coding education, and prototyping.
+It works by running user-written programs (in Python, MakeCode, or C++) that interact with its onboard sensors, actuators, and I/O pins.
+The board executes instructions stored in its flash memory, allowing it to:
+- Control external components (LEDs, servos, sensors),
+- Respond to physical inputs (buttons, accelerometer, microphone),
+- Communicate wirelessly using Bluetooth or its built-in radio.
+Programs are uploaded via USB or Bluetooth, and it starts running them immediately after power-up.
+
+#### Kind of signals used
+
+| Signal Type          | Purpose                                                |
+| -------------------- | ------------------------------------------------------ |
+| **Digital I/O**      | To turn devices ON/OFF (e.g. LEDs, buzzers)            |
+| **PWM**              | To control motors and servos (smooth movement)         |
+| **Analog Input**     | To read variable sensors (light, temperature)          |
+| **I2C / SPI / UART** | To communicate with other boards or sensors            |
+| **Radio (2.4 GHz)**  | To wirelessly send short messages to other micro\:bits |
+| **Bluetooth LE**     | To connect to phones, tablets, or PCs wirelessly       |
+
+#### What you need to interact with it
+
+| Component / Tool                                          | Purpose                                                 |
+| --------------------------------------------------------- | ------------------------------------------------------- |
+| **USB cable (micro-USB)**                                 | To power and program the micro\:bit                     |
+| **Computer or mobile device**                             | To write and upload code (via MakeCode, Python, or app) |
+| **Battery pack (optional)**                               | To run the micro\:bit without USB (e.g. in the field)   |
+| **External components** (e.g. STOP\:bit, sensors, motors) | To expand its functionality                             |
+| **Alligator clips / breakout board**                      | To connect to the GPIO edge pins                        |
+| **MakeCode or MicroPython editor**                        | To write, test, and deploy code                         |
+
+----------------------------------------------------------
+
 ## Kitronik STOP:bit
+
+![Kitronik STOP:bit](https://kitronik.co.uk/cdn/shop/products/5642_large-stop-bit-bbc-microbit-pedestrian-crossing-traffic-light_f8cf5103-c02d-42f3-86df-059e4afe8764_800x.jpg?v=1582131763)
 
 #### Hardware Overview
 - Features three large 10 mm LEDs in red, yellow, and green—perfectly sized and spaced like a pedestrian crossing light
@@ -24,6 +74,8 @@
 ----------------------------------------------------------
 
 ## Kitronik ACCESS:bit
+
+![Kitronik ACCESS:bit](https://kitronik.co.uk/cdn/shop/products/5646_large-access-bit-microbit-transportation-pedestrian-crossing-projects_53f05acd-fcfe-486e-b843-cd909d027dbf_800x.jpg?v=1582131993)
 
 #### Hardware Overview
 - Features a servo-controlled barrier arm that swings up and down like a real access gate
@@ -52,6 +104,10 @@
 - A micro USB cable to program the micro:bit.
 - Kitronik MakeCode extension for ACCESS:bit, giving you child-friendly drag‑and‑drop blocks to control it
 - Optionally: screws or crocodile clips to attach the micro:bit.
+
+#### Mounting PDF
+
+https://resources.kitronik.co.uk/pdf/5646-access-bit-microbit-pedestrian-crossing-datsheet.pdf
 
 ----------------------------------------------------------
 
