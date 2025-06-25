@@ -17,17 +17,17 @@
 
 #include "ControlsManager.hpp"
 #include <QDebug>
+#include <chrono>
+#include <condition_variable>
 #include <fcntl.h>
+#include <iomanip>
+#include <memory>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <sys/mman.h>
-#include <unistd.h>
-#include <memory>
-#include <mutex>
-#include <condition_variable>
-#include <chrono>
 #include <thread>
-#include <iomanip>
+#include <unistd.h>
 
 /*!
  * @brief Constructs a ControlsManager object.
@@ -46,7 +46,8 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
       m_manualControllerThread(nullptr), m_joystickControlThread(nullptr),
       m_subscriberJoystickThread(nullptr), m_cameraStreamerThread(nullptr), m_running(true),
       mpcPlanner(nullptr), m_polyfitter(nullptr), m_autonomousMode(false),
-      m_autonomousControlThread(nullptr), m_visionDataThread(nullptr), m_obstacleDataThread(nullptr) {
+      m_autonomousControlThread(nullptr), m_visionDataThread(nullptr),
+      m_obstacleDataThread(nullptr) {
 
 	// Initialize the joystick controller with callbacks
 	//! Verify where to put AUTO mode.
@@ -143,7 +144,7 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
 	m_visionDataThread = QThread::create([this]() { visionDataUpdateLoop(); });
 	m_visionDataThread->start();
 
-	// Initialize obstacle data subscriber in its own thread  
+	// Initialize obstacle data subscriber in its own thread
 	m_obstacleSubscriber = std::make_unique<Subscriber>();
 	m_obstacleDataThread = QThread::create([this]() { obstacleDataUpdateLoop(); });
 	m_obstacleDataThread->start();
@@ -318,12 +319,12 @@ void ControlsManager::autonomousControlLoop() {
 	while(m_autonomousMode && m_running && g_running.load()) {
 		auto now = std::chrono::steady_clock::now();
 		auto elapsed = std::chrono::duration<double>(now - last_control_time).count();
-		
+
 		// Precise timing control
 		if(elapsed < CONTROL_PERIOD) {
-			std::this_thread::sleep_for(std::chrono::microseconds(
-				static_cast<long>((CONTROL_PERIOD - elapsed) * 1000000 * 0.8) // Sleep for 80% of remaining time
-			));
+			std::this_thread::sleep_for(std::chrono::microseconds(static_cast<long>(
+			    (CONTROL_PERIOD - elapsed) * 1000000 * 0.8) // Sleep for 80% of remaining time
+			                                                      ));
 			continue;
 		}
 		last_control_time = now;
@@ -349,11 +350,12 @@ void ControlsManager::autonomousControlLoop() {
 			// 2. Get cached perception data (non-blocking)
 			std::vector<Point2D> waypoints = getCachedWaypoints();
 			LaneInfo lane_info = getCachedLaneInfo();
-			
+
 			if(control_counter % 40 == 0) {
 				std::cout << "State: x=" << std::fixed << std::setprecision(2) << current_state.x
 				          << ", y=" << current_state.y << ", vel=" << current_state.velocity
-				          << ", yaw=" << current_state.yaw << " | Waypoints: " << waypoints.size() << std::endl;
+				          << ", yaw=" << current_state.yaw << " | Waypoints: " << waypoints.size()
+				          << std::endl;
 			}
 
 			// 3. Check for emergency obstacles (cached data)
@@ -364,10 +366,10 @@ void ControlsManager::autonomousControlLoop() {
 				}
 				continue;
 			}
-			
+
 			// 4. Calculate MPC control (main computational work)
 			ControlCommand control = m_mpcPlanner->plan(current_state, waypoints, &lane_info);
-			
+
 			// 5. Apply controls with safety limits
 			int throttle_pct = static_cast<int>(std::clamp(control.throttle * 100, 0.0, 50.0));
 			int steer_angle = static_cast<int>(std::clamp(control.steer * 45, -45.0, 45.0));
@@ -384,14 +386,14 @@ void ControlsManager::autonomousControlLoop() {
 			// Apply controls to hardware
 			m_engineController.set_speed(throttle_pct);
 			m_engineController.set_steering(steer_angle);
-			
+
 		} catch(const std::exception &e) {
 			std::cerr << "Autonomous control error: " << e.what() << std::endl;
 			qDebug() << "Autonomous control error:" << e.what();
 			m_engineController.set_speed(0); // Safety stop
 		}
 	}
-	
+
 	qDebug() << "Autonomous control loop ended";
 }
 
@@ -449,7 +451,8 @@ std::vector<Point2D> ControlsManager::getWaypointsFromVision() {
 
 	try {
 		// Use the persistent vision subscriber connection
-		zmq::pollitem_t items[] = {{static_cast<void *>(m_visionSubscriber->getSocket()), 0, ZMQ_POLLIN, 0}};
+		zmq::pollitem_t items[] = {
+		    {static_cast<void *>(m_visionSubscriber->getSocket()), 0, ZMQ_POLLIN, 0}};
 		zmq::poll(items, 1, 50); // Reduced timeout: 50 ms
 
 		if(items[0].revents & ZMQ_POLLIN) {
@@ -492,7 +495,8 @@ std::vector<Point2D> ControlsManager::getWaypointsFromVision() {
 LaneInfo ControlsManager::getLaneInfoFromVision() {
 	try {
 		// Use the persistent vision subscriber connection
-		zmq::pollitem_t items[] = {{static_cast<void *>(m_visionSubscriber->getSocket()), 0, ZMQ_POLLIN, 0}};
+		zmq::pollitem_t items[] = {
+		    {static_cast<void *>(m_visionSubscriber->getSocket()), 0, ZMQ_POLLIN, 0}};
 		zmq::poll(items, 1, 50); // Reduced timeout: 50 ms
 
 		if(items[0].revents & ZMQ_POLLIN) {
@@ -527,7 +531,8 @@ LaneInfo ControlsManager::getLaneInfoFromVision() {
 bool ControlsManager::checkEmergencyObstacles() {
 	try {
 		// Use the persistent obstacle subscriber connection
-		zmq::pollitem_t items[] = {{static_cast<void *>(m_obstacleSubscriber->getSocket()), 0, ZMQ_POLLIN, 0}};
+		zmq::pollitem_t items[] = {
+		    {static_cast<void *>(m_obstacleSubscriber->getSocket()), 0, ZMQ_POLLIN, 0}};
 		zmq::poll(items, 1, 50); // Reduced timeout: 50 ms
 
 		if(items[0].revents & ZMQ_POLLIN) {
@@ -618,20 +623,21 @@ void ControlsManager::showVisionDebug() {
 	}
 }
 
-
 // === NEW: Thread-safe cached data access methods ===
 
 std::vector<Point2D> ControlsManager::getCachedWaypoints() {
 	std::lock_guard<std::mutex> lock(m_cachedVisionData.mutex);
-	
+
 	// Check if data is still valid (not too old)
 	auto now = std::chrono::steady_clock::now();
-	auto age_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_cachedVisionData.timestamp).count();
-	
+	auto age_ms =
+	    std::chrono::duration_cast<std::chrono::milliseconds>(now - m_cachedVisionData.timestamp)
+	        .count();
+
 	if(m_cachedVisionData.valid && age_ms < DATA_TIMEOUT_MS) {
 		return m_cachedVisionData.waypoints;
 	}
-	
+
 	// Return fallback waypoints if data is stale
 	std::vector<Point2D> fallback_waypoints;
 	for(int i = 1; i <= 10; ++i) {
@@ -642,28 +648,32 @@ std::vector<Point2D> ControlsManager::getCachedWaypoints() {
 
 LaneInfo ControlsManager::getCachedLaneInfo() {
 	std::lock_guard<std::mutex> lock(m_cachedVisionData.mutex);
-	
+
 	auto now = std::chrono::steady_clock::now();
-	auto age_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_cachedVisionData.timestamp).count();
-	
+	auto age_ms =
+	    std::chrono::duration_cast<std::chrono::milliseconds>(now - m_cachedVisionData.timestamp)
+	        .count();
+
 	if(m_cachedVisionData.valid && age_ms < DATA_TIMEOUT_MS) {
 		return m_cachedVisionData.lane_info;
 	}
-	
+
 	// Return neutral lane info if data is stale
 	return LaneInfo(0.0, 0.0);
 }
 
 bool ControlsManager::getCachedEmergencyStop() {
 	std::lock_guard<std::mutex> lock(m_cachedObstacleData.mutex);
-	
+
 	auto now = std::chrono::steady_clock::now();
-	auto age_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - m_cachedObstacleData.timestamp).count();
-	
+	auto age_ms =
+	    std::chrono::duration_cast<std::chrono::milliseconds>(now - m_cachedObstacleData.timestamp)
+	        .count();
+
 	if(m_cachedObstacleData.valid && age_ms < DATA_TIMEOUT_MS) {
 		return m_cachedObstacleData.emergency_stop;
 	}
-	
+
 	// Default to safe state if data is stale
 	return false;
 }
@@ -673,30 +683,30 @@ bool ControlsManager::getCachedEmergencyStop() {
 void ControlsManager::visionDataUpdateLoop() {
 	const double UPDATE_PERIOD = 1.0 / VISION_UPDATE_RATE;
 	auto last_update_time = std::chrono::steady_clock::now();
-	
+
 	// Add external reference to global running flag
 	extern std::atomic<bool> g_running;
-	
+
 	m_visionSubscriber->connect("tcp://localhost:5556");
 	m_visionSubscriber->subscribe("binary_mask");
-	
+
 	qDebug() << "Vision data update thread started";
-	
+
 	while(m_running && g_running.load()) {
 		auto now = std::chrono::steady_clock::now();
 		auto elapsed = std::chrono::duration<double>(now - last_update_time).count();
-		
+
 		if(elapsed < UPDATE_PERIOD) {
 			std::this_thread::sleep_for(std::chrono::milliseconds(10));
 			continue;
 		}
 		last_update_time = now;
-		
+
 		try {
 			// Get fresh vision data
 			std::vector<Point2D> waypoints = getWaypointsFromVision();
 			LaneInfo lane_info = getLaneInfoFromVision();
-			
+
 			// Update cached data in thread-safe manner
 			{
 				std::lock_guard<std::mutex> lock(m_cachedVisionData.mutex);
@@ -705,7 +715,7 @@ void ControlsManager::visionDataUpdateLoop() {
 				m_cachedVisionData.timestamp = now;
 				m_cachedVisionData.valid = true;
 			}
-			
+
 		} catch(const std::exception &e) {
 			std::cerr << "Vision data update error: " << e.what() << std::endl;
 			// Mark data as invalid on error
@@ -715,36 +725,36 @@ void ControlsManager::visionDataUpdateLoop() {
 			}
 		}
 	}
-	
+
 	qDebug() << "Vision data update thread ended";
 }
 
 void ControlsManager::obstacleDataUpdateLoop() {
 	const double UPDATE_PERIOD = 1.0 / OBSTACLE_UPDATE_RATE;
 	auto last_update_time = std::chrono::steady_clock::now();
-	
+
 	// Add external reference to global running flag
 	extern std::atomic<bool> g_running;
-	
+
 	m_obstacleSubscriber->connect("tcp://localhost:5557");
 	m_obstacleSubscriber->subscribe("emergency_stop");
-	
+
 	qDebug() << "Obstacle data update thread started";
-	
+
 	while(m_running && g_running.load()) {
 		auto now = std::chrono::steady_clock::now();
 		auto elapsed = std::chrono::duration<double>(now - last_update_time).count();
-		
+
 		if(elapsed < UPDATE_PERIOD) {
 			std::this_thread::sleep_for(std::chrono::milliseconds(5));
 			continue;
 		}
 		last_update_time = now;
-		
+
 		try {
 			// Get fresh obstacle data
 			bool emergency_stop = checkEmergencyObstacles();
-			
+
 			// Update cached data in thread-safe manner
 			{
 				std::lock_guard<std::mutex> lock(m_cachedObstacleData.mutex);
@@ -752,7 +762,7 @@ void ControlsManager::obstacleDataUpdateLoop() {
 				m_cachedObstacleData.timestamp = now;
 				m_cachedObstacleData.valid = true;
 			}
-			
+
 		} catch(const std::exception &e) {
 			std::cerr << "Obstacle data update error: " << e.what() << std::endl;
 			// Mark data as invalid on error
@@ -762,7 +772,7 @@ void ControlsManager::obstacleDataUpdateLoop() {
 			}
 		}
 	}
-	
+
 	qDebug() << "Obstacle data update thread ended";
 }
 

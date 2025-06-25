@@ -26,11 +26,11 @@
 #include <QObject>
 #include <QProcess>
 #include <QThread>
+#include <chrono>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
-#include <condition_variable>
 #include <queue>
-#include <chrono>
 
 /*!
  * @brief The ControlsManager class.
@@ -75,23 +75,23 @@ class ControlsManager : public QObject {
 
 		// Cached data structures with thread-safe access
 		struct CachedVisionData {
-			std::vector<Point2D> waypoints;
-			LaneInfo lane_info;
-			std::chrono::steady_clock::time_point timestamp;
-			bool valid = false;
-			std::mutex mutex;
+				std::vector<Point2D> waypoints;
+				LaneInfo lane_info;
+				std::chrono::steady_clock::time_point timestamp;
+				bool valid = false;
+				std::mutex mutex;
 		} m_cachedVisionData;
 
 		struct CachedObstacleData {
-			bool emergency_stop = false;
-			std::chrono::steady_clock::time_point timestamp;
-			bool valid = false;
-			std::mutex mutex;
+				bool emergency_stop = false;
+				std::chrono::steady_clock::time_point timestamp;
+				bool valid = false;
+				std::mutex mutex;
 		} m_cachedObstacleData;
 
 		// Control loop timing
-		static constexpr double CONTROL_RATE = 20.0; // Hz
-		static constexpr double DATA_TIMEOUT_MS = 200.0; // Max age for cached data
+		static constexpr double CONTROL_RATE = 20.0;       // Hz
+		static constexpr double DATA_TIMEOUT_MS = 200.0;   // Max age for cached data
 		static constexpr double VISION_UPDATE_RATE = 10.0; // Hz - Lower rate for vision processing
 		static constexpr double OBSTACLE_UPDATE_RATE = 20.0; // Hz - Higher rate for safety
 
