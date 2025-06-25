@@ -218,25 +218,29 @@ class MPCIntegratedApp : public QObject {
 
 				// Add MPC diagnostic logging
 				if(verbose_logging && step_counter % 50 == 0) {
-					std::cout << "[MPC Debug] Input state: pos(" << current_state_from_controls.x 
-					          << "," << current_state_from_controls.y << ") yaw=" 
-					          << current_state_from_controls.yaw << " vel=" 
-					          << current_state_from_controls.velocity << std::endl;
-					std::cout << "[MPC Debug] Trajectory points: " << reference_trajectory.size() << std::endl;
+					std::cout << "[MPC Debug] Input state: pos(" << current_state_from_controls.x
+					          << "," << current_state_from_controls.y
+					          << ") yaw=" << current_state_from_controls.yaw
+					          << " vel=" << current_state_from_controls.velocity << std::endl;
+					std::cout << "[MPC Debug] Trajectory points: " << reference_trajectory.size()
+					          << std::endl;
 					if(!reference_trajectory.empty()) {
 						std::cout << "[MPC Debug] First 3 ref points: ";
-						for(size_t i = 0; i < std::min(size_t(3), reference_trajectory.size()); i++) {
-							std::cout << "(" << reference_trajectory[i].x << "," << reference_trajectory[i].y << ") ";
+						for(size_t i = 0; i < std::min(size_t(3), reference_trajectory.size());
+						    i++) {
+							std::cout << "(" << reference_trajectory[i].x << ","
+							          << reference_trajectory[i].y << ") ";
 						}
 						std::cout << std::endl;
 					}
-					std::cout << "[MPC Debug] Output: throttle=" << control.throttle 
+					std::cout << "[MPC Debug] Output: throttle=" << control.throttle
 					          << " steering=" << control.steer << std::endl;
 				}
 
 				// Printar a trajetória prevista do MPC (only in verbose mode)
 				const auto &predicted_traj = mpc_planner->getPredictedTrajectory();
-				if(verbose_logging && !predicted_traj.empty() && step_counter % 100 == 0) { // Reduced frequency from 20 to 100
+				if(verbose_logging && !predicted_traj.empty() &&
+				   step_counter % 100 == 0) { // Reduced frequency from 20 to 100
 					std::cout << "[MPC Predicted] ";
 					for(size_t i = 0; i < std::min(size_t(5), predicted_traj.size()); i++) {
 						std::cout << "(" << std::fixed << std::setprecision(1)
@@ -349,7 +353,8 @@ class MPCIntegratedApp : public QObject {
 				} else {
 					static int repeat_counter = 0;
 					if(++repeat_counter % 10 == 0) { // Only show every 10th time
-						std::cout << "Logs detalhados já estão ATIVOS (reminder #" << repeat_counter/10 << ")" << std::endl;
+						std::cout << "Logs detalhados já estão ATIVOS (reminder #"
+						          << repeat_counter / 10 << ")" << std::endl;
 					}
 				}
 			} else if(input == "6") {
@@ -365,8 +370,8 @@ class MPCIntegratedApp : public QObject {
 				std::cout << "Executando limpeza de memória..." << std::endl;
 				// Force OpenCV cleanup
 				cv::Mat().copyTo(cv::Mat());
-				// Force CUDA memory cleanup if available
-				#ifdef CUDA_AVAILABLE
+// Force CUDA memory cleanup if available
+#ifdef CUDA_AVAILABLE
 				try {
 					cudaDeviceSynchronize();
 					cudaError_t error = cudaGetLastError();
@@ -376,7 +381,7 @@ class MPCIntegratedApp : public QObject {
 				} catch(...) {
 					// Ignore CUDA errors during cleanup
 				}
-				#endif
+#endif
 				std::cout << "Limpeza de memória concluída" << std::endl;
 			} else if(input == "c") {
 				// Limpar waypoints
@@ -488,9 +493,11 @@ class MPCIntegratedApp : public QObject {
 
 						static int no_frame_counter = 0;
 						no_frame_counter++;
-						if(no_frame_counter % 50 == 0) { // Only log every 50 attempts (~100 seconds)
-							std::cout << "[DEBUG] CameraStreamer is running but no frames yet (attempt " 
-							          << no_frame_counter << ")" << std::endl;
+						if(no_frame_counter % 50 ==
+						   0) { // Only log every 50 attempts (~100 seconds)
+							std::cout
+							    << "[DEBUG] CameraStreamer is running but no frames yet (attempt "
+							    << no_frame_counter << ")" << std::endl;
 						}
 
 					} catch(const std::exception &e) {
@@ -717,7 +724,8 @@ class MPCIntegratedApp : public QObject {
 					} else {
 						static int opencv_repeat_counter = 0;
 						if(++opencv_repeat_counter % 10 == 0) { // Only show every 10th time
-							std::cout << "Logs detalhados já estão ATIVOS (opencv reminder #" << opencv_repeat_counter/10 << ")" << std::endl;
+							std::cout << "Logs detalhados já estão ATIVOS (opencv reminder #"
+							          << opencv_repeat_counter / 10 << ")" << std::endl;
 						}
 					}
 				} else if(key == '6') {
@@ -732,12 +740,13 @@ class MPCIntegratedApp : public QObject {
 					// Limpeza de memória
 					std::cout << "Executando limpeza de memória..." << std::endl;
 					cv::Mat().copyTo(cv::Mat());
-					#ifdef CUDA_AVAILABLE
+#ifdef CUDA_AVAILABLE
 					try {
 						cudaDeviceSynchronize();
 						std::cout << "CUDA memory synchronized" << std::endl;
-					} catch(...) {}
-					#endif
+					} catch(...) {
+					}
+#endif
 					std::cout << "Limpeza de memória concluída" << std::endl;
 				} else if(key == 'c') {
 					recorded_waypoints.clear();
@@ -748,7 +757,8 @@ class MPCIntegratedApp : public QObject {
 				} else if(key == 'h') {
 					std::cout << "=== AJUDA - TECLAS OPENCV ===" << std::endl;
 					std::cout << "1:MPC  2:Manual  3:InicGrav  4:PararGrav" << std::endl;
-					std::cout << "5:LogsON  6:LogsOFF  7:LimpMem  s:Status  c:Limpar  q:Sair" << std::endl;
+					std::cout << "5:LogsON  6:LogsOFF  7:LimpMem  s:Status  c:Limpar  q:Sair"
+					          << std::endl;
 				}
 
 			} catch(const std::exception &e) {
