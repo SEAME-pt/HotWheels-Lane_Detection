@@ -3,8 +3,7 @@
  * @brief File containing the ControlsManager class.
  * @version 0.1
  * @date 2025-02-12
- * @details This file contains the declaration of the ControlsManager class,
- * which
+ * @details This file contains the declaration of the ControlsManager class, which
  * @author Félix LE BIHAN (@Fle-bihh)
  * @author Tiago Pereira (@t-pereira06)
  * @author Ricardo Melo (@reomelo)
@@ -31,6 +30,13 @@
 #include <memory>
 #include <mutex>
 #include <queue>
+#include <fcntl.h>
+#include <iomanip>
+#include <sstream>
+#include <string>
+#include <sys/mman.h>
+#include <thread>
+#include <unistd.h>
 
 /*!
  * @brief The ControlsManager class.

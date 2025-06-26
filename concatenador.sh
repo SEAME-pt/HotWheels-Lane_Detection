@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configurações
-OUTPUT_FILE="codigo_completo.txt"
+OUTPUT_FILE="codigo_completo_cpp.txt"
 INCLUDE_HIDDEN=false
 EXCLUDE_DIRS=".git build obj bin Debug Release scripts outputs docs tests examples"
 

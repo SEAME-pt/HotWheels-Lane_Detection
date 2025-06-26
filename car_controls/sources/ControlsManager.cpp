@@ -4,8 +4,8 @@
  * @version 0.1
  * @date 2025-02-12
  * @details This file contains the implementation of the ControlsManager class,
- * which is responsible for managing the different controllers and worker
- * threads for the car controls.
+ * which is responsible for managing the different controllers and worker threads
+ * for the car controls.
  *
  * @author Félix LE BIHAN (@Fle-bihh)
  * @author Tiago Pereira (@t-pereira06)
@@ -16,18 +16,10 @@
  */
 
 #include "ControlsManager.hpp"
-#include <QDebug>
-#include <chrono>
-#include <condition_variable>
 #include <fcntl.h>
-#include <iomanip>
-#include <memory>
-#include <mutex>
-#include <sstream>
-#include <string>
 #include <sys/mman.h>
-#include <thread>
 #include <unistd.h>
+#include <QDebug>
 
 /*!
  * @brief Constructs a ControlsManager object.
@@ -73,20 +65,16 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
 	m_manualController->moveToThread(m_manualControllerThread);
 
 	connect(m_manualControllerThread, &QThread::started, m_manualController,
-	        &JoysticksController::processInput);
-	connect(m_manualController, &JoysticksController::finished, m_manualControllerThread,
-	        &QThread::quit);
+			&JoysticksController::processInput);
+	connect(m_manualController, &JoysticksController::finished,
+			m_manualControllerThread, &QThread::quit);
 
 	m_manualControllerThread->start();
 
 	// **Running camera streamer**
 	m_cameraStreamerThread = QThread::create([this, argc, argv]() {
 		try {
-			// Use video file instead of camera for testing
-			bool use_video = true;
-			std::string video_path = "/home/jetson/Videos/output_1803ok.avi";
-
-			m_cameraStreamerObject = new CameraStreamer(0.5, use_video, video_path);
+			m_cameraStreamerObject = new CameraStreamer(0.5);
 			m_cameraStreamerObject->start();
 		} catch(const std::exception &e) {
 			std::cerr << "Error: " << e.what() << std::endl;
@@ -96,42 +84,39 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
 
 	// **Client Middleware Interface Thread**
 	m_subscriberJoystickObject = new Subscriber();
-	m_subscriberJoystickThread = QThread::create([this, argc, argv]() {
-		// Add external reference to global running flag
-		extern std::atomic<bool> g_running;
-
+	m_subscriberJoystickThread = QThread::create([this, argc, argv]()
+									{
 		m_subscriberJoystickObject->connect("tcp://localhost:5555");
 		m_subscriberJoystickObject->subscribe("joystick_value");
-		while(m_running && g_running.load()) {
+		while (m_running) {
 			try {
 				zmq::pollitem_t items[] = {
-				    {static_cast<void *>(m_subscriberJoystickObject->getSocket()), 0, ZMQ_POLLIN,
-				     0}};
+					{ static_cast<void*>(m_subscriberJoystickObject->getSocket()), 0, ZMQ_POLLIN, 0 }
+				};
 
 				// Wait up to 100ms for a message
 				zmq::poll(items, 1, 100);
 
-				if(items[0].revents & ZMQ_POLLIN) {
+				if (items[0].revents & ZMQ_POLLIN) {
 					zmq::message_t message;
-					if(!m_subscriberJoystickObject->getSocket().recv(&message, 0)) {
-						continue; // failed to receive
+					if (!m_subscriberJoystickObject->getSocket().recv(&message, 0)) {
+						continue;  // failed to receive
 					}
 
-					std::string received_msg(static_cast<char *>(message.data()), message.size());
+					std::string received_msg(static_cast<char*>(message.data()), message.size());
 
-					if(received_msg.find("joystick_value") == 0) {
-						std::string value =
-						    received_msg.substr(std::string("joystick_value ").length());
-						if(value == "true") {
+					if (received_msg.find("joystick_value") == 0) {
+						std::string value = received_msg.substr(std::string("joystick_value ").length());
+						if (value == "true") {
 							setMode(DrivingMode::Manual);
-						} else if(value == "false") {
+						} else if (value == "false") {
 							setMode(DrivingMode::Automatic);
 						}
 					}
 				}
-			} catch(const zmq::error_t &e) {
+			} catch (const zmq::error_t& e) {
 				std::cerr << "[Subscriber] ZMQ error: " << e.what() << std::endl;
-				break; // exit safely if socket is closed
+				break;  // exit safely if socket is closed
 			}
 		}
 	});
@@ -161,7 +146,8 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
  *          m_carDataObject, m_subscriberJoystickThread, and m_manualController.
  */
 
-ControlsManager::~ControlsManager() {
+ControlsManager::~ControlsManager()
+{
 	m_running = false;
 	stopAutonomousControl();
 
@@ -191,8 +177,8 @@ ControlsManager::~ControlsManager() {
 	m_obstacleSubscriber.reset();
 
 	// Stop the client thread safely
-	if(m_subscriberJoystickThread) {
-		if(m_subscriberJoystickObject) {
+	if (m_subscriberJoystickThread) {
+		if (m_subscriberJoystickObject) {
 			m_subscriberJoystickObject->stop();
 		}
 		m_subscriberJoystickThread->quit();
@@ -208,6 +194,7 @@ ControlsManager::~ControlsManager() {
 		delete m_subscriberJoystickThread;
 		m_subscriberJoystickThread = nullptr;
 	}
+
 
 	// Stop manual controller thread
 	if(m_manualControllerThread) {
@@ -257,8 +244,9 @@ ControlsManager::~ControlsManager() {
  * @param mode The new driving mode.
  * @details Updates the current driving mode if it has changed.
  */
-void ControlsManager::setMode(DrivingMode mode) {
-	if(m_currentMode == mode)
+void ControlsManager::setMode(DrivingMode mode)
+{
+	if (m_currentMode == mode)
 		return;
 
 	m_currentMode = mode;
