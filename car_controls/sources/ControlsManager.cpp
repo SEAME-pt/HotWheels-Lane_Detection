@@ -16,10 +16,10 @@
  */
 
 #include "ControlsManager.hpp"
+#include <QDebug>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
-#include <QDebug>
 
 /*!
  * @brief Constructs a ControlsManager object.
@@ -65,9 +65,9 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
 	m_manualController->moveToThread(m_manualControllerThread);
 
 	connect(m_manualControllerThread, &QThread::started, m_manualController,
-			&JoysticksController::processInput);
-	connect(m_manualController, &JoysticksController::finished,
-			m_manualControllerThread, &QThread::quit);
+	        &JoysticksController::processInput);
+	connect(m_manualController, &JoysticksController::finished, m_manualControllerThread,
+	        &QThread::quit);
 
 	m_manualControllerThread->start();
 
@@ -84,39 +84,39 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
 
 	// **Client Middleware Interface Thread**
 	m_subscriberJoystickObject = new Subscriber();
-	m_subscriberJoystickThread = QThread::create([this, argc, argv]()
-									{
+	m_subscriberJoystickThread = QThread::create([this, argc, argv]() {
 		m_subscriberJoystickObject->connect("tcp://localhost:5555");
 		m_subscriberJoystickObject->subscribe("joystick_value");
-		while (m_running) {
+		while(m_running) {
 			try {
 				zmq::pollitem_t items[] = {
-					{ static_cast<void*>(m_subscriberJoystickObject->getSocket()), 0, ZMQ_POLLIN, 0 }
-				};
+				    {static_cast<void *>(m_subscriberJoystickObject->getSocket()), 0, ZMQ_POLLIN,
+				     0}};
 
 				// Wait up to 100ms for a message
 				zmq::poll(items, 1, 100);
 
-				if (items[0].revents & ZMQ_POLLIN) {
+				if(items[0].revents & ZMQ_POLLIN) {
 					zmq::message_t message;
-					if (!m_subscriberJoystickObject->getSocket().recv(&message, 0)) {
-						continue;  // failed to receive
+					if(!m_subscriberJoystickObject->getSocket().recv(&message, 0)) {
+						continue; // failed to receive
 					}
 
-					std::string received_msg(static_cast<char*>(message.data()), message.size());
+					std::string received_msg(static_cast<char *>(message.data()), message.size());
 
-					if (received_msg.find("joystick_value") == 0) {
-						std::string value = received_msg.substr(std::string("joystick_value ").length());
-						if (value == "true") {
+					if(received_msg.find("joystick_value") == 0) {
+						std::string value =
+						    received_msg.substr(std::string("joystick_value ").length());
+						if(value == "true") {
 							setMode(DrivingMode::Manual);
-						} else if (value == "false") {
+						} else if(value == "false") {
 							setMode(DrivingMode::Automatic);
 						}
 					}
 				}
-			} catch (const zmq::error_t& e) {
+			} catch(const zmq::error_t &e) {
 				std::cerr << "[Subscriber] ZMQ error: " << e.what() << std::endl;
-				break;  // exit safely if socket is closed
+				break; // exit safely if socket is closed
 			}
 		}
 	});
@@ -146,8 +146,7 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
  *          m_carDataObject, m_subscriberJoystickThread, and m_manualController.
  */
 
-ControlsManager::~ControlsManager()
-{
+ControlsManager::~ControlsManager() {
 	m_running = false;
 	stopAutonomousControl();
 
@@ -177,8 +176,8 @@ ControlsManager::~ControlsManager()
 	m_obstacleSubscriber.reset();
 
 	// Stop the client thread safely
-	if (m_subscriberJoystickThread) {
-		if (m_subscriberJoystickObject) {
+	if(m_subscriberJoystickThread) {
+		if(m_subscriberJoystickObject) {
 			m_subscriberJoystickObject->stop();
 		}
 		m_subscriberJoystickThread->quit();
@@ -194,7 +193,6 @@ ControlsManager::~ControlsManager()
 		delete m_subscriberJoystickThread;
 		m_subscriberJoystickThread = nullptr;
 	}
-
 
 	// Stop manual controller thread
 	if(m_manualControllerThread) {
@@ -244,9 +242,8 @@ ControlsManager::~ControlsManager()
  * @param mode The new driving mode.
  * @details Updates the current driving mode if it has changed.
  */
-void ControlsManager::setMode(DrivingMode mode)
-{
-	if (m_currentMode == mode)
+void ControlsManager::setMode(DrivingMode mode) {
+	if(m_currentMode == mode)
 		return;
 
 	m_currentMode = mode;

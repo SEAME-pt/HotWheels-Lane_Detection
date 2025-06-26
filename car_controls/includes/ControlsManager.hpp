@@ -27,11 +27,11 @@
 #include <QThread>
 #include <chrono>
 #include <condition_variable>
+#include <fcntl.h>
+#include <iomanip>
 #include <memory>
 #include <mutex>
 #include <queue>
-#include <fcntl.h>
-#include <iomanip>
 #include <sstream>
 #include <string>
 #include <sys/mman.h>

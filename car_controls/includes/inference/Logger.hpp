@@ -6,20 +6,20 @@
 #include <iostream>
 
 class Logger : public nvinfer1::ILogger {
-public:
-	void log(Severity severity, const char* msg) noexcept override {
-		if (severity <= Severity::kWARNING) {
-			std::cout << "[TensorRT] " << msg << std::endl;
+	public:
+		void log(Severity severity, const char *msg) noexcept override {
+			if(severity <= Severity::kWARNING) {
+				std::cout << "[TensorRT] " << msg << std::endl;
+			}
 		}
-	}
 
-	static Logger& instance() {
-		static Logger logger;
-		return logger;
-	}
+		static Logger &instance() {
+			static Logger logger;
+			return logger;
+		}
 
-private:
-	Logger() = default;
+	private:
+		Logger() = default;
 };
 
 #endif // LOGGER_HPP
