@@ -15,6 +15,29 @@
 #include <signal.h>
 #include <thread>
 
+// === CONFIGURATION MACROS FOR EASY ADJUSTMENT ===
+//
+// Para alterar rapidamente os valores de velocidade constante, modifique as macros abaixo:
+//
+// DEFAULT_CONSTANT_SPEED_KMH: Velocidade alvo em km/h (será convertida automaticamente para m/s)
+//   - Valores seguros: 1 a 5 km/h
+//   - Valor padrão: 2 km/h (velocidade muito segura para testes)
+//   - Para testes mais rápidos: 4 km/h
+//
+// DEFAULT_CONSTANT_THROTTLE: Valor do throttle (0.0 a 1.0) para velocidade constante
+//   - Valores seguros: 0.1 a 0.3
+//   - Valor padrão: 0.15 (15% de potência - muito seguro)
+//   - Para mais velocidade: 0.25 (25% de potência)
+//   - ATENÇÃO: Valores acima de 0.3 podem ser perigosos!
+//
+#define DEFAULT_CONSTANT_SPEED_KMH 1 // km/h - Target speed in km/h (will be converted to m/s)
+#define DEFAULT_CONSTANT_SPEED (DEFAULT_CONSTANT_SPEED_KMH / 3.6) // Auto conversion to m/s
+#define DEFAULT_CONSTANT_THROTTLE 0.15 // Throttle value (0.0 to 1.0) for constant speed mode
+#define MIN_SAFE_SPEED_KMH 0.5         // km/h - Minimum safe speed
+#define MAX_SAFE_SPEED_KMH 7.0         // km/h - Maximum safe speed for testing
+#define MIN_SAFE_SPEED (MIN_SAFE_SPEED_KMH / 3.6) // Auto conversion to m/s
+#define MAX_SAFE_SPEED (MAX_SAFE_SPEED_KMH / 3.6) // Auto conversion to m/s
+
 // Global flag for graceful shutdown
 std::atomic<bool> g_running{true};
 
@@ -27,13 +50,21 @@ void emergencyMotorStop() {
 		try {
 			std::cout << "[EMERGENCY] Stopping all motors..." << std::endl;
 
-			// Use the built-in emergency stop method
-			g_emergency_controls->emergencyStop();
+			// Use BOTH emergency stop methods for maximum safety
+			g_emergency_controls->emergencyStop();      // Critical emergency stop
+			g_emergency_controls->emergencyMotorStop(); // Motor-specific stop
 
 			std::cout << "[EMERGENCY] Motors stopped successfully" << std::endl;
 
 		} catch(const std::exception &e) {
 			std::cerr << "[EMERGENCY] Error stopping motors: " << e.what() << std::endl;
+			// Try direct hardware stop as last resort
+			try {
+				std::cout << "[EMERGENCY] Attempting direct motor stop..." << std::endl;
+				g_emergency_controls->emergencyMotorStop();
+			} catch(...) {
+				std::cerr << "[EMERGENCY] CRITICAL: All motor stop attempts failed!" << std::endl;
+			}
 		} catch(...) {
 			std::cerr << "[EMERGENCY] Unknown error stopping motors" << std::endl;
 		}
@@ -108,8 +139,8 @@ class MPCIntegratedApp : public QObject {
 
 		// Constant speed mode for real-world testing
 		bool constant_speed_mode = false;
-		double target_constant_speed = 0.5; // m/s - very slow for testing
-		double constant_throttle = 0.15;    // Low throttle for safety;
+		double target_constant_speed = DEFAULT_CONSTANT_SPEED; // Use macro for easy adjustment
+		double constant_throttle = DEFAULT_CONSTANT_THROTTLE;  // Use macro for easy adjustment
 
 	public:
 		MPCIntegratedApp(int argc, char **argv, QObject *parent = nullptr)
@@ -345,10 +376,12 @@ class MPCIntegratedApp : public QObject {
 
 					// Log constant speed mode
 					if(step_counter % 100 == 0) {
-						std::cout << "[CONSTANT SPEED] Target: " << target_constant_speed
-						          << " m/s, Throttle: " << control.throttle
-						          << ", Steering: " << std::fixed << std::setprecision(3)
-						          << control.steer << " rad" << std::endl;
+						std::cout << "[CONSTANT SPEED] Target: " << std::fixed
+						          << std::setprecision(1) << (target_constant_speed * 3.6)
+						          << " km/h (" << std::setprecision(2) << target_constant_speed
+						          << " m/s)"
+						          << ", Throttle: " << std::setprecision(3) << control.throttle
+						          << ", Steering: " << control.steer << " rad" << std::endl;
 					}
 				}
 
@@ -523,21 +556,18 @@ class MPCIntegratedApp : public QObject {
 				std::cout << "Limpeza de memória concluída" << std::endl;
 			} else if(input == "8") {
 				// ATIVAR modo velocidade constante
-				if(!constant_speed_mode) {
-					constant_speed_mode = true;
-					std::cout << "MODO VELOCIDADE CONSTANTE ATIVADO" << std::endl;
-					std::cout << "Velocidade alvo: " << target_constant_speed << " m/s"
-					          << std::endl;
-					std::cout << "Throttle fixo: " << constant_throttle << std::endl;
-					std::cout << "ATENÇÃO: Veículo manterá velocidade baixa e constante!"
-					          << std::endl;
+				if(!controls_manager->isConstantSpeedMode()) {
+					controls_manager->setConstantSpeedMode(true, target_constant_speed,
+					                                       constant_throttle);
+					constant_speed_mode = true; // Update local flag for UI consistency
 				} else {
 					std::cout << "Modo velocidade constante já está ATIVO" << std::endl;
 				}
 			} else if(input == "9") {
 				// DESATIVAR modo velocidade constante
-				if(constant_speed_mode) {
-					constant_speed_mode = false;
+				if(controls_manager->isConstantSpeedMode()) {
+					controls_manager->setConstantSpeedMode(false);
+					constant_speed_mode = false; // Update local flag for UI consistency
 					std::cout << "MODO VELOCIDADE CONSTANTE DESATIVADO" << std::endl;
 					std::cout << "MPC voltará a controlar velocidade normalmente" << std::endl;
 				} else {
@@ -545,21 +575,38 @@ class MPCIntegratedApp : public QObject {
 				}
 			} else if(input == "0") {
 				// Ajustar velocidade constante
-				std::cout << "Digite nova velocidade (m/s) [atual: " << target_constant_speed
-				          << "]: ";
+				double current_kmh = target_constant_speed * 3.6; // Convert m/s to km/h
+				std::cout << "Digite nova velocidade:" << std::endl;
+				std::cout << "  Em km/h [atual: " << std::fixed << std::setprecision(1)
+				          << current_kmh << " km/h]: ";
 				std::string speed_input;
 				std::getline(std::cin, speed_input);
 				try {
-					double new_speed = std::stod(speed_input);
-					if(new_speed >= 0.1 && new_speed <= 2.0) {
-						target_constant_speed = new_speed;
-						// Adjust throttle proportionally (rough estimate)
-						constant_throttle = 0.1 + (new_speed / 2.0) * 0.2; // 0.1 to 0.3 range
-						std::cout << "Nova velocidade: " << target_constant_speed << " m/s"
+					double new_speed_kmh = std::stod(speed_input);
+					double new_speed_ms = new_speed_kmh / 3.6; // Convert km/h to m/s
+
+					if(new_speed_ms >= MIN_SAFE_SPEED && new_speed_ms <= MAX_SAFE_SPEED) {
+						target_constant_speed = new_speed_ms;
+						// Adjust throttle proportionally using intelligent scaling
+						// Base throttle + proportional adjustment based on speed ratio
+						double speed_ratio = new_speed_ms / DEFAULT_CONSTANT_SPEED;
+						constant_throttle = DEFAULT_CONSTANT_THROTTLE * speed_ratio;
+						// Clamp to safe throttle range
+						constant_throttle = std::clamp(constant_throttle, 0.05, 0.35);
+
+						std::cout << "✓ Nova velocidade: " << std::fixed << std::setprecision(1)
+						          << (target_constant_speed * 3.6) << " km/h ("
+						          << std::setprecision(2) << target_constant_speed << " m/s)"
 						          << std::endl;
-						std::cout << "Throttle ajustado: " << constant_throttle << std::endl;
+						std::cout << "✓ Throttle ajustado: " << std::setprecision(3)
+						          << constant_throttle << " (" << (constant_throttle * 100) << "%)"
+						          << std::endl;
 					} else {
-						std::cout << "Velocidade deve estar entre 0.1 e 2.0 m/s" << std::endl;
+						double min_kmh = MIN_SAFE_SPEED * 3.6;
+						double max_kmh = MAX_SAFE_SPEED * 3.6;
+						std::cout << "❌ Velocidade deve estar entre " << std::fixed
+						          << std::setprecision(1) << min_kmh << " e " << max_kmh << " km/h"
+						          << std::endl;
 					}
 				} catch(...) {
 					std::cout << "Valor inválido. Mantendo velocidade atual." << std::endl;
@@ -603,8 +650,10 @@ class MPCIntegratedApp : public QObject {
 				std::cout << "===========================" << std::endl;
 			} else if(input == "e" || input == "E" || input == "emergency") {
 				// EMERGENCY STOP - parada imediata dos motores
-				std::cout << "\n*** EMERGENCY STOP ACTIVATED ***" << std::endl;
-				emergencyMotorStop();
+				std::cout << "\n*** TERMINAL EMERGENCY STOP ACTIVATED ***" << std::endl;
+
+				// Use ControlsManager's emergency stop method
+				controls_manager->emergencyMotorStop();
 
 				// Also deactivate MPC for safety
 				if(mpc_active) {
@@ -618,6 +667,47 @@ class MPCIntegratedApp : public QObject {
 			} else if(input == "test" || input == "emergency-test") {
 				// Test emergency stop system
 				testEmergencyStop();
+			} else if(input == "soft") {
+				// Toggle soft start
+				bool current_enabled = controls_manager->isSoftStartEnabled();
+				controls_manager->setSoftStartEnabled(!current_enabled);
+				std::cout << "Soft Start agora está: "
+				          << (!current_enabled ? "ATIVADO" : "DESATIVADO") << std::endl;
+			} else if(input == "softp") {
+				// Configure soft start parameters
+				std::cout << "=== CONFIGURAÇÃO DE SOFT START ===" << std::endl;
+				std::cout
+				    << "Digite nova taxa máxima de mudança por passo (% por iteração) [atual: "
+				    << (controls_manager->isSoftStartEnabled() ? "1" : "N/A") << "]: ";
+				std::string change_input;
+				std::getline(std::cin, change_input);
+
+				std::cout << "Digite novo limite inicial (% durante aquecimento) [atual: 5]: ";
+				std::string limit_input;
+				std::getline(std::cin, limit_input);
+
+				std::cout << "Digite duração do aquecimento (segundos) [atual: 3.0]: ";
+				std::string duration_input;
+				std::getline(std::cin, duration_input);
+
+				try {
+					double max_change =
+					    change_input.empty() ? 0.01 : std::stod(change_input) / 100.0;
+					double initial_limit =
+					    limit_input.empty() ? 0.05 : std::stod(limit_input) / 100.0;
+					double warmup_duration =
+					    duration_input.empty() ? 3.0 : std::stod(duration_input);
+
+					// Validate ranges
+					max_change = std::clamp(max_change, 0.001, 0.1);      // 0.1% to 10% per step
+					initial_limit = std::clamp(initial_limit, 0.01, 0.3); // 1% to 30% initial limit
+					warmup_duration = std::clamp(warmup_duration, 0.5, 10.0); // 0.5s to 10s warmup
+
+					controls_manager->setSoftStartParameters(max_change, initial_limit,
+					                                         warmup_duration);
+				} catch(...) {
+					std::cout << "Valores inválidos. Mantendo configuração atual." << std::endl;
+				}
 			} else if(input == "q") {
 				// Sair
 				g_running = false;
@@ -915,8 +1005,10 @@ class MPCIntegratedApp : public QObject {
 					std::cout << "e:EMERGENCY STOP (parar motores imediatamente)" << std::endl;
 				} else if(key == 'e' || key == 'E') {
 					// EMERGENCY STOP - parada imediata dos motores
-					std::cout << "\n*** EMERGENCY STOP ACTIVATED ***" << std::endl;
-					emergencyMotorStop();
+					std::cout << "\n*** OPENCV EMERGENCY STOP ACTIVATED ***" << std::endl;
+
+					// Use ControlsManager's emergency stop method
+					controls_manager->emergencyMotorStop();
 
 					// Also deactivate MPC for safety
 					if(mpc_active) {
@@ -962,10 +1054,12 @@ class MPCIntegratedApp : public QObject {
 			}
 
 			// Add constant speed mode indicator
-			if(constant_speed_mode) {
+			if(controls_manager && controls_manager->isConstantSpeedMode()) {
 				cv::putText(
 				    m_visualizationFrame,
-				    "CONST SPEED: " + std::to_string(target_constant_speed).substr(0, 3) + "m/s",
+				    "CONST SPEED: " +
+				        std::to_string(controls_manager->getTargetConstantSpeed()).substr(0, 3) +
+				        "m/s",
 				    cv::Point(status_x, status_y + 3 * line_height), cv::FONT_HERSHEY_SIMPLEX, 0.4,
 				    cv::Scalar(0, 255, 255), 1); // Yellow for constant speed mode
 			}
@@ -1041,7 +1135,9 @@ class MPCIntegratedApp : public QObject {
 			std::cout << "5: Logs ON          6: Logs OFF        7: Limpeza Memória" << std::endl;
 			std::cout << "=== VELOCIDADE CONSTANTE (TESTE REAL) ===" << std::endl;
 			std::cout << "8: Ativar Vel. Const.   9: Desativar Vel. Const." << std::endl;
-			std::cout << "0: Ajustar Velocidade" << std::endl;
+			std::cout << "0: Ajustar Velocidade (entrada em km/h)" << std::endl;
+			std::cout << "=== ACELERAÇÃO GRADUAL (SOFT START) ===" << std::endl;
+			std::cout << "soft: Toggle Soft Start    softp: Configurar Parâmetros" << std::endl;
 			std::cout << "=== SEGURANÇA ===" << std::endl;
 			std::cout << "e: EMERGENCY STOP   test: Testar Sistema Emergência" << std::endl;
 			std::cout << "=== UTILIDADES ===" << std::endl;
@@ -1099,6 +1195,13 @@ class MPCIntegratedApp : public QObject {
 			mpc_active = false;
 			// Mudar para modo manual
 			controls_manager->setMode(DrivingMode::Manual);
+
+			// Reset emergency stop flag when switching to manual mode
+			if(controls_manager->isEmergencyStopActive()) {
+				std::cout << "Resetando flag de emergência..." << std::endl;
+				controls_manager->resetEmergencyStop();
+			}
+
 			mpc_timer->stop();
 			std::cout << "MANUAL ATIVADO - Use joystick" << std::endl;
 		}
@@ -1187,14 +1290,19 @@ class MPCIntegratedApp : public QObject {
 			std::cout << "\n--- Estado do Veículo ---" << std::endl;
 			std::cout << "Posição atual: (" << std::fixed << std::setprecision(2) << current_state.x
 			          << ", " << current_state.y << ")" << std::endl;
-			std::cout << "Velocidade: " << current_state.velocity << " m/s" << std::endl;
-			std::cout << "Orientação: " << current_state.yaw * 180 / M_PI << " graus" << std::endl;
+			std::cout << "Velocidade: " << std::setprecision(1) << (current_state.velocity * 3.6)
+			          << " km/h (" << std::setprecision(2) << current_state.velocity << " m/s)"
+			          << std::endl;
+			std::cout << "Orientação: " << std::setprecision(1) << (current_state.yaw * 180 / M_PI)
+			          << " graus" << std::endl;
 
 			std::cout << "\n--- Controle de Velocidade ---" << std::endl;
 			std::cout << "Modo velocidade constante: "
 			          << (constant_speed_mode ? "ATIVO" : "INATIVO") << std::endl;
 			if(constant_speed_mode) {
-				std::cout << "Velocidade alvo: " << target_constant_speed << " m/s" << std::endl;
+				std::cout << "Velocidade alvo: " << std::setprecision(1)
+				          << (target_constant_speed * 3.6) << " km/h (" << std::setprecision(2)
+				          << target_constant_speed << " m/s)" << std::endl;
 				std::cout << "Throttle fixo: " << constant_throttle << std::endl;
 			} else {
 				std::cout << "Controle de velocidade: MPC automático" << std::endl;
@@ -1241,7 +1349,9 @@ class MPCIntegratedApp : public QObject {
 
 			if(confirmation == "s" || confirmation == "S" || confirmation == "sim") {
 				std::cout << "Executando teste de emergência..." << std::endl;
-				emergencyMotorStop();
+
+				// Use ControlsManager's emergency stop method
+				controls_manager->emergencyMotorStop();
 
 				// Also stop MPC
 				if(mpc_active) {

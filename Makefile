@@ -1,8 +1,8 @@
 # Makefile for autonomous_jetson
 
 CXX = c++
-CXXFLAGS = -std=c++17 -Wall -Wextra -g -fopenmp -fPIC
-CXXFLAGS += -fprofile-arcs -ftest-coverage -O2 -g
+CXXFLAGS = -std=c++17 -Wall -Wextra -g -fopenmp
+CXXFLAGS += -fprofile-arcs -ftest-coverage -O0 -g
 LDFLAGS  += -fprofile-arcs -ftest-coverage
 
 
@@ -11,30 +11,12 @@ CUDA_PATH = /usr/local/cuda
 CUDA_INCLUDE = $(CUDA_PATH)/include
 CUDA_LIB = $(CUDA_PATH)/lib64
 
-# Check if CUDA is available (different logic for cross-compilation)
-ifneq ($(CXX),aarch64-linux-gnu-g++)
-    # Native compilation - check local CUDA
-    CUDA_AVAILABLE = $(shell test -d $(CUDA_INCLUDE) && echo "yes" || echo "no")
-else
-    # Cross-compilation - assume CUDA is available on Jetson target
-    CUDA_AVAILABLE = yes
-endif
+# Check if CUDA is available
+CUDA_AVAILABLE = $(shell test -d $(CUDA_INCLUDE) && echo "yes" || echo "no")
 
-# Qt5 paths - different for cross-compilation
-ifneq ($(CXX),aarch64-linux-gnu-g++)
-    # Native compilation
-    QT5_CFLAGS = $(shell pkg-config --cflags Qt5Core Qt5Gui Qt5Widgets 2>/dev/null || echo "")
-    QT5_LIBS = $(shell pkg-config --libs Qt5Core Qt5Gui Qt5Widgets 2>/dev/null || echo "")
-else
-    # Cross-compilation - use sysroot Qt5
-    QT5_CFLAGS = -DQT_WIDGETS_LIB -DQT_GUI_LIB -DQT_CORE_LIB \
-                 -I/home/michel/new_qtjetson/sysroot/usr/include/aarch64-linux-gnu/qt5/QtWidgets \
-                 -I/home/michel/new_qtjetson/sysroot/usr/include/aarch64-linux-gnu/qt5 \
-                 -I/home/michel/new_qtjetson/sysroot/usr/include/aarch64-linux-gnu/qt5/QtGui \
-                 -I/home/michel/new_qtjetson/sysroot/usr/include/aarch64-linux-gnu/qt5/QtCore
-    QT5_LIBS = -L/home/michel/new_qtjetson/sysroot/usr/lib/aarch64-linux-gnu \
-               -lQt5Widgets -lQt5Gui -lQt5Core
-endif
+# Qt5 paths
+QT5_CFLAGS = $(shell pkg-config --cflags Qt5Core Qt5Gui Qt5Widgets 2>/dev/null || echo "")
+QT5_LIBS = $(shell pkg-config --libs Qt5Core Qt5Gui Qt5Widgets 2>/dev/null || echo "")
 
 # Include paths
 INCLUDE_PATHS = -I. \
@@ -96,44 +78,15 @@ MOC_FILES = main.moc \
             car_controls/sources/EngineController.moc \
             car_controls/sources/JoysticksController.moc
 
-# Libraries - different for cross-compilation
-ifneq ($(CXX),aarch64-linux-gnu-g++)
-    # Native compilation
-    OPENCV_LIBS = $(shell pkg-config --libs opencv4 || pkg-config --libs opencv)
-else
-    # Cross-compilation - use sysroot OpenCV
-    OPENCV_LIBS = -L/home/michel/new_qtjetson/sysroot/usr/lib/aarch64-linux-gnu \
-                  -lopencv_stitching -lopencv_alphamat -lopencv_aruco -lopencv_barcode \
-                  -lopencv_bgsegm -lopencv_bioinspired -lopencv_ccalib -lopencv_dnn_objdetect \
-                  -lopencv_dnn_superres -lopencv_dpm -lopencv_face -lopencv_freetype \
-                  -lopencv_fuzzy -lopencv_hdf -lopencv_hfs -lopencv_img_hash \
-                  -lopencv_intensity_transform -lopencv_line_descriptor -lopencv_mcc \
-                  -lopencv_quality -lopencv_rapid -lopencv_reg -lopencv_rgbd \
-                  -lopencv_saliency -lopencv_shape -lopencv_stereo -lopencv_structured_light \
-                  -lopencv_phase_unwrapping -lopencv_superres -lopencv_optflow \
-                  -lopencv_surface_matching -lopencv_tracking -lopencv_highgui \
-                  -lopencv_datasets -lopencv_text -lopencv_plot -lopencv_ml \
-                  -lopencv_videostab -lopencv_videoio -lopencv_viz -lopencv_wechat_qrcode \
-                  -lopencv_ximgproc -lopencv_video -lopencv_xobjdetect -lopencv_objdetect \
-                  -lopencv_calib3d -lopencv_imgcodecs -lopencv_features2d -lopencv_dnn \
-                  -lopencv_flann -lopencv_xphoto -lopencv_photo -lopencv_imgproc -lopencv_core \
-                  -lopencv_cudaimgproc -lopencv_cudaarithm -lopencv_cudawarping
-endif
-
+# Libraries
+OPENCV_LIBS = $(shell pkg-config --libs opencv4 || pkg-config --libs opencv)
 MLPACK_LIBS = -lmlpack -larmadillo -llapack -lblas
+FILESYSTEM_LIBS = -lstdc++fs
 ZMQ_LIBS = -lzmq
 
-# Filesystem library - different for cross-compilation
-ifneq ($(CXX),aarch64-linux-gnu-g++)
-    FILESYSTEM_LIBS = -lstdc++fs
-else
-    # Use sysroot's filesystem library to avoid glibc version conflicts
-    FILESYSTEM_LIBS = -L/home/michel/new_qtjetson/sysroot/usr/lib/gcc/aarch64-linux-gnu/9 -lstdc++fs
-endif
-
 ifeq ($(CUDA_AVAILABLE), yes)
-	ifneq ($(wildcard /usr/local/lib/libnvinfer.so /usr/lib/aarch64-linux-gnu/libnvinfer.so /home/michel/new_qtjetson/sysroot/usr/lib/aarch64-linux-gnu/libnvinfer.so),)
-        TENSORRT_LIBS = -L/home/michel/new_qtjetson/sysroot/usr/lib/aarch64-linux-gnu -lnvinfer -lnvinfer_plugin -lnvonnxparser
+	ifneq ($(wildcard /usr/local/lib/libnvinfer.so /usr/lib/aarch64-linux-gnu/libnvinfer.so),)
+        TENSORRT_LIBS = -lnvinfer -lnvinfer_plugin -lnvonnxparser
         CXXFLAGS += -DTENSORRT_AVAILABLE
         $(info TensorRT found - enabling TensorRT support)
     else
@@ -151,20 +104,12 @@ TARGET = main
 
 all: $(TARGET)
 
-# MOC processing - different for cross-compilation
-ifneq ($(CXX),aarch64-linux-gnu-g++)
-    # Native compilation
-    MOC = $(shell pkg-config --variable=host_bins Qt5Core)/moc
-else
-    # Cross-compilation - use sysroot MOC via qemu to match Qt version
-    MOC = qemu-aarch64-static -L /home/michel/new_qtjetson/sysroot /home/michel/new_qtjetson/sysroot/usr/lib/qt5/bin/moc
-endif
-
+# MOC processing
 %.moc: %.cpp
-	$(MOC) $< -o $@
+	$(shell pkg-config --variable=host_bins Qt5Core)/moc $< -o $@
 
 car_controls/sources/%.moc: car_controls/includes/%.hpp
-	$(MOC) $< -o $@
+	$(shell pkg-config --variable=host_bins Qt5Core)/moc $< -o $@
 
 # Main target
 $(TARGET): $(OBJECTS) $(MOC_FILES)
@@ -199,6 +144,7 @@ lane_detection_video_test: lane_detection_video_test.cpp \
 # Clean
 clean: # remove gcno recursivally
 	rm -f $(OBJECTS) $(MOC_FILES) $(TARGET) */**.gcno */*/*.gcno */*/*/*.gcno
+
 
 install-deps:
 	sudo apt update
@@ -265,21 +211,18 @@ debug-compile:
 .PHONY: all clean install-deps check-cuda check-libs debug-compile check-qt show-flags test lane_detection_video_test jetson
 
 # Simple jetson cross-compilation target
-jetson: clean
+jetson:
 	@echo "=== Building for Jetson (ARM64) ==="
 	@which aarch64-linux-gnu-g++ > /dev/null || (echo "❌ Cross-compiler not found! Install with: sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu" && exit 1)
 	@test -d /home/michel/new_qtjetson/sysroot || (echo "❌ Sysroot not found at /home/michel/new_qtjetson/sysroot" && exit 1)
-	@test -d /home/michel/new_qtjetson/sysroot/usr/local/cuda || (echo "❌ CUDA not found in sysroot. Run sync-jetson-sys.sh first" && exit 1)
-	@echo "✅ Cross-compiler, sysroot, and CUDA found"
+	@echo "✅ Cross-compiler and sysroot found"
 	$(MAKE) CXX=aarch64-linux-gnu-g++ \
-		CXXFLAGS="-std=c++17 -Wall -Wextra -O2 -fopenmp -fPIC -DCUDA_AVAILABLE --sysroot=/home/michel/new_qtjetson/sysroot -D_GLIBCXX_USE_CXX11_ABI=1 -fno-stack-protector" \
-		LDFLAGS="--sysroot=/home/michel/new_qtjetson/sysroot -Wl,--allow-shlib-undefined -static-libgcc -static-libstdc++" \
-		INCLUDE_PATHS="-I. -IZeroMQ -Icar_controls/includes -Icar_controls/includes/inference -Icar_controls/includes/objectDetection -I/home/michel/new_qtjetson/sysroot/usr/include/eigen3 -I/home/michel/new_qtjetson/sysroot/usr/include/opencv4 -I/home/michel/new_qtjetson/sysroot/usr/local/cuda/include -I/home/michel/new_qtjetson/sysroot/usr/local/include" \
+		CXXFLAGS="$(CXXFLAGS) --sysroot=/home/michel/new_qtjetson/sysroot" \
+		LDFLAGS="$(LDFLAGS) --sysroot=/home/michel/new_qtjetson/sysroot" \
+		INCLUDE_PATHS="-I. -IZeroMQ -Icar_controls/includes -Icar_controls/includes/inference -Icar_controls/includes/objectDetection -I/home/michel/new_qtjetson/sysroot/usr/include/eigen3 -I/home/michel/new_qtjetson/sysroot/usr/include/opencv4" \
 		CUDA_PATH="/home/michel/new_qtjetson/sysroot/usr/local/cuda" \
 		CUDA_INCLUDE="/home/michel/new_qtjetson/sysroot/usr/local/cuda/include" \
 		CUDA_LIB="/home/michel/new_qtjetson/sysroot/usr/local/cuda/lib64" \
-		CUDA_AVAILABLE=yes \
-		MLPACK_LIBS="-lmlpack -larmadillo -L/home/michel/new_qtjetson/sysroot/usr/lib/aarch64-linux-gnu/atlas -llapack -lblas" \
 		all
 	@echo "✅ Jetson build complete! Binary: main (ARM64)"
 	@file main | grep -q ARM && echo "✅ Confirmed ARM64 binary" || echo "⚠️  Warning: Binary architecture verification failed"
