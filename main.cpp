@@ -1,5 +1,5 @@
-#include "ZeroMQ/Subscriber.hpp"
 #include "Debugger.hpp"
+#include "ZeroMQ/Subscriber.hpp"
 #include "car_controls/includes/CommonTypes.hpp"
 #include "car_controls/includes/ControlsManager.hpp"
 #include "car_controls/includes/MPCOptimizer.hpp"
@@ -58,7 +58,7 @@ void emergencyMotorStop() {
 			std::cout << "[EMERGENCY] Motors stopped successfully" << std::endl;
 
 		} catch(const std::exception &e) {
-			ERROR_LOG("Main", "[EMERGENCY] Error stopping motors: " << e.what());
+			ERROR_STREAM("Main") << "[EMERGENCY] Error stopping motors: " << e.what();
 			// Try direct hardware stop as last resort
 			try {
 				std::cout << "[EMERGENCY] Attempting direct motor stop..." << std::endl;
@@ -197,7 +197,7 @@ class MPCIntegratedApp : public QObject {
 					// Continue without local inference - will use remote inference
 				}
 			} catch(const std::exception &e) {
-				ERROR_LOG("Main", "[MPCIntegratedApp] Initialization error: " << e.what());
+				ERROR_STREAM("Main") << "[MPCIntegratedApp] Initialization error: " << e.what();
 				throw;
 			}
 		}
@@ -293,7 +293,7 @@ class MPCIntegratedApp : public QObject {
 				std::cout << "[~MPCIntegratedApp] Cleanup complete" << std::endl;
 
 			} catch(const std::exception &e) {
-				ERROR_LOG("Main", "[~MPCIntegratedApp] Error during cleanup: " << e.what());
+				ERROR_STREAM("Main") << "[~MPCIntegratedApp] Error during cleanup: " << e.what();
 			} catch(...) {
 				ERROR_LOG("Main", "[~MPCIntegratedApp] Unknown error during cleanup");
 			}
@@ -474,7 +474,7 @@ class MPCIntegratedApp : public QObject {
 				// updateVehicleState(control.throttle, control.steer); // Now using ControlsManager
 				// state instead
 			} catch(const std::exception &e) {
-				ERROR_LOG("Main", "Erro no MPC: " << e.what());
+				ERROR_STREAM("Main") << "Erro no MPC: " << e.what();
 			}
 		}
 
@@ -846,7 +846,7 @@ class MPCIntegratedApp : public QObject {
 				}
 
 			} catch(const std::exception &e) {
-				ERROR_LOG("Main", "[getLaneDetectionFrame] Error: " << e.what());
+				ERROR_STREAM("Main") << "[getLaneDetectionFrame] Error: " << e.what();
 			}
 		}
 
@@ -1023,7 +1023,7 @@ class MPCIntegratedApp : public QObject {
 				}
 
 			} catch(const std::exception &e) {
-				ERROR_LOG("Main", "Visualization error: " << e.what());
+				ERROR_STREAM("Main") << "Visualization error: " << e.what();
 			}
 		}
 
@@ -1415,7 +1415,7 @@ class MPCIntegratedApp : public QObject {
 				            cv::Scalar(255, 255, 255), 2);
 
 			} catch(const std::exception &e) {
-				ERROR_LOG("Main", "[createLaneVisualization] Error: " << e.what());
+				ERROR_STREAM("Main") << "[createLaneVisualization] Error: " << e.what();
 				// Create a simple error visualization
 				m_processedFrame = cv::Mat::zeros(binary_mask.size(), CV_8UC3);
 				cv::putText(m_processedFrame, "Lane Processing Error",
@@ -1551,7 +1551,7 @@ class MPCIntegratedApp : public QObject {
 				}
 
 			} catch(const std::exception &e) {
-				ERROR_LOG("Main", "[generateMPCTrajectory] Error: " << e.what());
+				ERROR_STREAM("Main") << "[generateMPCTrajectory] Error: " << e.what();
 			}
 		}
 
@@ -1666,7 +1666,7 @@ class MPCIntegratedApp : public QObject {
 				            cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255), 1);
 
 			} catch(const std::exception &e) {
-				ERROR_LOG("Main", "[drawTrajectoryVisualization] Error: " << e.what());
+				ERROR_STREAM("Main") << "[drawTrajectoryVisualization] Error: " << e.what();
 				// Draw error message
 				cv::putText(m_visualizationFrame, "Trajectory Error",
 				            cv::Point(region.x + 50, region.y + region.height / 2),
@@ -1750,7 +1750,7 @@ int main(int argc, char *argv[]) {
 		try {
 			integrated_app = std::make_unique<MPCIntegratedApp>(argc, argv);
 		} catch(const std::exception &e) {
-			ERROR_LOG("Main", "Failed to initialize application: " << e.what());
+			ERROR_STREAM("Main") << "Failed to initialize application: " << e.what();
 			return 1;
 		}
 
@@ -1794,18 +1794,18 @@ int main(int argc, char *argv[]) {
 			try {
 				Publisher::destroyAll();
 			} catch(const std::exception &e) {
-				ERROR_LOG("Main", "[main] Warning during Publisher cleanup: " << e.what());
+				ERROR_STREAM("Main") << "[main] Warning during Publisher cleanup: " << e.what();
 			}
 
 			std::cout << "[main] Application cleanup complete" << std::endl;
 		} catch(const std::exception &e) {
-			ERROR_LOG("Main", "[main] Error during cleanup: " << e.what());
+			ERROR_STREAM("Main") << "[main] Error during cleanup: " << e.what();
 		}
 
 		return result;
 
 	} catch(const std::exception &e) {
-		ERROR_LOG("Main", "Erro: " << e.what());
+		ERROR_STREAM("Main") << "Erro: " << e.what();
 		try {
 			cv::destroyAllWindows();
 			Publisher::destroyAll();

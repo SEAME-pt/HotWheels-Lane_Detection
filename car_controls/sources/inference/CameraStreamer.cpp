@@ -1,4 +1,5 @@
 #include "../../includes/inference/CameraStreamer.hpp"
+#include "Debugger.hpp"
 
 // Constructor: initializes camera capture, inference reference, and settings
 CameraStreamer::CameraStreamer(double scale)
@@ -25,7 +26,7 @@ CameraStreamer::CameraStreamer(double scale)
 	std::cout << "[CameraStreamer] Camera opened." << std::endl;
 
 	if(!cap.isOpened()) { // Check if camera opened successfully
-		std::cerr << "Error: Could not open CSI camera" << std::endl;
+		ERROR_LOG("CameraStreamer", "Error: Could not open CSI camera");
 		exit(-1); // Terminate if failed
 	}
 }
@@ -113,7 +114,7 @@ void CameraStreamer::captureLoop() {
 		cap >> frame; // Read one frame (decoded)
 
 		if(frame.empty()) {
-			std::cerr << "Empty frame, exiting" << std::endl;
+			ERROR_LOG("CameraStreamer", "Empty frame, exiting");
 			break;
 		}
 
@@ -141,7 +142,7 @@ void CameraStreamer::stop() {
 	try {
 		cudaDeviceSynchronize();
 	} catch(const std::exception &e) {
-		std::cerr << "CUDA sync error in stop(): " << e.what() << std::endl;
+		ERROR_STREAM("CameraStreamer") << "CUDA sync error in stop(): " << e.what();
 	}
 	std::this_thread::sleep_for(std::chrono::milliseconds(100));
 

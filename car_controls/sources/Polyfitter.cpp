@@ -1,4 +1,5 @@
 #include "Polyfitter.hpp"
+#include "Debugger.hpp"
 #include <algorithm>
 #include <cmath>
 #include <experimental/filesystem>
@@ -22,7 +23,7 @@ Polyfitter::loadImagesFromFolder(const std::string &folderPath) {
 	std::vector<std::string> extensions = {".png", ".jpg", ".jpeg"};
 
 	if(!fs::exists(folderPath)) {
-		std::cerr << "Folder does not exist: " << folderPath << std::endl;
+		ERROR_STREAM("Polyfitter") << "Folder does not exist: " << folderPath;
 		return images;
 	}
 
@@ -660,7 +661,21 @@ std::vector<double> Polyfitter::getPolynomialCoeffs(const std::vector<Point2D> &
 		y.push_back(point.y);
 	}
 
-	// Determinar se é linha reta ou curva
+	// Detectar variação lateral significativa
+	if(y.size() >= 3) {
+		double y_min = *std::min_element(y.begin(), y.end());
+		double y_max = *std::max_element(y.begin(), y.end());
+		double lateral_variation = y_max - y_min;
+
+		// Se há variação lateral > 0.1m, usar curva quadrática
+		if(lateral_variation > 0.1) {
+			std::cout << "[Polyfitter] Lateral variation detected: " << lateral_variation
+			          << "m -> using quadratic fit" << std::endl;
+			return polyfit(x, y, 2); // Curva quadrática
+		}
+	}
+
+	// Determinar se é linha reta ou curva baseado na correlação
 	if(isStraightLine(y, x)) {
 		return polyfit(x, y, 1); // Linha reta
 	} else {

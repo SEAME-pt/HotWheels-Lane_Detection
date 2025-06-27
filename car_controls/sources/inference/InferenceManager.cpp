@@ -1,4 +1,5 @@
 #include "../../includes/inference/InferenceManager.hpp"
+#include "Debugger.hpp"
 #include <algorithm>
 #include <experimental/filesystem>
 #include <iostream>
@@ -60,12 +61,12 @@ bool InferenceManager::loadModel(const std::string &model_name, const std::strin
 			break;
 
 		default:
-			std::cerr << "[InferenceManager] Erro: Tipo de modelo não suportado" << std::endl;
+			ERROR_LOG("InferenceManager", "[InferenceManager] Erro: Tipo de modelo não suportado");
 			return false;
 		}
 
 		if(!inferencer) {
-			std::cerr << "[InferenceManager] Erro: Falha ao criar inferenciador" << std::endl;
+			ERROR_LOG("InferenceManager", "[InferenceManager] Erro: Falha ao criar inferenciador");
 			return false;
 		}
 
@@ -103,7 +104,7 @@ bool InferenceManager::selectModel(const std::string &model_name) {
 
 cv::Mat InferenceManager::predict(const cv::Mat &image) {
 	if(current_model_name_.empty()) {
-		std::cerr << "[InferenceManager] Erro: Nenhum modelo ativo" << std::endl;
+		ERROR_LOG("InferenceManager", "[InferenceManager] Erro: Nenhum modelo ativo");
 		return cv::Mat();
 	}
 

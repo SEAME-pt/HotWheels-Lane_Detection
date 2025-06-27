@@ -1,8 +1,17 @@
 #include "MPCOptimizer.hpp"
+#include "Debugger.hpp"
 #include "Polyfitter.hpp"
 
 MPCOptimizer::MPCOptimizer()
-    : _current_state(), _current_reference(), _current_lane_info(nullptr) {}
+    : _current_state(), _current_reference(), _current_lane_info(nullptr), debug_counter(0) {
+
+	// Initialize debug system
+	debug_enabled = false;
+	output_debug_to_file = true;
+
+	// Use centralized debugger instead of individual files
+	MPC_INFO("MPCOptimizer initialized for Jetracer (wheelbase=150mm)");
+}
 
 MPCOptimizer::MPCOptimizer(const MPCOptimizer &origin) {
 	*this = origin;
@@ -14,7 +23,9 @@ MPCOptimizer &MPCOptimizer::operator=(const MPCOptimizer &origin) {
 	return *this;
 }
 
-MPCOptimizer::~MPCOptimizer(void) {}
+MPCOptimizer::~MPCOptimizer(void) {
+	MPC_INFO("MPCOptimizer destroyed");
+}
 
 static double costWrapper(unsigned n, const double *x, double *grad, void *data) {
 	(void)grad; // Suppress unused parameter warning
@@ -33,11 +44,31 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
 	Polyfitter polyfitter;
 	std::vector<double> poly_coeffs = polyfitter.getPolynomialCoeffs(reference);
 
-	// Calcular cte e epsi iniciais
+	// Calcular cte e epsi iniciais baseado na posição real do veículo
 	double cte0 = 0.0, epsi0 = 0.0;
-	if(!poly_coeffs.empty()) {
-		cte0 = polyfitter.calculateCTE(poly_coeffs, x0, y0);
-		epsi0 = polyfitter.calculateEPSI(poly_coeffs, x0, yaw0);
+	if(!poly_coeffs.empty() && reference.size() > 0) {
+		// Usar a posição real do veículo para calcular erros
+		cte0 = polyfitter.calculateCTE(poly_coeffs, 0.0, y0);     // Veículo na origem X, erro em Y
+		epsi0 = polyfitter.calculateEPSI(poly_coeffs, 0.0, yaw0); // Orientação do veículo
+
+		// Se há trajetória válida mas CTE/EPSI são zero, calcular manualmente
+		if(std::abs(cte0) < 0.01 && std::abs(epsi0) < 0.01 && reference.size() >= 2) {
+			// Calcular erro cross-track baseado no primeiro ponto da trajetória
+			cte0 = reference[0].y; // Distância lateral do primeiro ponto
+
+			// Calcular erro de orientação baseado na direção da trajetória
+			if(reference.size() >= 2) {
+				double trajectory_angle =
+				    std::atan2(reference[1].y - reference[0].y, reference[1].x - reference[0].x);
+				epsi0 = yaw0 - trajectory_angle;
+
+				// Normalizar ângulo
+				while(epsi0 > M_PI)
+					epsi0 -= 2.0 * M_PI;
+				while(epsi0 < -M_PI)
+					epsi0 += 2.0 * M_PI;
+			}
+		}
 	}
 
 	// Tratar latência
@@ -68,18 +99,30 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
 	nlopt::opt optimizer(nlopt::LD_SLSQP, 2 * MPCConfig::horizon); // SLSQP é melhor para MPC
 
 	// Add debug to understand steering behavior
-	static int debug_counter = 0;
-	bool debug_this_call = (++debug_counter % 100 == 0); // Debug every 100th call
+	bool debug_this_call = (++debug_counter % 10 == 0); // Debug every 10th call
 
-	if(debug_this_call) {
-		std::cout << "[MPC Debug] Poly coefficients: ";
+	if(debug_this_call || debug_enabled) {
+		MPC_DEBUG("=== MPC SOLVE CALL " + std::to_string(debug_counter) + " ===");
+
+		// Log input state
+		Debugger::getInstance()->logMPCState(x0, y0, yaw0, v0, cte0, epsi0);
+
+		// Log polynomial coefficients
+		std::ostringstream poly_msg;
+		poly_msg << "Poly coefficients: ";
 		for(double coeff : poly_coeffs) {
-			std::cout << std::fixed << std::setprecision(3) << coeff << " ";
+			poly_msg << std::fixed << std::setprecision(3) << coeff << " ";
 		}
-		std::cout << std::endl;
-		std::cout << "[MPC Debug] Initial state: x=" << state_with_latency[0] 
-		          << " y=" << state_with_latency[1] << " yaw=" << state_with_latency[2] 
-		          << " vel=" << state_with_latency[3] << " cte=" << cte0 << " epsi=" << epsi0 << std::endl;
+		MPC_DEBUG(poly_msg.str());
+
+		// Log reference trajectory
+		if(reference.size() >= 3) {
+			std::vector<std::pair<double, double>> ref_pairs;
+			for(size_t i = 0; i < std::min(size_t(3), reference.size()); ++i) {
+				ref_pairs.emplace_back(reference[i].x, reference[i].y);
+			}
+			Debugger::getInstance()->logMPCReferences(ref_pairs);
+		}
 	}
 
 	// Limites das variáveis de controle
@@ -97,22 +140,33 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
 
 	// Inicialização mais inteligente baseada no estado atual
 	std::vector<double> u0(2 * MPCConfig::horizon, 0.0);
-	
+
 	// Calcular steering inicial baseado no cte e epsi
 	double initial_steering = 0.0;
-	if (std::abs(cte0) > 0.05 || std::abs(epsi0) > 0.1) {
-		// Se há erro lateral significativo, inicializar com correção proporcional
-		initial_steering = std::max(-0.2, std::min(0.2, cte0 * 0.8 + epsi0 * 0.5));
+	if(std::abs(cte0) > 0.01 || std::abs(epsi0) > 0.05) {
+		// Se há erro lateral ou orientação significativo, inicializar com correção proporcional
+		initial_steering = std::max(-0.3, std::min(0.3, cte0 * 2.0 + epsi0 * 1.5));
 	}
-	
+	// Se a trajetória tem curvatura, adicionar steering baseado na geometria
+	if(reference.size() >= 3) {
+		double curvature = _calculatePathCurvature(reference);
+		if(std::abs(curvature) > 0.01) {
+			double curve_steering = std::max(-0.2, std::min(0.2, curvature * 10.0));
+			initial_steering += curve_steering;
+			initial_steering = std::max(-0.35, std::min(0.35, initial_steering));
+		}
+	}
+
 	for(int i = 0; i < MPCConfig::horizon; ++i) {
-		u0[2 * i] = 0.3;     // throttle moderado
+		u0[2 * i] = 0.3;                                    // throttle moderado
 		u0[2 * i + 1] = initial_steering * (1.0 - i * 0.1); // steering com decay
 	}
-	
+
 	if(debug_this_call) {
-		std::cout << "[MPC Debug] Initial steering guess: " << initial_steering 
-		          << " (based on cte=" << cte0 << " epsi=" << epsi0 << ")" << std::endl;
+		std::ostringstream msg;
+		msg << "Initial steering guess: " << initial_steering << " (based on cte=" << cte0
+		    << " epsi=" << epsi0 << ")";
+		MPC_DEBUG(msg.str());
 	}
 
 	optimizer.set_min_objective(costWrapper, this);
@@ -129,20 +183,19 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
 		if(result < 0) {
 			// Fallback: retornar controles seguros
 			if(debug_this_call) {
-				std::cout << "[MPC Debug] Optimization failed, returning fallback controls" << std::endl;
+				MPC_DEBUG("Optimization failed, returning fallback controls");
 			}
 			return {0.2, 0.0};
 		}
-		
+
 		if(debug_this_call) {
-			std::cout << "[MPC Debug] Optimization succeeded. First controls: throttle=" 
-			          << u0[0] << " steering=" << u0[1] << std::endl;
-			std::cout << "[MPC Debug] Cost: " << min_cost << std::endl;
+			Debugger::getInstance()->logMPCControls(u0[0], u0[1], min_cost);
+			MPC_DEBUG("Optimization succeeded");
 		}
 	} catch(const std::exception &e) {
 		// Fallback: retornar controles seguros
 		if(debug_this_call) {
-			std::cout << "[MPC Debug] Optimization exception: " << e.what() << std::endl;
+			MPC_DEBUG("Optimization exception: " + std::string(e.what()));
 		}
 		return {0.2, 0.0};
 	}
@@ -237,13 +290,13 @@ double MPCOptimizer::_costFunction(const std::vector<double> &u, const std::vect
 	}
 
 	double total_cte_cost = 0.0, total_epsi_cost = 0.0, total_steer_cost = 0.0;
-	
+
 	for(int t = 0; t < MPCConfig::horizon; ++t) {
 		double throttle = u[2 * t];
 		double steer = u[2 * t + 1];
 		// Modelo 6 estados usando coeficientes armazenados
 		_kinematicModel(x, y, yaw, v, cte, epsi, throttle, steer, _current_poly_coeffs);
-		
+
 		// Penalizar cte e epsi explicitamente
 		double cte_cost = w_cte * cte * cte;
 		double epsi_cost = w_etheta * epsi * epsi;
@@ -273,14 +326,12 @@ double MPCOptimizer::_costFunction(const std::vector<double> &u, const std::vect
 			cost += 0.5 * steer_rate * steer_rate;       // Suavidade do steering
 		}
 	}
-	
+
 	// Debug ocasional para diagnosticar problemas
 	static int cost_debug_counter = 0;
-	if (++cost_debug_counter % 1000 == 0) {
-		std::cout << "[Cost Debug] Total cost: " << cost 
-		          << " CTE: " << total_cte_cost 
-		          << " EPSI: " << total_epsi_cost 
-		          << " Steer: " << total_steer_cost 
+	if(++cost_debug_counter % 1000 == 0) {
+		std::cout << "[Cost Debug] Total cost: " << cost << " CTE: " << total_cte_cost
+		          << " EPSI: " << total_epsi_cost << " Steer: " << total_steer_cost
 		          << " First steer: " << u[1] << std::endl;
 	}
 
