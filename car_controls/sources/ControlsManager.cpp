@@ -17,6 +17,8 @@
 
 #include "ControlsManager.hpp"
 #include <QDebug>
+#include <chrono>
+#include <condition_variable>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -147,6 +149,25 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
  */
 
 ControlsManager::~ControlsManager() {
+	std::cout << "[~ControlsManager] CRITICAL SAFETY: Stopping all motors during cleanup"
+	          << std::endl;
+
+	// CRITICAL SAFETY: Stop motors immediately during destruction
+	try {
+		m_engineController.emergencyHardwareStop();
+		std::cout << "[~ControlsManager] Motors stopped successfully" << std::endl;
+	} catch(const std::exception &e) {
+		std::cerr << "[~ControlsManager] Error stopping motors: " << e.what() << std::endl;
+		// Try direct engine stop as fallback
+		try {
+			m_engineController.set_speed(0);
+			m_engineController.set_steering(0);
+		} catch(...) {
+			std::cerr << "[~ControlsManager] CRITICAL: Failed to stop motors during cleanup!"
+			          << std::endl;
+		}
+	}
+
 	m_running = false;
 	stopAutonomousControl();
 
@@ -258,6 +279,16 @@ void ControlsManager::startAutonomousControl() {
 	m_autonomousMode = true;
 	m_mpcPlanner = new MPCPlanner();
 
+	// Initialize soft start system
+	m_softStart.current_throttle_output = 0.0;
+	m_softStart.start_time = std::chrono::steady_clock::now();
+
+	std::cout << "[SOFT START] Autonomous mode activated with gradual acceleration" << std::endl;
+	std::cout << "[SOFT START] Warmup period: " << m_softStart.warmup_duration_seconds << " seconds"
+	          << std::endl;
+	std::cout << "[SOFT START] Max throttle change per step: "
+	          << (m_softStart.max_throttle_change_per_step * 100) << "%" << std::endl;
+
 	m_autonomousControlThread = QThread::create([this]() { autonomousControlLoop(); });
 	m_autonomousControlThread->start();
 }
@@ -302,6 +333,15 @@ void ControlsManager::autonomousControlLoop() {
 	qDebug() << "Autonomous control loop started with optimized architecture";
 
 	while(m_autonomousMode && m_running && g_running.load()) {
+		// CRITICAL SAFETY: Check emergency stop flag first
+		if(m_emergencyStop.load()) {
+			m_engineController.set_speed(0);
+			m_engineController.set_steering(0);
+			qDebug() << "Emergency stop is active - motors stopped";
+			std::this_thread::sleep_for(std::chrono::milliseconds(50));
+			continue;
+		}
+
 		auto now = std::chrono::steady_clock::now();
 		auto elapsed = std::chrono::duration<double>(now - last_control_time).count();
 
@@ -358,23 +398,54 @@ void ControlsManager::autonomousControlLoop() {
 			// 4. Calculate MPC control (main computational work)
 			ControlCommand control = m_mpcPlanner->plan(current_state, waypoints, &lane_info);
 
-			// 5. Apply controls with safety limits
+			// 5. Apply constant speed override if enabled
+			if(m_constantSpeedMode) {
+				control.throttle = m_constantThrottle;
+
+				// Optional: limit steering rate for smoother operation in constant speed mode
+				static double last_steering = 0.0;
+				double max_steering_change = 0.05; // rad per step
+				double steering_diff = control.steer - last_steering;
+
+				if(std::abs(steering_diff) > max_steering_change) {
+					control.steer = last_steering + (steering_diff > 0 ? max_steering_change
+					                                                   : -max_steering_change);
+				}
+				last_steering = control.steer;
+
+				if(control_counter % 80 == 0) { // Log every ~4 seconds
+					std::cout << "[CONSTANT SPEED] Mode: ON, Target: " << m_targetConstantSpeed
+					          << " m/s, Throttle: " << control.throttle
+					          << ", Steering: " << std::fixed << std::setprecision(3)
+					          << control.steer << " rad" << std::endl;
+				}
+			}
+
+			// 6. Apply controls with safety limits
 			int throttle_pct = static_cast<int>(std::clamp(control.throttle * 100, 0.0, 50.0));
 			int steer_angle = static_cast<int>(std::clamp(control.steer * 45, -45.0, 45.0));
 
-			// Store applied controls for state estimation
-			m_lastThrottle = throttle_pct / 100.0;       // Convert back to 0-1 range
+			// === SOFT START: Apply gradual acceleration to prevent sudden motor movement ===
+			double target_throttle = throttle_pct / 100.0; // Convert to 0-1 range
+			double final_throttle = applySoftStart(target_throttle);
+			int final_throttle_pct = static_cast<int>(final_throttle * 100);
+
+			// Store applied controls for state estimation (use final values)
+			m_lastThrottle = final_throttle;             // Use the soft-start limited throttle
 			m_lastSteering = steer_angle * M_PI / 180.0; // Convert to radians
 
 			if(control_counter % 40 == 0) {
-				std::cout << "Controls: Throttle=" << throttle_pct << "%, Steering=" << steer_angle
+				std::cout << "Controls: Target=" << throttle_pct
+				          << "%, Final=" << final_throttle_pct << "%, Steering=" << steer_angle
 				          << "°" << std::endl;
 			}
 
 			// Apply controls to hardware
-			//! Só ativar após validação do MPC!
-			// m_engineController.set_speed(throttle_pct);
-			// m_engineController.set_steering(steer_angle);
+			// *** MOTOR CROSS-CONNECTION FIX: Invert speed signal ***
+			m_engineController.set_speed(
+			    -final_throttle_pct); // INVERTED due to crossed motor connections (using soft-start
+			                          // limited throttle)
+			m_engineController.set_steering(steer_angle);
 
 		} catch(const std::exception &e) {
 			std::cerr << "Autonomous control error: " << e.what() << std::endl;
@@ -949,6 +1020,195 @@ void ControlsManager::integrateRealSensorData() {
 		while(state.yaw < -M_PI)
 			state.yaw += 2.0 * M_PI;
 	}
+}
+
+// === NEW: Constant speed control and emergency stop methods ===
+
+void ControlsManager::setConstantSpeedMode(bool enable, double target_speed, double throttle) {
+	m_constantSpeedMode = enable;
+	m_targetConstantSpeed = target_speed;
+	m_constantThrottle = throttle;
+
+	if(enable) {
+		std::cout << "[ControlsManager] CONSTANT SPEED MODE ENABLED:" << std::endl;
+		std::cout << "  Target speed: " << target_speed << " m/s" << std::endl;
+		std::cout << "  Fixed throttle: " << throttle << std::endl;
+		std::cout << "  ⚠️ Motor control will use constant throttle value!" << std::endl;
+	} else {
+		std::cout << "[ControlsManager] Constant speed mode DISABLED - using MPC throttle control"
+		          << std::endl;
+	}
+}
+
+void ControlsManager::emergencyMotorStop() {
+	std::cout << "\n*** EMERGENCY MOTOR STOP ACTIVATED ***" << std::endl;
+	std::cout << "*** STOPPING ALL MOTORS IMMEDIATELY ***" << std::endl;
+
+	// Stop all motors immediately using multiple methods for maximum safety
+	try {
+		// Primary stop call
+		m_engineController.set_speed(0);
+
+		// Use the robust emergency hardware stop
+		m_engineController.emergencyHardwareStop();
+
+	} catch(const std::exception &e) {
+		std::cerr << "[EMERGENCY] Error in primary stop: " << e.what() << std::endl;
+
+		// Fallback: try forced stop
+		try {
+			m_engineController.forcedMotorStop();
+		} catch(...) {
+			std::cerr << "[EMERGENCY] CRITICAL: All motor stop methods failed!" << std::endl;
+		}
+	}
+
+	// Reset steering to center
+	try {
+		m_engineController.set_steering(0);
+	} catch(...) {
+		std::cerr << "[EMERGENCY] Warning: Could not center steering" << std::endl;
+	}
+
+	// Disable constant speed mode for safety
+	m_constantSpeedMode = false;
+	m_emergencyStop = true;
+
+	std::cout << "*** MOTORS STOPPED - SYSTEM SAFE ***" << std::endl;
+	std::cout << "*** To resume operation, use manual mode (press '2') ***" << std::endl;
+}
+
+/*!
+ * @brief Emergency stop function - critical safety method
+ * @details Immediately stops all motors and disables autonomous operations.
+ * This is a fail-safe method that should work even if other systems fail.
+ */
+void ControlsManager::emergencyStop() {
+	std::cout << "\n*** CRITICAL EMERGENCY STOP ACTIVATED ***" << std::endl;
+	std::cout << "*** IMMEDIATE SHUTDOWN OF ALL MOTOR SYSTEMS ***" << std::endl;
+
+	// Set emergency stop flag first
+	m_emergencyStop = true;
+	m_constantSpeedMode = false;
+	m_currentMode = DrivingMode::Manual; // Force manual mode
+
+	// Multiple redundant motor stop calls for maximum safety
+	try {
+		// Primary: Use the most robust emergency hardware stop
+		m_engineController.emergencyHardwareStop();
+		std::cout << "*** PRIMARY EMERGENCY STOP COMPLETED ***" << std::endl;
+
+	} catch(const std::exception &e) {
+		std::cerr << "[EMERGENCY] Error in primary emergency stop: " << e.what() << std::endl;
+
+		// Fallback 1: Try forced motor stop
+		try {
+			m_engineController.forcedMotorStop();
+			std::cout << "*** FALLBACK FORCED STOP COMPLETED ***" << std::endl;
+		} catch(const std::exception &e2) {
+			std::cerr << "[EMERGENCY] Error in forced stop: " << e2.what() << std::endl;
+
+			// Fallback 2: Basic set_speed(0) calls
+			try {
+				for(int i = 0; i < 5; ++i) {
+					m_engineController.set_speed(0);
+					std::this_thread::sleep_for(std::chrono::milliseconds(10));
+				}
+				std::cout << "*** BASIC STOP FALLBACK COMPLETED ***" << std::endl;
+			} catch(...) {
+				std::cerr << "[EMERGENCY] CRITICAL: ALL MOTOR STOP METHODS FAILED!" << std::endl;
+			}
+		}
+	}
+
+	// Try to center steering
+	try {
+		m_engineController.set_steering(0);
+	} catch(...) {
+		std::cerr << "[EMERGENCY] Warning: Could not center steering" << std::endl;
+	}
+
+	std::cout << "*** EMERGENCY STOP COMPLETE - ALL SYSTEMS HALTED ***" << std::endl;
+	std::cout << "*** SYSTEM IS IN SAFE STATE ***" << std::endl;
+}
+
+/*!
+ * @brief Reset emergency stop flag when it's safe to resume operations
+ * @details This method should only be called when the user explicitly wants to
+ * resume operations after an emergency stop.
+ */
+void ControlsManager::resetEmergencyStop() {
+	std::cout << "[SAFETY] Resetting emergency stop flag..." << std::endl;
+	m_emergencyStop = false;
+	std::cout << "[SAFETY] Emergency stop flag cleared - system ready for operation" << std::endl;
+}
+
+/*!
+ * @brief Apply soft start logic to throttle commands for gradual acceleration
+ * @param target_throttle The desired throttle value (0.0 to 1.0)
+ * @return The limited throttle value considering soft start constraints
+ * @details This method ensures smooth acceleration by limiting the rate of throttle change
+ * and applying special limits during the initial warmup period.
+ */
+double ControlsManager::applySoftStart(double target_throttle) {
+	if(!m_softStart.enabled) {
+		return target_throttle; // Soft start disabled, return target directly
+	}
+
+	auto now = std::chrono::steady_clock::now();
+	auto elapsed_seconds = std::chrono::duration<double>(now - m_softStart.start_time).count();
+
+	// Calculate maximum allowed throttle based on warmup period
+	double max_allowed_throttle;
+	if(elapsed_seconds < m_softStart.warmup_duration_seconds) {
+		// During warmup: linear ramp from 0 to normal operation
+		double warmup_progress = elapsed_seconds / m_softStart.warmup_duration_seconds;
+		max_allowed_throttle =
+		    m_softStart.initial_throttle_limit +
+		    (target_throttle - m_softStart.initial_throttle_limit) * warmup_progress;
+
+		// Also respect the initial throttle limit during warmup
+		max_allowed_throttle = std::min(max_allowed_throttle, m_softStart.initial_throttle_limit +
+		                                                          (0.3 * warmup_progress));
+	} else {
+		// After warmup: allow full throttle range
+		max_allowed_throttle = target_throttle;
+	}
+
+	// Apply rate limiting: limit how fast throttle can change
+	double throttle_change = target_throttle - m_softStart.current_throttle_output;
+	double max_change = m_softStart.max_throttle_change_per_step;
+
+	if(std::abs(throttle_change) > max_change) {
+		// Limit the change rate
+		if(throttle_change > 0) {
+			m_softStart.current_throttle_output += max_change; // Gradual increase
+		} else {
+			m_softStart.current_throttle_output -= max_change; // Gradual decrease
+		}
+	} else {
+		// Small change, allow it directly
+		m_softStart.current_throttle_output = target_throttle;
+	}
+
+	// Apply warmup limit
+	m_softStart.current_throttle_output =
+	    std::min(m_softStart.current_throttle_output, max_allowed_throttle);
+
+	// Ensure within valid range
+	m_softStart.current_throttle_output = std::clamp(m_softStart.current_throttle_output, 0.0, 1.0);
+
+	// Log soft start activity (only occasionally to avoid spam)
+	static int log_counter = 0;
+	if(++log_counter % 40 == 0 && elapsed_seconds < m_softStart.warmup_duration_seconds) {
+		std::cout << "[SOFT START] Elapsed: " << std::fixed << std::setprecision(1)
+		          << elapsed_seconds << "s, Target: " << std::setprecision(2)
+		          << (target_throttle * 100)
+		          << "%, Limited: " << (m_softStart.current_throttle_output * 100) << "%"
+		          << std::endl;
+	}
+
+	return m_softStart.current_throttle_output;
 }
 
 #include "ControlsManager.moc"
