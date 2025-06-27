@@ -170,8 +170,8 @@ void EngineController::set_steering(int angle) {
 	    std::chrono::duration_cast<std::chrono::milliseconds>(now - last_servo_time).count();
 	if(elapsed < 80) {
 		// Comando muito rápido para o servo - usar último ângulo seguro
-		INFO_LOG("[SERVO PROTECTION] Comando muito rápido ("
-		         << elapsed << "ms) - aguardando para proteger servo");
+		INFO_STREAM("SERVO_PROTECTION")
+		    << "Comando muito rápido (" << elapsed << "ms) - aguardando para proteger servo";
 		return; // Não executar comando muito rápido
 	}
 
@@ -183,8 +183,8 @@ void EngineController::set_steering(int angle) {
 	int angle_diff = angle - last_angle;
 	if(std::abs(angle_diff) > max_change) {
 		angle = last_angle + (angle_diff > 0 ? max_change : -max_change);
-		INFO_LOG("[SERVO PROTECTION] Limitando mudança de "
-		         << angle_diff << "° para " << (angle - last_angle) << "° (protegendo servo)");
+		INFO_STREAM("SERVO_PROTECTION") << "Limitando mudança de " << angle_diff << "° para "
+		                                << (angle - last_angle) << "° (protegendo servo)";
 	}
 
 	// Aplicar clamp final do sistema original
@@ -208,7 +208,7 @@ void EngineController::set_steering(int angle) {
 
 	// Log apenas quando há mudança significativa
 	if(std::abs(angle_diff) > 1) {
-		INFO_LOG("[SERVO] Ângulo: " << angle << "° (PWM: " << pwm << ")");
+		INFO_STREAM("SERVO") << "Ângulo: " << angle << "° (PWM: " << pwm << ")";
 	}
 
 	emit this->steeringUpdated(angle);
