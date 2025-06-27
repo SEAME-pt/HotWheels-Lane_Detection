@@ -22,6 +22,9 @@
 #include <linux/i2c-dev.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+#include <chrono>
+#include <thread>
+#include <iostream>
 
 /*!
  * @brief Clamps a value to a given range.
@@ -118,7 +121,7 @@ void EngineController::set_speed(int speed) {
 	speed = clamp(speed, -100, 100);
 	int pwm_value = static_cast<int>(std::abs(speed) / 100.0 * 4096);
 
-	if(speed < 0) { // Forward
+	if(speed < 0) { // Reverse (negative speed)
 		pcontrol->set_motor_pwm(0, pwm_value);
 		pcontrol->set_motor_pwm(1, 0);
 		pcontrol->set_motor_pwm(2, pwm_value);
@@ -126,7 +129,7 @@ void EngineController::set_speed(int speed) {
 		pcontrol->set_motor_pwm(6, 0);
 		pcontrol->set_motor_pwm(7, pwm_value);
 		setDirection(CarDirection::Reverse);
-	} else if(speed > 0) { // Backwards
+	} else if(speed > 0) { // Forward (positive speed)
 		pcontrol->set_motor_pwm(0, pwm_value);
 		pcontrol->set_motor_pwm(1, pwm_value);
 		pcontrol->set_motor_pwm(2, 0);
@@ -134,9 +137,21 @@ void EngineController::set_speed(int speed) {
 		pcontrol->set_motor_pwm(6, pwm_value);
 		pcontrol->set_motor_pwm(7, pwm_value);
 		setDirection(CarDirection::Drive);
-	} else { // Stop
-		for(int channel = 0; channel < 9; ++channel)
+	} else { // Stop - CRITICAL SAFETY: Force all motor channels to 0
+
+		// Force ALL motor channels to 0 for safety
+		for(int channel = 0; channel <= 15; ++channel) { // Expanded range for safety
 			pcontrol->set_motor_pwm(channel, 0);
+		}
+
+		// Double-check critical motor channels
+		pcontrol->set_motor_pwm(0, 0); // Motor channel 0
+		pcontrol->set_motor_pwm(1, 0); // Motor channel 1
+		pcontrol->set_motor_pwm(2, 0); // Motor channel 2
+		pcontrol->set_motor_pwm(5, 0); // Motor channel 5
+		pcontrol->set_motor_pwm(6, 0); // Motor channel 6
+		pcontrol->set_motor_pwm(7, 0); // Motor channel 7
+
 		setDirection(CarDirection::Stop);
 	}
 	m_current_speed = speed;
@@ -168,6 +183,74 @@ void EngineController::set_steering(int angle) {
 	pcontrol->set_servo_pwm(STEERING_CHANNEL, 0, pwm);
 	m_current_angle = angle;
 	emit this->steeringUpdated(angle);
+}
+
+/*!
+ * @brief Forced motor stop - bypasses all normal logic for emergency situations
+ * @details This method forces all motor channels to zero without any checks or logic.
+ * It's designed to be called in emergency situations where normal motor control may fail.
+ */
+void EngineController::forcedMotorStop() {
+
+	try {
+		// Force ALL possible motor channels to zero - no exceptions
+		for(int channel = 0; channel <= 15; ++channel) {
+			pcontrol->set_motor_pwm(channel, 0);
+		}
+
+		// Double-verify critical channels are zero
+		pcontrol->set_motor_pwm(0, 0);
+		pcontrol->set_motor_pwm(1, 0);
+		pcontrol->set_motor_pwm(2, 0);
+		pcontrol->set_motor_pwm(5, 0);
+		pcontrol->set_motor_pwm(6, 0);
+		pcontrol->set_motor_pwm(7, 0);
+
+		m_current_speed = 0;
+		setDirection(CarDirection::Stop);
+
+	} catch(...) {
+	}
+}
+
+/*!
+ * @brief Emergency hardware stop with multiple redundant calls
+ * @details Makes multiple redundant calls to ensure motors are stopped.
+ * This is the most robust stop method available.
+ */
+void EngineController::emergencyHardwareStop() {
+
+	// Call 1: Normal stop
+	try {
+		set_speed(0);
+	} catch(...) {
+	}
+
+	// Small delay for hardware to process
+	std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
+	// Call 2: Forced stop
+	try {
+		forcedMotorStop();
+	} catch(...) {
+	}
+
+	// Small delay for hardware to process
+	std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
+	// Call 3: Final redundant stop
+	try {
+		for(int i = 0; i < 3; ++i) {
+			for(int channel = 0; channel <= 15; ++channel) {
+				pcontrol->set_motor_pwm(channel, 0);
+			}
+			std::this_thread::sleep_for(std::chrono::milliseconds(2));
+		}
+	} catch(...) {
+	}
+
+	m_current_speed = 0;
+	setDirection(CarDirection::Stop);
 }
 
 #include "EngineController.moc"

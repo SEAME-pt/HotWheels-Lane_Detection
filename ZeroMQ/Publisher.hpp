@@ -3,6 +3,7 @@
 
 #include <chrono>
 #include <cuda_runtime.h>
+#include <errno.h>
 #include <iostream>
 #include <mutex>
 #include <opencv2/core/cuda.hpp>
@@ -22,6 +23,9 @@ class Publisher {
 		std::mutex frame_mtx;
 		std::string boundAddress;
 		bool running;
+
+		bool isActive = true;  // Flag to prevent publishing after shutdown
+		std::mutex active_mtx; // Mutex for isActive
 
 		static std::unordered_map<int, Publisher *> instances;
 

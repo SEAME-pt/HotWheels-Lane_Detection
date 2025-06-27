@@ -28,8 +28,9 @@ TensorRTInferencer::TensorRTInferencer(const std::string &enginePath)
 
 	engineData = readEngineFile(enginePath); // Load serialized engine file into memory
 
-	runtime = nvinfer1::createInferRuntime(logger); // Create TensorRT runtime with logger
-	if(!runtime) {                                  // Check if runtime creation failed
+	runtime =
+	    nvinfer1::createInferRuntime(getLogger()); // Create TensorRT runtime with singleton logger
+	if(!runtime) {                                 // Check if runtime creation failed
 		throw std::runtime_error("Failed to create TensorRT Runtime");
 	}
 
@@ -121,9 +122,7 @@ TensorRTInferencer::TensorRTInferencer(const std::string &enginePath)
 	bindings[inputBindingIndex] = deviceInput;   // Assign device input buffer
 	bindings[outputBindingIndex] = deviceOutput; // Assign device output buffer
 
-	Publisher::instance(5556); // Initialize publisher for inference results
-
-	initUndistortMaps();             // Initialize undistortion maps for camera calibration
+	Publisher::instance(5556);       // Initialize publisher for inference results
 	cudaStream = cv::cuda::Stream(); // CUDA stream for asynchronous operations
 }
 
@@ -247,12 +246,43 @@ cv::cuda::GpuMat TensorRTInferencer::makePrediction(const cv::cuda::GpuMat &gpuI
 
 	runInference(gpuInputFloat); // Run inference
 
-	int height = outputDims.d[1];
-	int width = outputDims.d[2];
+	// Extract output dimensions correctly based on the tensor shape
+	int height, width;
+	if(outputDims.nbDims == 4) {
+		// Format: [batch, height, width, channels] or [batch, channels, height, width]
+		// Based on the debug output, our model uses [batch, height, width, channels]
+		height = static_cast<int>(outputDims.d[1]);
+		width = static_cast<int>(outputDims.d[2]);
+	} else if(outputDims.nbDims == 3) {
+		// Format: [height, width, channels] or [channels, height, width]
+		height = static_cast<int>(outputDims.d[0]);
+		width = static_cast<int>(outputDims.d[1]);
+	} else {
+		std::cerr << "[TensorRTInferencer] Unsupported output dimensions: " << outputDims.nbDims << std::endl;
+		throw std::runtime_error("Unsupported output tensor dimensions");
+	}
+
+	// Debug: Check output dimensions
+	if(height <= 0 || width <= 0 || height > 10000 || width > 10000) {
+		std::cerr << "[TensorRTInferencer] Invalid output dimensions: " << width << "x" << height
+		          << std::endl;
+		std::cerr << "[TensorRTInferencer] OutputDims: nbDims=" << outputDims.nbDims;
+		for(int i = 0; i < outputDims.nbDims; i++) {
+			std::cerr << " d[" << i << "]=" << outputDims.d[i];
+		}
+		std::cerr << std::endl;
+		throw std::runtime_error("Invalid output dimensions detected");
+	}
 
 	// Allocate or resize the output mask on GPU if it's not allocated or has wrong size
 	if(outputMaskGpu.empty() || outputMaskGpu.rows != height || outputMaskGpu.cols != width) {
-		outputMaskGpu = cv::cuda::GpuMat(height, width, CV_32F);
+		try {
+			outputMaskGpu = cv::cuda::GpuMat(height, width, CV_32F);
+		} catch(const cv::Exception &e) {
+			std::cerr << "[TensorRTInferencer] Failed to create GpuMat with dimensions " << width
+			          << "x" << height << ": " << e.what() << std::endl;
+			throw;
+		}
 	}
 
 	// Copy the raw prediction output from TensorRT device memory to `outputMaskGpu`
@@ -296,43 +326,42 @@ cv::cuda::GpuMat TensorRTInferencer::makePrediction(const cv::cuda::GpuMat &gpuI
 	return outputMaskGpu;
 }
 
-void TensorRTInferencer::initUndistortMaps() {
-	cv::Mat cameraMatrix, distCoeffs;
-	cv::FileStorage fs("/home/jetson/models/lane-detection/camera_calibration.yml",
-	                   cv::FileStorage::READ); // Open calibration file
-
-	if(!fs.isOpened()) {
-		std::cerr << "[Error] Failed to open camera_calibration.yml" << std::endl;
-		return; // Handle file opening error
-	}
-
-	fs["camera_matrix"] >> cameraMatrix;         // Read camera matrix
-	fs["distortion_coefficients"] >> distCoeffs; // Read distortion coefficients
-	fs.release();                                // Close file
-
-	cv::Mat mapx, mapy;
-	cv::initUndistortRectifyMap(cameraMatrix, distCoeffs, cv::Mat(), cameraMatrix,
-	                            cv::Size(1280, 720), CV_32FC1, mapx,
-	                            mapy); // Compute undistortion mapping
-
-	d_mapx.upload(mapx); // Upload X map to GPU
-	d_mapy.upload(mapy); // Upload Y map to GPU
-}
-
 void TensorRTInferencer::doInference(const cv::Mat &frame) {
-	std::cout << "[DEBUG] TensorRTInferencer::doInference called with frame size: " << frame.cols
-	          << "x" << frame.rows << std::endl;
-
 	if(frame.empty()) {
 		throw std::runtime_error("Input frame is empty");
 	}
 
-	cv::cuda::GpuMat d_frame(frame); // Upload frame to GPU
-	cv::cuda::GpuMat d_undistorted;
-	cv::cuda::remap(d_frame, d_undistorted, d_mapx, d_mapy, cv::INTER_LINEAR, 0, cv::Scalar(),
-	                cudaStream); // Undistort frame
+	// Debug: Log model dimensions
+	static bool first_run = true;
+	if(first_run) {
+		std::cout << "[TensorRTInferencer] Input dims: " << inputDims.nbDims;
+		for(int i = 0; i < inputDims.nbDims; i++) {
+			std::cout << " d[" << i << "]=" << inputDims.d[i];
+		}
+		std::cout << std::endl;
 
-	cv::cuda::GpuMat d_prediction_mask = makePrediction(d_undistorted); // Run model inference
+		std::cout << "[TensorRTInferencer] Output dims: " << outputDims.nbDims;
+		for(int i = 0; i < outputDims.nbDims; i++) {
+			std::cout << " d[" << i << "]=" << outputDims.d[i];
+		}
+		std::cout << std::endl;
+		first_run = false;
+	}
+
+	// Redimensiona o frame para 1280x720 se necessário
+	cv::Mat resized_frame;
+	if(frame.cols != 1280 || frame.rows != 720) {
+		cv::resize(frame, resized_frame, cv::Size(1280, 720));
+	} else {
+		resized_frame = frame;
+	}
+	cv::cuda::GpuMat d_frame(resized_frame); // Upload frame to GPU
+	// Remover undistort
+	// cv::cuda::GpuMat d_undistorted;
+	// cv::cuda::remap(d_frame, d_undistorted, d_mapx, d_mapy, cv::INTER_LINEAR, 0, cv::Scalar(),
+	// cudaStream);
+
+	cv::cuda::GpuMat d_prediction_mask = makePrediction(d_frame); // Run model inference
 
 	// Convert to 8-bit (0 or 255) in a new GpuMat
 	cv::cuda::GpuMat d_mask_u8;
@@ -342,6 +371,15 @@ void TensorRTInferencer::doInference(const cv::Mat &frame) {
 	d_mask_u8.download(binary_mask_cpu, cudaStream);
 	cv::threshold(binary_mask_cpu, binary_mask_cpu, 128, 255, cv::THRESH_BINARY);
 	cudaStream.waitForCompletion(); // Ensure async operations are complete
+
+	// Salva a máscara binária para acesso externo
+	lastMask = binary_mask_cpu.clone();
+
+	// Publica a máscara binária para o MPC
+	std::vector<uchar> mask_buffer;
+	cv::imencode(".png", binary_mask_cpu, mask_buffer);
+	std::string mask_data(mask_buffer.begin(), mask_buffer.end());
+	Publisher::instance(5556)->publish("binary_mask", mask_data);
 
 	// Convert model output to 8-bit binary mask on GPU
 	cv::cuda::GpuMat d_visualization;

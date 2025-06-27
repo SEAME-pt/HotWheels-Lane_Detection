@@ -3,27 +3,33 @@
 #include <string>
 #include <vector>
 
+#include <opencv2/opencv.hpp>
 #include <opencv2/cudaimgproc.hpp>
 #include <opencv2/cudawarping.hpp>
-#include <opencv2/opencv.hpp>
 
 #include <NvInfer.h>
-#include <cuda_fp16.h>
 #include <cuda_runtime_api.h>
+#include <cuda_fp16.h>
 
 #include "IInferencer.hpp"
-#include "LaneCurveFitter.hpp"
 #include "LanePostProcessor.hpp"
+#include "LaneCurveFitter.hpp"
+#include "Logger.hpp"
 
-#include "../../../ZeroMQ/Publisher.hpp"
 #include "../../../ZeroMQ/Subscriber.hpp"
+#include "../../../ZeroMQ/Publisher.hpp"
 
 class TensorRTInferencer : public IInferencer {
 	private:
 		class Logger : public nvinfer1::ILogger {
 			public:
 				void log(Severity severity, const char *msg) noexcept override;
-		} logger;
+		};
+
+		static Logger &getLogger() {
+			static Logger instance;
+			return instance;
+		}
 
 		std::vector<char> engineData;
 		nvinfer1::IRuntime *runtime;
@@ -61,6 +67,8 @@ class TensorRTInferencer : public IInferencer {
 
 		Publisher *m_publisherObject;
 
+		cv::Mat lastMask;
+
 		std::vector<char> readEngineFile(const std::string &enginePath);
 		void cleanupResources();
 
@@ -84,5 +92,8 @@ class TensorRTInferencer : public IInferencer {
 		}
 		cv::cuda::GpuMat getOutputMaskGpu() const {
 			return outputMaskGpu;
+		}
+		cv::Mat getLastMask() const {
+			return lastMask;
 		}
 };

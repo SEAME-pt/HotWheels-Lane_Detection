@@ -4,7 +4,7 @@
 JETSON_USER="jetson"
 JETSON_HOST="hotwheels-car.netbird.cloud"
 PROJECT_PATH="/home/jetson/Documents/MPC"
-LOCAL_PATH="/home/michel-batista/Documents/SEA_ME/HotWheels-Lane_Detection"
+LOCAL_PATH="/home/michel/Documents/other"
 TMUX_SESSION="MPC"
 
 echo "� Capturando output da sessão tmux '$TMUX_SESSION' na Jetson..."

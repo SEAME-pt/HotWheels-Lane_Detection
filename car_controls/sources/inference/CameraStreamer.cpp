@@ -2,10 +2,7 @@
 
 // Constructor: initializes camera capture, inference reference, and settings
 CameraStreamer::CameraStreamer(double scale)
-    : scale_factor(scale), m_publisherFrameObject(nullptr), m_running(true),
-      m_rawFramePublisher(nullptr) {
-
-	// segmentationInferencer = std::make_shared<ONNXInferencer>(
+    : scale_factor(scale), m_publisherFrameObject(nullptr), m_running(true) {
 
 	segmentationInferencer =
 	    std::make_shared<TensorRTInferencer>("/home/jetson/models/lane-detection/model.engine");
@@ -30,18 +27,6 @@ CameraStreamer::CameraStreamer(double scale)
 	if(!cap.isOpened()) { // Check if camera opened successfully
 		std::cerr << "Error: Could not open CSI camera" << std::endl;
 		exit(-1); // Terminate if failed
-	}
-
-	// Initialize ZeroMQ publishers (singletons - just store raw pointers)
-	try {
-		// Get publisher instances - they are singletons managed internally
-		m_rawFramePublisher = Publisher::instance(5558);
-		// m_inferencePublisher removed - now handled by TensorRTInferencer directly
-
-		std::cout << "[CameraStreamer] ZeroMQ raw frame publisher initialized" << std::endl;
-	} catch(const std::exception &e) {
-		std::cerr << "[CameraStreamer] ZeroMQ setup error: " << e.what() << std::endl;
-		m_rawFramePublisher = nullptr;
 	}
 }
 
@@ -71,9 +56,6 @@ CameraStreamer::~CameraStreamer() {
 	delete m_publisherFrameObject;
 	m_publisherFrameObject = nullptr;
 
-	// Don't delete singletons - just null the pointer
-	m_rawFramePublisher = nullptr;
-
 	std::cout << "[~CameraStreamer] Destructor done." << std::endl;
 }
 
@@ -81,19 +63,12 @@ void CameraStreamer::segmentationWorker() {
 	while(m_running) {
 		cv::Mat frame;
 		if(segmentationBuffer.getFrame(frame)) {
-			std::cout << "[DEBUG] Segmentation worker got frame: " << frame.cols << "x"
-			          << frame.rows << std::endl;
-
 			// auto start = std::chrono::high_resolution_clock::now();
 
 			segmentationInferencer->doInference(frame);
 
-			// Publishing is now handled directly by TensorRTInferencer::doInference()
-			// No need to publish here anymore
-
 			// auto end = std::chrono::high_resolution_clock::now();
-			// auto duration_ms =
-			// std::chrono::duration_cast<std::chrono::milliseconds>(end -
+			// auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end -
 			// start).count();
 
 			// std::cout << "[Segmentation] Inference time: " << duration_ms << " ms" << std::endl;
@@ -142,20 +117,6 @@ void CameraStreamer::captureLoop() {
 			break;
 		}
 
-		// Publish raw camera frame for testing/debugging
-		try {
-			if(m_rawFramePublisher &&
-			   frame_count % 5 == 0) { // Publish every 5th frame to reduce bandwidth
-				std::vector<uchar> buffer;
-				cv::imencode(".jpg", frame, buffer, {cv::IMWRITE_JPEG_QUALITY, 70});
-				std::string encoded_frame(buffer.begin(), buffer.end());
-				m_rawFramePublisher->publish("camera_frame", encoded_frame);
-			}
-		} catch(const std::exception &e) {
-			std::cerr << "[CameraStreamer] Raw frame publish error: " << e.what() << std::endl;
-		}
-
-		// Update buffers for inference threads INSIDE the loop
 		segmentationBuffer.update(frame);
 		detectionBuffer.update(frame);
 
@@ -163,9 +124,8 @@ void CameraStreamer::captureLoop() {
 		auto now = std::chrono::high_resolution_clock::now();
 		auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
 
-		if(elapsed >= 10) { // Log every 10 seconds instead of every second
-			std::cout << "[CameraStreamer] Average FPS: "
-			          << frame_count / static_cast<double>(elapsed) << std::endl;
+		if(elapsed >= 1) {
+			std::cout << "Average FPS: " << frame_count / static_cast<double>(elapsed) << std::endl;
 			start_time = now;
 			frame_count = 0;
 		}

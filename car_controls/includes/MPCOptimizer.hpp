@@ -21,6 +21,7 @@ class MPCOptimizer {
 		std::vector<Point2D> _current_reference;
 		const LaneInfo *_current_lane_info;
 		std::vector<double> _current_poly_coeffs; // Add this line
+		std::vector<Point2D> _predicted_trajectory;
 
 	public:
 		MPCOptimizer(void);
@@ -39,6 +40,7 @@ class MPCOptimizer {
 		const LaneInfo *getCurrentLaneInfo(void) const {
 			return _current_lane_info;
 		}
+		const std::vector<Point2D>& getPredictedTrajectory() const { return _predicted_trajectory; }
 
 		// Declaração da função solve
 		std::pair<double, double> solve(double x0, double y0, double yaw0, double v0,

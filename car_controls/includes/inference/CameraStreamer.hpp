@@ -10,7 +10,6 @@
 
 #include "../../../ZeroMQ/Publisher.hpp"
 #include "../../../ZeroMQ/Subscriber.hpp"
-#include "ONNXInferencer.hpp"
 #include "TensorRTInferencer.hpp"
 
 #include <GL/glew.h>
@@ -21,8 +20,8 @@
 #include <mutex>
 #include <queue>
 
+#include "../objectDetection/YOLOv5TRT.hpp"
 #include "IInferencer.hpp"
-#include "YOLOv5TRT.hpp"
 
 class FrameBufferSegmentation {
 	public:
@@ -88,13 +87,7 @@ class CameraStreamer {
 
 		Publisher *m_publisherFrameObject;
 
-		// ZeroMQ Publishers (raw pointers to singletons - we don't own them)
-		Publisher *m_rawFramePublisher;
-		// Removed: m_inferencePublisher - now handled by TensorRTInferencer directly
-
 		std::shared_ptr<TensorRTInferencer> segmentationInferencer;
-		// std::shared_ptr<ONNXInferencer> segmentationInferencer;
-
 		std::shared_ptr<YOLOv5TRT> yoloInferencer;
 
 		FrameBufferSegmentation segmentationBuffer;

@@ -16,7 +16,7 @@ void Subscriber::connect(const std::string &address) {
 	while(!connected) {
 		try {
 			subscriber.connect(address); // Attempt to connect to the publisher
-			std::cout << "Subscriber connected to " << address << std::endl;
+			// std::cout << "Subscriber connected to " << address << std::endl;
 			connected = true; // Exit the loop once the connection is successful
 		} catch(const zmq::error_t &e) {
 			std::cout << "Connection failed, retrying in 1 second..." << std::endl;

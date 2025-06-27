@@ -38,6 +38,20 @@ struct LaneInfo {
 		      yaw_error(0.0) {}
 };
 
+// Diagnósticos do estimador de estado
+struct StateEstimatorDiagnostics {
+	double position_accuracy;    // Precisão da posição estimada
+	double velocity_confidence;  // Confiança na velocidade
+	double yaw_stability;       // Estabilidade da orientação
+	bool sensor_health;         // Estado dos sensores
+	double last_update_time;    // Timestamp da última atualização
+	int num_sensor_failures;    // Contador de falhas de sensor
+	
+	StateEstimatorDiagnostics() 
+		: position_accuracy(0.0), velocity_confidence(0.0), yaw_stability(0.0),
+		  sensor_health(true), last_update_time(0.0), num_sensor_failures(0) {}
+};
+
 // Outros tipos comuns podem ser adicionados aqui
 
 #endif // COMMON_TYPES_HPP

@@ -54,8 +54,33 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
 	_current_lane_info = lane_info;
 	_current_poly_coeffs = poly_coeffs; // Store coefficients
 
+	// Prever trajetória ao longo do horizonte (INITIAL PREDICTION - will be updated after
+	// optimization)
+	_predicted_trajectory.clear();
+	double px = x0, py = y0, psi = yaw0, v = v0, cte = 0.0, epsi = 0.0;
+	for(int t = 0; t < MPCConfig::horizon; ++t) {
+		// Use simple forward prediction with zero controls for initial trajectory
+		_kinematicModel(px, py, psi, v, cte, epsi, 0.0, 0.0, poly_coeffs);
+		_predicted_trajectory.emplace_back(px, py);
+	}
+
 	// Configuração do otimizador (melhor para MPC)
 	nlopt::opt optimizer(nlopt::LD_SLSQP, 2 * MPCConfig::horizon); // SLSQP é melhor para MPC
+
+	// Add debug to understand steering behavior
+	static int debug_counter = 0;
+	bool debug_this_call = (++debug_counter % 100 == 0); // Debug every 100th call
+
+	if(debug_this_call) {
+		std::cout << "[MPC Debug] Poly coefficients: ";
+		for(double coeff : poly_coeffs) {
+			std::cout << std::fixed << std::setprecision(3) << coeff << " ";
+		}
+		std::cout << std::endl;
+		std::cout << "[MPC Debug] Initial state: x=" << state_with_latency[0] 
+		          << " y=" << state_with_latency[1] << " yaw=" << state_with_latency[2] 
+		          << " vel=" << state_with_latency[3] << " cte=" << cte0 << " epsi=" << epsi0 << std::endl;
+	}
 
 	// Limites das variáveis de controle
 	std::vector<double> lb(2 * MPCConfig::horizon);
@@ -70,11 +95,24 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
 	optimizer.set_lower_bounds(lb);
 	optimizer.set_upper_bounds(ub);
 
-	// Inicialização mais inteligente
+	// Inicialização mais inteligente baseada no estado atual
 	std::vector<double> u0(2 * MPCConfig::horizon, 0.0);
+	
+	// Calcular steering inicial baseado no cte e epsi
+	double initial_steering = 0.0;
+	if (std::abs(cte0) > 0.05 || std::abs(epsi0) > 0.1) {
+		// Se há erro lateral significativo, inicializar com correção proporcional
+		initial_steering = std::max(-0.2, std::min(0.2, cte0 * 0.8 + epsi0 * 0.5));
+	}
+	
 	for(int i = 0; i < MPCConfig::horizon; ++i) {
 		u0[2 * i] = 0.3;     // throttle moderado
-		u0[2 * i + 1] = 0.0; // steering neutro
+		u0[2 * i + 1] = initial_steering * (1.0 - i * 0.1); // steering com decay
+	}
+	
+	if(debug_this_call) {
+		std::cout << "[MPC Debug] Initial steering guess: " << initial_steering 
+		          << " (based on cte=" << cte0 << " epsi=" << epsi0 << ")" << std::endl;
 	}
 
 	optimizer.set_min_objective(costWrapper, this);
@@ -90,11 +128,39 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
 		nlopt::result result = optimizer.optimize(u0, min_cost);
 		if(result < 0) {
 			// Fallback: retornar controles seguros
+			if(debug_this_call) {
+				std::cout << "[MPC Debug] Optimization failed, returning fallback controls" << std::endl;
+			}
 			return {0.2, 0.0};
+		}
+		
+		if(debug_this_call) {
+			std::cout << "[MPC Debug] Optimization succeeded. First controls: throttle=" 
+			          << u0[0] << " steering=" << u0[1] << std::endl;
+			std::cout << "[MPC Debug] Cost: " << min_cost << std::endl;
 		}
 	} catch(const std::exception &e) {
 		// Fallback: retornar controles seguros
+		if(debug_this_call) {
+			std::cout << "[MPC Debug] Optimization exception: " << e.what() << std::endl;
+		}
 		return {0.2, 0.0};
+	}
+
+	// Update predicted trajectory with optimized controls
+	_predicted_trajectory.clear();
+	px = state_with_latency[0];
+	py = state_with_latency[1];
+	psi = state_with_latency[2];
+	v = state_with_latency[3];
+	cte = state_with_latency[4];
+	epsi = state_with_latency[5];
+
+	for(int t = 0; t < MPCConfig::horizon; ++t) {
+		double throttle = (t < MPCConfig::horizon) ? u0[2 * t] : 0.0;
+		double steer = (t < MPCConfig::horizon) ? u0[2 * t + 1] : 0.0;
+		_kinematicModel(px, py, psi, v, cte, epsi, throttle, steer, poly_coeffs);
+		_predicted_trajectory.emplace_back(px, py);
 	}
 
 	return {u0[0], u0[1]}; // Retorna primeiro par de controles
@@ -170,14 +236,21 @@ double MPCOptimizer::_costFunction(const std::vector<double> &u, const std::vect
 		target_speed = MPCConfig::target_speed_straight;
 	}
 
+	double total_cte_cost = 0.0, total_epsi_cost = 0.0, total_steer_cost = 0.0;
+	
 	for(int t = 0; t < MPCConfig::horizon; ++t) {
 		double throttle = u[2 * t];
 		double steer = u[2 * t + 1];
 		// Modelo 6 estados usando coeficientes armazenados
 		_kinematicModel(x, y, yaw, v, cte, epsi, throttle, steer, _current_poly_coeffs);
+		
 		// Penalizar cte e epsi explicitamente
-		cost += w_cte * cte * cte;
-		cost += w_etheta * epsi * epsi;
+		double cte_cost = w_cte * cte * cte;
+		double epsi_cost = w_etheta * epsi * epsi;
+		cost += cte_cost;
+		cost += epsi_cost;
+		total_cte_cost += cte_cost;
+		total_epsi_cost += epsi_cost;
 
 		// 3. Velocity Error
 		double v_error = v - target_speed;
@@ -185,7 +258,9 @@ double MPCOptimizer::_costFunction(const std::vector<double> &u, const std::vect
 
 		// 4. Actuator Use (minimize control effort)
 		cost += w_throttle * throttle * throttle;
-		cost += w_steer * steer * steer;
+		double steer_cost = w_steer * steer * steer;
+		cost += steer_cost;
+		total_steer_cost += steer_cost;
 
 		// 5. Actuator Rate (smoothness)
 		if(t > 0) {
@@ -197,6 +272,16 @@ double MPCOptimizer::_costFunction(const std::vector<double> &u, const std::vect
 			cost += 0.1 * throttle_rate * throttle_rate; // Suavidade do throttle
 			cost += 0.5 * steer_rate * steer_rate;       // Suavidade do steering
 		}
+	}
+	
+	// Debug ocasional para diagnosticar problemas
+	static int cost_debug_counter = 0;
+	if (++cost_debug_counter % 1000 == 0) {
+		std::cout << "[Cost Debug] Total cost: " << cost 
+		          << " CTE: " << total_cte_cost 
+		          << " EPSI: " << total_epsi_cost 
+		          << " Steer: " << total_steer_cost 
+		          << " First steer: " << u[1] << std::endl;
 	}
 
 	return cost;

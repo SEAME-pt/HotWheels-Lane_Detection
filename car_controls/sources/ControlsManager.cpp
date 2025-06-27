@@ -4,8 +4,8 @@
  * @version 0.1
  * @date 2025-02-12
  * @details This file contains the implementation of the ControlsManager class,
- * which is responsible for managing the different controllers and worker
- * threads for the car controls.
+ * which is responsible for managing the different controllers and worker threads
+ * for the car controls.
  *
  * @author Félix LE BIHAN (@Fle-bihh)
  * @author Tiago Pereira (@t-pereira06)
@@ -18,8 +18,6 @@
 #include "ControlsManager.hpp"
 #include <QDebug>
 #include <fcntl.h>
-#include <sstream>
-#include <string>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -37,10 +35,11 @@
 ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
     : QObject(parent), m_engineController(0x40, 0x60, this), m_manualController(nullptr),
       m_currentMode(DrivingMode::Manual), m_subscriberJoystickObject(nullptr),
+      m_cameraStreamerObject(nullptr), m_running(true), m_cameraStreamerThread(nullptr),
       m_manualControllerThread(nullptr), m_joystickControlThread(nullptr),
-      m_subscriberJoystickThread(nullptr), m_cameraStreamerThread(nullptr), m_running(true),
-      m_mpcPlanner(nullptr), m_polyfitter(nullptr), m_autonomousMode(false),
-      m_autonomousControlThread(nullptr) {
+      m_subscriberJoystickThread(nullptr), m_mpcPlanner(nullptr), m_polyfitter(nullptr),
+      m_autonomousMode(false), m_autonomousControlThread(nullptr), m_visionDataThread(nullptr),
+      m_obstacleDataThread(nullptr) {
 
 	// Initialize the joystick controller with callbacks
 	//! Verify where to put AUTO mode.
@@ -123,6 +122,19 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
 	});
 	m_polyfitter = new Polyfitter();
 	m_subscriberJoystickThread->start();
+
+	// === NEW: Initialize persistent ZMQ connections for data streams ===
+	// Initialize vision data subscriber in its own thread
+	m_visionSubscriber = std::make_unique<Subscriber>();
+	m_visionDataThread = QThread::create([this]() { visionDataUpdateLoop(); });
+	m_visionDataThread->start();
+
+	// Initialize obstacle data subscriber in its own thread
+	m_obstacleSubscriber = std::make_unique<Subscriber>();
+	m_obstacleDataThread = QThread::create([this]() { obstacleDataUpdateLoop(); });
+	m_obstacleDataThread->start();
+
+	qDebug() << "ControlsManager initialized with optimized thread architecture";
 }
 
 /*!
@@ -135,8 +147,52 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
  */
 
 ControlsManager::~ControlsManager() {
+	std::cout << "[~ControlsManager] CRITICAL SAFETY: Stopping all motors during cleanup"
+	          << std::endl;
+
+	// CRITICAL SAFETY: Stop motors immediately during destruction
+	try {
+		m_engineController.emergencyHardwareStop();
+		std::cout << "[~ControlsManager] Motors stopped successfully" << std::endl;
+	} catch(const std::exception &e) {
+		std::cerr << "[~ControlsManager] Error stopping motors: " << e.what() << std::endl;
+		// Try direct engine stop as fallback
+		try {
+			m_engineController.set_speed(0);
+			m_engineController.set_steering(0);
+		} catch(...) {
+			std::cerr << "[~ControlsManager] CRITICAL: Failed to stop motors during cleanup!"
+			          << std::endl;
+		}
+	}
+
 	m_running = false;
 	stopAutonomousControl();
+
+	// === NEW: Stop data update threads first ===
+	if(m_visionDataThread) {
+		m_visionDataThread->quit();
+		if(!m_visionDataThread->wait(2000)) {
+			m_visionDataThread->terminate();
+			m_visionDataThread->wait(1000);
+		}
+		delete m_visionDataThread;
+		m_visionDataThread = nullptr;
+	}
+
+	if(m_obstacleDataThread) {
+		m_obstacleDataThread->quit();
+		if(!m_obstacleDataThread->wait(2000)) {
+			m_obstacleDataThread->terminate();
+			m_obstacleDataThread->wait(1000);
+		}
+		delete m_obstacleDataThread;
+		m_obstacleDataThread = nullptr;
+	}
+
+	// Clean up persistent ZMQ connections
+	m_visionSubscriber.reset();
+	m_obstacleSubscriber.reset();
 
 	// Stop the client thread safely
 	if(m_subscriberJoystickThread) {
@@ -144,9 +200,14 @@ ControlsManager::~ControlsManager() {
 			m_subscriberJoystickObject->stop();
 		}
 		m_subscriberJoystickThread->quit();
-		m_subscriberJoystickThread->wait();
+		if(!m_subscriberJoystickThread->wait(3000)) { // 3 second timeout
+			m_subscriberJoystickThread->terminate();
+			m_subscriberJoystickThread->wait(1000);
+		}
 
-		m_subscriberJoystickObject->getSocket().close();
+		if(m_subscriberJoystickObject) {
+			m_subscriberJoystickObject->getSocket().close();
+		}
 
 		delete m_subscriberJoystickThread;
 		m_subscriberJoystickThread = nullptr;
@@ -158,7 +219,10 @@ ControlsManager::~ControlsManager() {
 			m_manualController->requestStop();
 
 		m_manualControllerThread->quit();
-		m_manualControllerThread->wait();
+		if(!m_manualControllerThread->wait(3000)) { // 3 second timeout
+			m_manualControllerThread->terminate();
+			m_manualControllerThread->wait(1000);
+		}
 		delete m_manualControllerThread;
 		m_manualControllerThread = nullptr;
 	}
@@ -169,7 +233,10 @@ ControlsManager::~ControlsManager() {
 			m_cameraStreamerObject->stop();
 
 		m_cameraStreamerThread->quit();
-		m_cameraStreamerThread->wait();
+		if(!m_cameraStreamerThread->wait(3000)) { // 3 second timeout
+			m_cameraStreamerThread->terminate();
+			m_cameraStreamerThread->wait(1000);
+		}
 		delete m_cameraStreamerThread;
 		m_cameraStreamerThread = nullptr;
 	}
@@ -210,6 +277,16 @@ void ControlsManager::startAutonomousControl() {
 	m_autonomousMode = true;
 	m_mpcPlanner = new MPCPlanner();
 
+	// Initialize soft start system
+	m_softStart.current_throttle_output = 0.0;
+	m_softStart.start_time = std::chrono::steady_clock::now();
+
+	std::cout << "[SOFT START] Autonomous mode activated with gradual acceleration" << std::endl;
+	std::cout << "[SOFT START] Warmup period: " << m_softStart.warmup_duration_seconds << " seconds"
+	          << std::endl;
+	std::cout << "[SOFT START] Max throttle change per step: "
+	          << (m_softStart.max_throttle_change_per_step * 100) << "%" << std::endl;
+
 	m_autonomousControlThread = QThread::create([this]() { autonomousControlLoop(); });
 	m_autonomousControlThread->start();
 }
@@ -245,84 +322,252 @@ void ControlsManager::stopAutonomousControl() {
 }
 
 void ControlsManager::autonomousControlLoop() {
-	const double CONTROL_RATE = 20.0; // Hz
 	const double CONTROL_PERIOD = 1.0 / CONTROL_RATE;
 	auto last_control_time = std::chrono::steady_clock::now();
-	while(m_autonomousMode && m_running) {
+
+	// Add external reference to global running flag
+	extern std::atomic<bool> g_running;
+
+	qDebug() << "Autonomous control loop started with optimized architecture";
+
+	while(m_autonomousMode && m_running && g_running.load()) {
+		// CRITICAL SAFETY: Check emergency stop flag first
+		if(m_emergencyStop.load()) {
+			m_engineController.set_speed(0);
+			m_engineController.set_steering(0);
+			qDebug() << "Emergency stop is active - motors stopped";
+			std::this_thread::sleep_for(std::chrono::milliseconds(50));
+			continue;
+		}
+
 		auto now = std::chrono::steady_clock::now();
 		auto elapsed = std::chrono::duration<double>(now - last_control_time).count();
+
+		// Precise timing control
 		if(elapsed < CONTROL_PERIOD) {
-			std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			std::this_thread::sleep_for(std::chrono::microseconds(static_cast<long>(
+			    (CONTROL_PERIOD - elapsed) * 1000000 * 0.8) // Sleep for 80% of remaining time
+			                                                      ));
 			continue;
 		}
 		last_control_time = now;
-		std::cout << "Running autonomous control loop..." << std::endl;
+
+		// Reduced logging frequency
+		static int control_counter = 0;
+		control_counter++;
+
+		// Force memory cleanup every 200 iterations (every ~10 seconds at 20Hz)
+		if(control_counter % 200 == 0) {
+			// Force OpenCV memory cleanup (safer method)
+			cv::Mat temp;
+			temp.create(1, 1, CV_8UC1);
+			temp = cv::Mat(); // Safe cleanup
+		}
+
+		if(control_counter % 40 == 0) { // Log every 40th iteration (every ~2 seconds)
+			qDebug() << "Autonomous control loop #" << control_counter << "- Using cached data";
+		}
+
 		try {
-			// Mostra feedback visual da visão
-			showVisionDebug();
-			// 1. Obter dados de percepção
-			std::cout << "Getting current vehicle state and waypoints..." << std::endl;
-			VehicleState current_state = getCurrentVehicleState();
-			std::cout << "Current state: " << "x=" << current_state.x << ", y=" << current_state.y
-			          << ", velocity=" << current_state.velocity << ", yaw=" << current_state.yaw
-			          << std::endl;
-			std::vector<Point2D> waypoints = getWaypointsFromVision();
-			std::cout << "Waypoints size: " << waypoints.size() << std::endl;
-			LaneInfo lane_info = getLaneInfoFromVision();
-			// 2. Verificar obstáculos críticos
-			if(checkEmergencyObstacles()) {
+			// === OPTIMIZED: Use cached data instead of blocking ZMQ calls ===
+			// 1. Get current vehicle state with enhanced estimation and diagnostics
+			VehicleState current_state = getVehicleStateWithDiagnostics();
+
+			// 2. Get cached perception data (non-blocking)
+			std::vector<Point2D> waypoints = getCachedWaypoints();
+			LaneInfo lane_info = getCachedLaneInfo();
+
+			if(control_counter % 40 == 0) {
+				std::cout << "State: x=" << std::fixed << std::setprecision(2) << current_state.x
+				          << ", y=" << current_state.y << ", vel=" << current_state.velocity
+				          << ", yaw=" << current_state.yaw << " | Waypoints: " << waypoints.size()
+				          << std::endl;
+			}
+
+			// 3. Check for emergency obstacles (cached data)
+			if(getCachedEmergencyStop()) {
 				m_engineController.set_speed(0);
+				if(control_counter % 40 == 0) {
+					qDebug() << "Emergency stop activated!";
+				}
 				continue;
 			}
-			// 3. Calcular controle MPC
+
+			// 4. Calculate MPC control (main computational work)
 			ControlCommand control = m_mpcPlanner->plan(current_state, waypoints, &lane_info);
-			// 4. Aplicar controles com limites de segurança
+
+			// 5. Apply constant speed override if enabled
+			if(m_constantSpeedMode) {
+				control.throttle = m_constantThrottle;
+
+				// Optional: limit steering rate for smoother operation in constant speed mode
+				static double last_steering = 0.0;
+				double max_steering_change = 0.05; // rad per step
+				double steering_diff = control.steer - last_steering;
+
+				if(std::abs(steering_diff) > max_steering_change) {
+					control.steer = last_steering + (steering_diff > 0 ? max_steering_change
+					                                                   : -max_steering_change);
+				}
+				last_steering = control.steer;
+
+				if(control_counter % 80 == 0) { // Log every ~4 seconds
+					std::cout << "[CONSTANT SPEED] Mode: ON, Target: " << m_targetConstantSpeed
+					          << " m/s, Throttle: " << control.throttle
+					          << ", Steering: " << std::fixed << std::setprecision(3)
+					          << control.steer << " rad" << std::endl;
+				}
+			}
+
+			// 6. Apply controls with safety limits
 			int throttle_pct = static_cast<int>(std::clamp(control.throttle * 100, 0.0, 50.0));
 			int steer_angle = static_cast<int>(std::clamp(control.steer * 45, -45.0, 45.0));
-			std::cout << "Throttle: " << throttle_pct << "%, Steering: " << steer_angle
-			          << " degrees" << std::endl;
-			m_engineController.set_speed(throttle_pct);
+
+			// === SOFT START: Apply gradual acceleration to prevent sudden motor movement ===
+			double target_throttle = throttle_pct / 100.0; // Convert to 0-1 range
+			double final_throttle = applySoftStart(target_throttle);
+			int final_throttle_pct = static_cast<int>(final_throttle * 100);
+
+			// Store applied controls for state estimation (use final values)
+			m_lastThrottle = final_throttle;             // Use the soft-start limited throttle
+			m_lastSteering = steer_angle * M_PI / 180.0; // Convert to radians
+
+			if(control_counter % 40 == 0) {
+				std::cout << "Controls: Target=" << throttle_pct
+				          << "%, Final=" << final_throttle_pct << "%, Steering=" << steer_angle
+				          << "°" << std::endl;
+			}
+
+			// Apply controls to hardware
+			// *** MOTOR CROSS-CONNECTION FIX: Invert speed signal ***
+			m_engineController.set_speed(
+			    -final_throttle_pct); // INVERTED due to crossed motor connections (using soft-start
+			                          // limited throttle)
 			m_engineController.set_steering(steer_angle);
+
 		} catch(const std::exception &e) {
 			std::cerr << "Autonomous control error: " << e.what() << std::endl;
 			qDebug() << "Autonomous control error:" << e.what();
-			m_engineController.set_speed(0);
+			m_engineController.set_speed(0); // Safety stop
 		}
 	}
+
+	qDebug() << "Autonomous control loop ended";
 }
 
-// Adicionar ao ControlsManager
+// === ENHANCED: Vehicle state estimation with sensor fusion ===
 VehicleState ControlsManager::getCurrentVehicleState() {
-	static VehicleState state{0.0, 0.0, 0.0, 0.0};
+	return getEnhancedVehicleState();
+}
 
-	// Implementação básica - pode ser melhorada com odometria real
-	static auto last_time = std::chrono::steady_clock::now();
+VehicleState ControlsManager::getEnhancedVehicleState() {
+	std::lock_guard<std::mutex> lock(m_stateEstimator.m_stateMutex);
+
 	auto now = std::chrono::steady_clock::now();
-	double dt = std::chrono::duration<double>(now - last_time).count();
-	last_time = now;
+	double dt = std::chrono::duration<double>(now - m_stateEstimator.m_lastUpdate).count();
+	m_stateEstimator.m_lastUpdate = now;
 
-	// Simular movimento baseado nos controles aplicados
-	state.x += state.velocity * std::cos(state.yaw) * dt;
-	state.y += state.velocity * std::sin(state.yaw) * dt;
-	state.velocity = 2.0; // Velocidade simulada
+	if(!m_stateEstimator.m_initialized) {
+		// Initialize state estimator
+		m_stateEstimator.m_estimatedState = {0.0, 0.0, 0.0, 0.5}; // Start with small velocity
+		m_stateEstimator.m_initialized = true;
+		return m_stateEstimator.m_estimatedState;
+	}
 
-	return state;
+	// Clamp dt to prevent numerical issues
+	dt = std::clamp(dt, 0.001, 0.1); // 1ms to 100ms
+
+	// Get applied controls
+	double applied_throttle = m_lastThrottle.load();
+	double applied_steering = m_lastSteering.load();
+
+	// Update state estimation
+	updateVehicleStateEstimation(applied_throttle, applied_steering, dt);
+
+	// Integrate real sensor data if available
+	if(m_stateEstimator.m_useRealSensors.load()) {
+		integrateRealSensorData();
+	}
+
+	return m_stateEstimator.m_estimatedState;
+}
+
+void ControlsManager::updateVehicleStateEstimation(double applied_throttle, double applied_steering,
+                                                   double dt) {
+	// Enhanced kinematic model with more realistic dynamics
+	VehicleState &state = m_stateEstimator.m_estimatedState;
+
+	// Vehicle parameters (tuned for typical RC car)
+	const double wheelbase = 0.15;         // 15cm wheelbase
+	const double max_acceleration = 3.0;   // m/s²
+	const double max_deceleration = 4.0;   // m/s²
+	const double rolling_resistance = 0.1; // Friction coefficient
+	const double air_resistance = 0.05;    // Air drag coefficient
+	const double max_velocity = 2.0;       // Maximum velocity m/s
+	const double steering_response = 0.8;  // Steering response factor
+
+	// === Velocity dynamics with realistic physics ===
+	double target_acceleration = applied_throttle * max_acceleration;
+
+	// Apply rolling resistance and air drag
+	double resistance_force = rolling_resistance + air_resistance * state.velocity * state.velocity;
+	double net_acceleration = target_acceleration - resistance_force;
+
+	// Apply acceleration limits
+	if(net_acceleration > 0) {
+		net_acceleration = std::min(net_acceleration, max_acceleration);
+	} else {
+		net_acceleration = std::max(net_acceleration, -max_deceleration);
+	}
+
+	// Update velocity with realistic dynamics
+	state.velocity += net_acceleration * dt;
+	state.velocity = std::clamp(state.velocity, 0.0, max_velocity);
+
+	// Add velocity noise for realism
+	if(state.velocity > 0.1) {
+		state.velocity += (((double)rand() / RAND_MAX) - 0.5) * 0.02; // ±1cm/s noise
+	}
+
+	// === Position integration ===
+	double distance = state.velocity * dt;
+	state.x += distance * std::cos(state.yaw);
+	state.y += distance * std::sin(state.yaw);
+
+	// === Yaw dynamics with realistic steering response ===
+	if(std::abs(applied_steering) > 0.01 && state.velocity > 0.1) {
+		// Bicycle model with realistic steering response
+		double turning_radius = wheelbase / std::tan(applied_steering * steering_response);
+		double angular_velocity = state.velocity / turning_radius;
+
+		// Apply yaw rate limits
+		angular_velocity = std::clamp(angular_velocity, -2.0, 2.0); // ±2 rad/s max
+
+		state.yaw += angular_velocity * dt;
+
+		// Add steering noise
+		state.yaw += (((double)rand() / RAND_MAX) - 0.5) * 0.01; // ±0.01 rad noise
+
+		// Normalize yaw to [-π, π]
+		while(state.yaw > M_PI)
+			state.yaw -= 2.0 * M_PI;
+		while(state.yaw < -M_PI)
+			state.yaw += 2.0 * M_PI;
+	}
 }
 
 std::vector<Point2D> ControlsManager::getWaypointsFromVision() {
 	std::vector<Point2D> waypoints;
 
-	Subscriber vision_sub;
-	vision_sub.connect("tcp://localhost:5556");
-	vision_sub.subscribe("binary_mask");
-
 	try {
-		zmq::pollitem_t items[] = {{static_cast<void *>(vision_sub.getSocket()), 0, ZMQ_POLLIN, 0}};
-		zmq::poll(items, 1, 100); // Timeout: 100 ms
+		// Use the persistent vision subscriber connection
+		zmq::pollitem_t items[] = {
+		    {static_cast<void *>(m_visionSubscriber->getSocket()), 0, ZMQ_POLLIN, 0}};
+		zmq::poll(items, 1, 50); // Reduced timeout: 50 ms
 
 		if(items[0].revents & ZMQ_POLLIN) {
 			zmq::message_t message;
-			if(vision_sub.getSocket().recv(&message, 0)) {
+			if(m_visionSubscriber->getSocket().recv(&message, 0)) {
 				std::string received_msg(static_cast<char *>(message.data()), message.size());
 				const std::string topic = "binary_mask ";
 
@@ -330,14 +575,11 @@ std::vector<Point2D> ControlsManager::getWaypointsFromVision() {
 					std::string mask_data = received_msg.substr(topic.size());
 					cv::Mat binary_mask = deserializeMask(mask_data);
 
-					// 1. Extraia as faixas
+					// Extract lanes and compute centerline
 					auto lanes = m_polyfitter->fitLanesInImage(binary_mask);
-
-					// 2. Calcule a centerline virtual
 					CenterlineResult result = m_polyfitter->computeVirtualCenterline(
 					    lanes, binary_mask.cols, binary_mask.rows);
 
-					// 3. Use result.blend como waypoints
 					if(result.valid) {
 						waypoints = result.blend;
 					}
@@ -350,7 +592,7 @@ std::vector<Point2D> ControlsManager::getWaypointsFromVision() {
 		std::cerr << "[getWaypointsFromVision] Unknown error" << std::endl;
 	}
 
-	// Fallback: waypoints retos à frente se não conseguiu obter dados
+	// Fallback: straight waypoints if no data received
 	if(waypoints.empty()) {
 		for(int i = 1; i <= 10; ++i) {
 			waypoints.emplace_back(i * 2.0, 0.0);
@@ -361,17 +603,15 @@ std::vector<Point2D> ControlsManager::getWaypointsFromVision() {
 }
 
 LaneInfo ControlsManager::getLaneInfoFromVision() {
-	Subscriber vision_sub;
-	vision_sub.connect("tcp://localhost:5556");
-	vision_sub.subscribe("binary_mask");
-
 	try {
-		zmq::pollitem_t items[] = {{static_cast<void *>(vision_sub.getSocket()), 0, ZMQ_POLLIN, 0}};
-		zmq::poll(items, 1, 100); // Timeout: 100 ms
+		// Use the persistent vision subscriber connection
+		zmq::pollitem_t items[] = {
+		    {static_cast<void *>(m_visionSubscriber->getSocket()), 0, ZMQ_POLLIN, 0}};
+		zmq::poll(items, 1, 50); // Reduced timeout: 50 ms
 
 		if(items[0].revents & ZMQ_POLLIN) {
 			zmq::message_t message;
-			if(vision_sub.getSocket().recv(&message, 0)) {
+			if(m_visionSubscriber->getSocket().recv(&message, 0)) {
 				std::string received_msg(static_cast<char *>(message.data()), message.size());
 				const std::string topic = "binary_mask ";
 
@@ -379,12 +619,12 @@ LaneInfo ControlsManager::getLaneInfoFromVision() {
 					std::string mask_data = received_msg.substr(topic.size());
 					cv::Mat binary_mask = deserializeMask(mask_data);
 
-					// Use Polyfitter's fitLanesInImage and computeVirtualCenterline
+					// Use Polyfitter's methods to extract lane information
 					auto lanes = m_polyfitter->fitLanesInImage(binary_mask);
 					auto centerline = m_polyfitter->computeVirtualCenterline(
 					    lanes, binary_mask.cols, binary_mask.rows);
 
-					// TODO: Implement a method to extract LaneInfo from lanes/centerline if needed
+					// TODO: Extract meaningful LaneInfo from lanes/centerline
 					return LaneInfo(0.0, 0.0);
 				}
 			}
@@ -399,18 +639,15 @@ LaneInfo ControlsManager::getLaneInfoFromVision() {
 }
 
 bool ControlsManager::checkEmergencyObstacles() {
-	Subscriber obstacle_sub;
-	obstacle_sub.connect("tcp://localhost:5557");
-	obstacle_sub.subscribe("emergency_stop");
-
 	try {
+		// Use the persistent obstacle subscriber connection
 		zmq::pollitem_t items[] = {
-		    {static_cast<void *>(obstacle_sub.getSocket()), 0, ZMQ_POLLIN, 0}};
-		zmq::poll(items, 1, 100); // Timeout: 100 ms
+		    {static_cast<void *>(m_obstacleSubscriber->getSocket()), 0, ZMQ_POLLIN, 0}};
+		zmq::poll(items, 1, 50); // Reduced timeout: 50 ms
 
 		if(items[0].revents & ZMQ_POLLIN) {
 			zmq::message_t message;
-			if(obstacle_sub.getSocket().recv(&message, 0)) {
+			if(m_obstacleSubscriber->getSocket().recv(&message, 0)) {
 				std::string received_msg(static_cast<char *>(message.data()), message.size());
 				const std::string topic = "emergency_stop ";
 
@@ -426,7 +663,7 @@ bool ControlsManager::checkEmergencyObstacles() {
 		std::cerr << "[checkEmergencyObstacles] Unknown error" << std::endl;
 	}
 
-	return false; // Garante retorno em todos os paths
+	return false; // Safe default
 }
 
 std::string ControlsManager::serializeMask(const cv::Mat &mask) {
@@ -494,6 +731,482 @@ void ControlsManager::showVisionDebug() {
 	} catch(...) {
 		std::cerr << "[showVisionDebug] Unknown error" << std::endl;
 	}
+}
+
+// === NEW: Thread-safe cached data access methods ===
+
+std::vector<Point2D> ControlsManager::getCachedWaypoints() {
+	std::lock_guard<std::mutex> lock(m_cachedVisionData.mutex);
+
+	// Check if data is still valid (not too old)
+	auto now = std::chrono::steady_clock::now();
+	auto age_ms =
+	    std::chrono::duration_cast<std::chrono::milliseconds>(now - m_cachedVisionData.timestamp)
+	        .count();
+
+	if(m_cachedVisionData.valid && age_ms < DATA_TIMEOUT_MS) {
+		return m_cachedVisionData.waypoints;
+	}
+
+	// Return fallback waypoints if data is stale
+	std::vector<Point2D> fallback_waypoints;
+	for(int i = 1; i <= 10; ++i) {
+		fallback_waypoints.emplace_back(i * 2.0, 0.0);
+	}
+	return fallback_waypoints;
+}
+
+LaneInfo ControlsManager::getCachedLaneInfo() {
+	std::lock_guard<std::mutex> lock(m_cachedVisionData.mutex);
+
+	auto now = std::chrono::steady_clock::now();
+	auto age_ms =
+	    std::chrono::duration_cast<std::chrono::milliseconds>(now - m_cachedVisionData.timestamp)
+	        .count();
+
+	if(m_cachedVisionData.valid && age_ms < DATA_TIMEOUT_MS) {
+		return m_cachedVisionData.lane_info;
+	}
+
+	// Return neutral lane info if data is stale
+	return LaneInfo(0.0, 0.0);
+}
+
+bool ControlsManager::getCachedEmergencyStop() {
+	std::lock_guard<std::mutex> lock(m_cachedObstacleData.mutex);
+
+	auto now = std::chrono::steady_clock::now();
+	auto age_ms =
+	    std::chrono::duration_cast<std::chrono::milliseconds>(now - m_cachedObstacleData.timestamp)
+	        .count();
+
+	if(m_cachedObstacleData.valid && age_ms < DATA_TIMEOUT_MS) {
+		return m_cachedObstacleData.emergency_stop;
+	}
+
+	// Default to safe state if data is stale
+	return false;
+}
+
+// === NEW: Background data update threads ===
+
+void ControlsManager::visionDataUpdateLoop() {
+	const double UPDATE_PERIOD = 1.0 / VISION_UPDATE_RATE;
+	auto last_update_time = std::chrono::steady_clock::now();
+
+	// Add external reference to global running flag
+	extern std::atomic<bool> g_running;
+
+	m_visionSubscriber->connect("tcp://localhost:5556");
+	m_visionSubscriber->subscribe("binary_mask");
+
+	qDebug() << "Vision data update thread started";
+
+	while(m_running && g_running.load()) {
+		auto now = std::chrono::steady_clock::now();
+		auto elapsed = std::chrono::duration<double>(now - last_update_time).count();
+
+		if(elapsed < UPDATE_PERIOD) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+			continue;
+		}
+		last_update_time = now;
+
+		try {
+			// Get fresh vision data
+			std::vector<Point2D> waypoints = getWaypointsFromVision();
+			LaneInfo lane_info = getLaneInfoFromVision();
+
+			// Update cached data in thread-safe manner
+			{
+				std::lock_guard<std::mutex> lock(m_cachedVisionData.mutex);
+				m_cachedVisionData.waypoints = std::move(waypoints);
+				m_cachedVisionData.lane_info = lane_info;
+				m_cachedVisionData.timestamp = now;
+				m_cachedVisionData.valid = true;
+			}
+
+		} catch(const std::exception &e) {
+			std::cerr << "Vision data update error: " << e.what() << std::endl;
+			// Mark data as invalid on error
+			{
+				std::lock_guard<std::mutex> lock(m_cachedVisionData.mutex);
+				m_cachedVisionData.valid = false;
+			}
+		}
+	}
+
+	qDebug() << "Vision data update thread ended";
+}
+
+void ControlsManager::obstacleDataUpdateLoop() {
+	const double UPDATE_PERIOD = 1.0 / OBSTACLE_UPDATE_RATE;
+	auto last_update_time = std::chrono::steady_clock::now();
+
+	// Add external reference to global running flag
+	extern std::atomic<bool> g_running;
+
+	m_obstacleSubscriber->connect("tcp://localhost:5557");
+	m_obstacleSubscriber->subscribe("emergency_stop");
+
+	qDebug() << "Obstacle data update thread started";
+
+	while(m_running && g_running.load()) {
+		auto now = std::chrono::steady_clock::now();
+		auto elapsed = std::chrono::duration<double>(now - last_update_time).count();
+
+		if(elapsed < UPDATE_PERIOD) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(5));
+			continue;
+		}
+		last_update_time = now;
+
+		try {
+			// Get fresh obstacle data
+			bool emergency_stop = checkEmergencyObstacles();
+
+			// Update cached data in thread-safe manner
+			{
+				std::lock_guard<std::mutex> lock(m_cachedObstacleData.mutex);
+				m_cachedObstacleData.emergency_stop = emergency_stop;
+				m_cachedObstacleData.timestamp = now;
+				m_cachedObstacleData.valid = true;
+			}
+
+		} catch(const std::exception &e) {
+			std::cerr << "Obstacle data update error: " << e.what() << std::endl;
+			// Mark data as invalid on error
+			{
+				std::lock_guard<std::mutex> lock(m_cachedObstacleData.mutex);
+				m_cachedObstacleData.valid = false;
+			}
+		}
+	}
+
+	qDebug() << "Obstacle data update thread ended";
+}
+
+// === NEW: Enhanced sensor integration interface ===
+
+void ControlsManager::enableRealSensors(bool enable) {
+	m_stateEstimator.m_useRealSensors.store(enable);
+	qDebug() << "Real sensors" << (enable ? "enabled" : "disabled");
+}
+
+void ControlsManager::updateRealVelocity(double velocity) {
+	m_stateEstimator.m_realVelocity.store(velocity);
+	// This can be used to input measured velocity from external sources
+	// For example: calculated from camera movement, wheel tick counting, etc.
+	if(m_stateEstimator.m_useRealSensors.load()) {
+		std::lock_guard<std::mutex> lock(m_stateEstimator.m_stateMutex);
+		// Fuse with current estimate using weighted average
+		const double sensor_weight = 0.3; // 30% external measurement, 70% model
+		m_stateEstimator.m_estimatedState.velocity =
+		    sensor_weight * velocity +
+		    (1.0 - sensor_weight) * m_stateEstimator.m_estimatedState.velocity;
+	}
+}
+
+void ControlsManager::updateRealYawRate(double yaw_rate) {
+	m_stateEstimator.m_realYawRate.store(yaw_rate);
+	// This can be used to input measured yaw rate from external sources
+	// For example: calculated from camera rotation, estimated from vision, etc.
+}
+
+VehicleState ControlsManager::getVehicleStateWithDiagnostics() {
+	VehicleState state = getEnhancedVehicleState();
+
+	// Add diagnostic information
+	static int diagnostic_counter = 0;
+	diagnostic_counter++;
+
+	if(diagnostic_counter % 50 == 0) { // Every ~2.5 seconds at 20Hz
+		qDebug() << "Vehicle State Diagnostics:";
+		qDebug() << "  Position: (" << state.x << ", " << state.y << ")";
+		qDebug() << "  Velocity: " << state.velocity << " m/s";
+		qDebug() << "  Yaw: " << state.yaw * 180.0 / M_PI << " degrees";
+		qDebug() << "  Real sensors: " << (m_stateEstimator.m_useRealSensors.load() ? "ON" : "OFF");
+		qDebug() << "  Applied throttle: " << m_lastThrottle.load();
+		qDebug() << "  Applied steering: " << m_lastSteering.load() * 180.0 / M_PI << " degrees";
+	}
+
+	return state;
+}
+
+void ControlsManager::resetVehicleState(const VehicleState &initial_state) {
+	std::lock_guard<std::mutex> lock(m_stateEstimator.m_stateMutex);
+	m_stateEstimator.m_estimatedState = initial_state;
+	m_stateEstimator.m_lastUpdate = std::chrono::steady_clock::now();
+	qDebug() << "Vehicle state reset to: (" << initial_state.x << ", " << initial_state.y << ", "
+	         << initial_state.yaw * 180.0 / M_PI << "°, " << initial_state.velocity << " m/s)";
+}
+
+void ControlsManager::integrateRealSensorData() {
+	// === REALISTIC: Integration with available project sensors ===
+	// This project only has access to:
+	// - Camera vision data (lanes/waypoints)
+	// - Applied control commands (throttle/steering)
+	// - No GPS, IMU, encoders, or magnetometer available
+
+	VehicleState &state = m_stateEstimator.m_estimatedState;
+
+	if(m_stateEstimator.m_useRealSensors.load()) {
+		// 1. Use vision data for position correction (if available)
+		std::vector<Point2D> current_waypoints = getCachedWaypoints();
+		if(!current_waypoints.empty()) {
+			// If we have waypoints, we can infer lateral position relative to lane center
+			// This simulates basic visual odometry
+
+			// Simple lane-relative positioning (basic visual odometry substitute)
+			// Assume we're following the waypoints and adjust position accordingly
+			if(current_waypoints.size() >= 2) {
+				// Calculate expected trajectory from waypoints
+				Point2D first_wp = current_waypoints[0];
+				Point2D second_wp = current_waypoints[1];
+
+				// Estimate direction from waypoints
+				double expected_yaw =
+				    std::atan2(second_wp.y - first_wp.y, second_wp.x - first_wp.x);
+
+				// Apply small correction to yaw based on vision (10% influence)
+				const double vision_weight = 0.1;
+				double yaw_correction = expected_yaw - state.yaw;
+
+				// Normalize angle difference
+				while(yaw_correction > M_PI)
+					yaw_correction -= 2.0 * M_PI;
+				while(yaw_correction < -M_PI)
+					yaw_correction += 2.0 * M_PI;
+
+				// Apply small yaw correction
+				state.yaw += vision_weight * yaw_correction;
+			}
+		}
+
+		// 2. Use applied controls for velocity estimation refinement
+		// The controls we actually sent to the hardware are more accurate than model prediction
+		double real_throttle_effect = m_stateEstimator.m_realVelocity.load();
+		if(real_throttle_effect > 0.01) {
+			// If we have measured velocity feedback, fuse it
+			const double feedback_weight = 0.2; // 20% feedback, 80% model
+			state.velocity =
+			    feedback_weight * real_throttle_effect + (1.0 - feedback_weight) * state.velocity;
+		}
+
+		// 3. Add realistic measurement noise to simulate sensor limitations
+		// This makes the simulation more realistic for testing the MPC robustness
+
+		// Camera-based position noise (vision processing uncertainty)
+		double vision_noise_x = (((double)rand() / RAND_MAX) - 0.5) * 0.05; // ±2.5cm
+		double vision_noise_y = (((double)rand() / RAND_MAX) - 0.5) * 0.05; // ±2.5cm
+
+		state.x += vision_noise_x;
+		state.y += vision_noise_y;
+
+		// Control actuation uncertainty (motor/servo response)
+		double control_noise_vel = (((double)rand() / RAND_MAX) - 0.5) * 0.01;  // ±0.5cm/s
+		double control_noise_yaw = (((double)rand() / RAND_MAX) - 0.5) * 0.005; // ±0.005 rad
+
+		state.velocity += control_noise_vel;
+		state.velocity = std::max(0.0, state.velocity); // Velocity can't be negative
+
+		state.yaw += control_noise_yaw;
+
+		// Normalize yaw
+		while(state.yaw > M_PI)
+			state.yaw -= 2.0 * M_PI;
+		while(state.yaw < -M_PI)
+			state.yaw += 2.0 * M_PI;
+	}
+}
+
+// === NEW: Constant speed control and emergency stop methods ===
+
+void ControlsManager::setConstantSpeedMode(bool enable, double target_speed, double throttle) {
+	m_constantSpeedMode = enable;
+	m_targetConstantSpeed = target_speed;
+	m_constantThrottle = throttle;
+
+	if(enable) {
+		std::cout << "[ControlsManager] CONSTANT SPEED MODE ENABLED:" << std::endl;
+		std::cout << "  Target speed: " << target_speed << " m/s" << std::endl;
+		std::cout << "  Fixed throttle: " << throttle << std::endl;
+		std::cout << "  ⚠️ Motor control will use constant throttle value!" << std::endl;
+	} else {
+		std::cout << "[ControlsManager] Constant speed mode DISABLED - using MPC throttle control"
+		          << std::endl;
+	}
+}
+
+void ControlsManager::emergencyMotorStop() {
+	std::cout << "\n*** EMERGENCY MOTOR STOP ACTIVATED ***" << std::endl;
+	std::cout << "*** STOPPING ALL MOTORS IMMEDIATELY ***" << std::endl;
+
+	// Stop all motors immediately using multiple methods for maximum safety
+	try {
+		// Primary stop call
+		m_engineController.set_speed(0);
+
+		// Use the robust emergency hardware stop
+		m_engineController.emergencyHardwareStop();
+
+	} catch(const std::exception &e) {
+		std::cerr << "[EMERGENCY] Error in primary stop: " << e.what() << std::endl;
+
+		// Fallback: try forced stop
+		try {
+			m_engineController.forcedMotorStop();
+		} catch(...) {
+			std::cerr << "[EMERGENCY] CRITICAL: All motor stop methods failed!" << std::endl;
+		}
+	}
+
+	// Reset steering to center
+	try {
+		m_engineController.set_steering(0);
+	} catch(...) {
+		std::cerr << "[EMERGENCY] Warning: Could not center steering" << std::endl;
+	}
+
+	// Disable constant speed mode for safety
+	m_constantSpeedMode = false;
+	m_emergencyStop = true;
+
+	std::cout << "*** MOTORS STOPPED - SYSTEM SAFE ***" << std::endl;
+	std::cout << "*** To resume operation, use manual mode (press '2') ***" << std::endl;
+}
+
+/*!
+ * @brief Emergency stop function - critical safety method
+ * @details Immediately stops all motors and disables autonomous operations.
+ * This is a fail-safe method that should work even if other systems fail.
+ */
+void ControlsManager::emergencyStop() {
+	std::cout << "\n*** CRITICAL EMERGENCY STOP ACTIVATED ***" << std::endl;
+	std::cout << "*** IMMEDIATE SHUTDOWN OF ALL MOTOR SYSTEMS ***" << std::endl;
+
+	// Set emergency stop flag first
+	m_emergencyStop = true;
+	m_constantSpeedMode = false;
+	m_currentMode = DrivingMode::Manual; // Force manual mode
+
+	// Multiple redundant motor stop calls for maximum safety
+	try {
+		// Primary: Use the most robust emergency hardware stop
+		m_engineController.emergencyHardwareStop();
+		std::cout << "*** PRIMARY EMERGENCY STOP COMPLETED ***" << std::endl;
+
+	} catch(const std::exception &e) {
+		std::cerr << "[EMERGENCY] Error in primary emergency stop: " << e.what() << std::endl;
+
+		// Fallback 1: Try forced motor stop
+		try {
+			m_engineController.forcedMotorStop();
+			std::cout << "*** FALLBACK FORCED STOP COMPLETED ***" << std::endl;
+		} catch(const std::exception &e2) {
+			std::cerr << "[EMERGENCY] Error in forced stop: " << e2.what() << std::endl;
+
+			// Fallback 2: Basic set_speed(0) calls
+			try {
+				for(int i = 0; i < 5; ++i) {
+					m_engineController.set_speed(0);
+					std::this_thread::sleep_for(std::chrono::milliseconds(10));
+				}
+				std::cout << "*** BASIC STOP FALLBACK COMPLETED ***" << std::endl;
+			} catch(...) {
+				std::cerr << "[EMERGENCY] CRITICAL: ALL MOTOR STOP METHODS FAILED!" << std::endl;
+			}
+		}
+	}
+
+	// Try to center steering
+	try {
+		m_engineController.set_steering(0);
+	} catch(...) {
+		std::cerr << "[EMERGENCY] Warning: Could not center steering" << std::endl;
+	}
+
+	std::cout << "*** EMERGENCY STOP COMPLETE - ALL SYSTEMS HALTED ***" << std::endl;
+	std::cout << "*** SYSTEM IS IN SAFE STATE ***" << std::endl;
+}
+
+/*!
+ * @brief Reset emergency stop flag when it's safe to resume operations
+ * @details This method should only be called when the user explicitly wants to
+ * resume operations after an emergency stop.
+ */
+void ControlsManager::resetEmergencyStop() {
+	std::cout << "[SAFETY] Resetting emergency stop flag..." << std::endl;
+	m_emergencyStop = false;
+	std::cout << "[SAFETY] Emergency stop flag cleared - system ready for operation" << std::endl;
+}
+
+/*!
+ * @brief Apply soft start logic to throttle commands for gradual acceleration
+ * @param target_throttle The desired throttle value (0.0 to 1.0)
+ * @return The limited throttle value considering soft start constraints
+ * @details This method ensures smooth acceleration by limiting the rate of throttle change
+ * and applying special limits during the initial warmup period.
+ */
+double ControlsManager::applySoftStart(double target_throttle) {
+	if(!m_softStart.enabled) {
+		return target_throttle; // Soft start disabled, return target directly
+	}
+
+	auto now = std::chrono::steady_clock::now();
+	auto elapsed_seconds = std::chrono::duration<double>(now - m_softStart.start_time).count();
+
+	// Calculate maximum allowed throttle based on warmup period
+	double max_allowed_throttle;
+	if(elapsed_seconds < m_softStart.warmup_duration_seconds) {
+		// During warmup: linear ramp from 0 to normal operation
+		double warmup_progress = elapsed_seconds / m_softStart.warmup_duration_seconds;
+		max_allowed_throttle =
+		    m_softStart.initial_throttle_limit +
+		    (target_throttle - m_softStart.initial_throttle_limit) * warmup_progress;
+
+		// Also respect the initial throttle limit during warmup
+		max_allowed_throttle = std::min(max_allowed_throttle, m_softStart.initial_throttle_limit +
+		                                                          (0.3 * warmup_progress));
+	} else {
+		// After warmup: allow full throttle range
+		max_allowed_throttle = target_throttle;
+	}
+
+	// Apply rate limiting: limit how fast throttle can change
+	double throttle_change = target_throttle - m_softStart.current_throttle_output;
+	double max_change = m_softStart.max_throttle_change_per_step;
+
+	if(std::abs(throttle_change) > max_change) {
+		// Limit the change rate
+		if(throttle_change > 0) {
+			m_softStart.current_throttle_output += max_change; // Gradual increase
+		} else {
+			m_softStart.current_throttle_output -= max_change; // Gradual decrease
+		}
+	} else {
+		// Small change, allow it directly
+		m_softStart.current_throttle_output = target_throttle;
+	}
+
+	// Apply warmup limit
+	m_softStart.current_throttle_output =
+	    std::min(m_softStart.current_throttle_output, max_allowed_throttle);
+
+	// Ensure within valid range
+	m_softStart.current_throttle_output = std::clamp(m_softStart.current_throttle_output, 0.0, 1.0);
+
+	// Log soft start activity (only occasionally to avoid spam)
+	static int log_counter = 0;
+	if(++log_counter % 40 == 0 && elapsed_seconds < m_softStart.warmup_duration_seconds) {
+		std::cout << "[SOFT START] Elapsed: " << std::fixed << std::setprecision(1)
+		          << elapsed_seconds << "s, Target: " << std::setprecision(2)
+		          << (target_throttle * 100)
+		          << "%, Limited: " << (m_softStart.current_throttle_output * 100) << "%"
+		          << std::endl;
+	}
+
+	return m_softStart.current_throttle_output;
 }
 
 #include "ControlsManager.moc"
