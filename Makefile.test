@@ -1,0 +1,46 @@
+# Simple Makefile for autonomous test
+CXX = g++
+CXXFLAGS = -std=c++17 -Wall -Wextra -g -O2
+
+# Include paths
+INCLUDES = -I. -Icar_controls/includes -IZeroMQ
+
+# OpenCV
+OPENCV_CFLAGS = $(shell pkg-config --cflags opencv4 2>/dev/null || pkg-config --cflags opencv)
+OPENCV_LIBS = $(shell pkg-config --libs opencv4 2>/dev/null || pkg-config --libs opencv)
+
+# Source files for the test
+SOURCES = test_autonomous_simple.cpp \
+          car_controls/sources/MPCPlanner.cpp \
+          car_controls/sources/MPCOptimizer.cpp \
+          car_controls/sources/Polyfitter.cpp \
+          car_controls/sources/inference/InferenceManager.cpp \
+          car_controls/sources/inference/KerasInferencer.cpp \
+          car_controls/sources/inference/ONNXInferencer.cpp
+
+OBJECTS = $(SOURCES:.cpp=.o)
+
+# Libraries
+LIBS = -lpthread $(OPENCV_LIBS) -larmadillo -llapack -lblas
+
+# Target
+TARGET = test_autonomous_simple
+
+all: $(TARGET)
+
+$(TARGET): $(OBJECTS)
+	$(CXX) $(OBJECTS) -o $(TARGET) $(LIBS)
+	@echo "✅ Build complete: $(TARGET)"
+
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $(OPENCV_CFLAGS) -c $< -o $@
+
+clean:
+	rm -f $(OBJECTS) $(TARGET)
+	@echo "🧹 Clean complete"
+
+test: $(TARGET)
+	@echo "🧪 Running test with video..."
+	./$(TARGET) models/lane_detector_combined_v2.onnx videos/test_video.mp4
+
+.PHONY: all clean test

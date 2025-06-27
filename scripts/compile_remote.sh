@@ -12,5 +12,9 @@ rsync -avz --update --exclude='.git' --exclude='build/' --exclude='*.o' --exclud
 echo "Compilando na Jetson Nano..."
 # ssh $JETSON_USER@$JETSON_HOST "cd $PROJECT_PATH && make clean && make $1 -j$(nproc)"
 ssh $JETSON_USER@$JETSON_HOST "cd $PROJECT_PATH && rm -fr main && make $1 -j4"
-
+# se aparecer algua linha "Error 1" compilacao falhou
+if [ $? -ne 0 ]; then
+	echo "❌ Compilação falhou!"
+	exit 1
+fi
 echo "Compilação concluída!"

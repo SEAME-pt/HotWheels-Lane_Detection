@@ -15,13 +15,71 @@
 #include <signal.h>
 #include <thread>
 
+// === CONFIGURATION MACROS FOR EASY ADJUSTMENT ===
+//
+// Para alterar rapidamente os valores de velocidade constante, modifique as macros abaixo:
+//
+// DEFAULT_CONSTANT_SPEED_KMH: Velocidade alvo em km/h (será convertida automaticamente para m/s)
+//   - Valores seguros: 1 a 5 km/h
+//   - Valor padrão: 2 km/h (velocidade muito segura para testes)
+//   - Para testes mais rápidos: 4 km/h
+//
+// DEFAULT_CONSTANT_THROTTLE: Valor do throttle (0.0 a 1.0) para velocidade constante
+//   - Valores seguros: 0.1 a 0.3
+//   - Valor padrão: 0.15 (15% de potência - muito seguro)
+//   - Para mais velocidade: 0.25 (25% de potência)
+//   - ATENÇÃO: Valores acima de 0.3 podem ser perigosos!
+//
+#define DEFAULT_CONSTANT_SPEED_KMH 1 // km/h - Target speed in km/h (will be converted to m/s)
+#define DEFAULT_CONSTANT_SPEED (DEFAULT_CONSTANT_SPEED_KMH / 3.6) // Auto conversion to m/s
+#define DEFAULT_CONSTANT_THROTTLE 0.15 // Throttle value (0.0 to 1.0) for constant speed mode
+#define MIN_SAFE_SPEED_KMH 0.5         // km/h - Minimum safe speed
+#define MAX_SAFE_SPEED_KMH 7.0         // km/h - Maximum safe speed for testing
+#define MIN_SAFE_SPEED (MIN_SAFE_SPEED_KMH / 3.6) // Auto conversion to m/s
+#define MAX_SAFE_SPEED (MAX_SAFE_SPEED_KMH / 3.6) // Auto conversion to m/s
+
 // Global flag for graceful shutdown
 std::atomic<bool> g_running{true};
+
+// Global pointer to controls manager for emergency motor stop
+static ControlsManager *g_emergency_controls = nullptr;
+
+// Emergency motor stop function
+void emergencyMotorStop() {
+	if(g_emergency_controls) {
+		try {
+			std::cout << "[EMERGENCY] Stopping all motors..." << std::endl;
+
+			// Use BOTH emergency stop methods for maximum safety
+			g_emergency_controls->emergencyStop();      // Critical emergency stop
+			g_emergency_controls->emergencyMotorStop(); // Motor-specific stop
+
+			std::cout << "[EMERGENCY] Motors stopped successfully" << std::endl;
+
+		} catch(const std::exception &e) {
+			std::cerr << "[EMERGENCY] Error stopping motors: " << e.what() << std::endl;
+			// Try direct hardware stop as last resort
+			try {
+				std::cout << "[EMERGENCY] Attempting direct motor stop..." << std::endl;
+				g_emergency_controls->emergencyMotorStop();
+			} catch(...) {
+				std::cerr << "[EMERGENCY] CRITICAL: All motor stop attempts failed!" << std::endl;
+			}
+		} catch(...) {
+			std::cerr << "[EMERGENCY] Unknown error stopping motors" << std::endl;
+		}
+	} else {
+		std::cout << "[EMERGENCY] No controls manager available for motor stop" << std::endl;
+	}
+}
 
 // Signal handler for Ctrl+C
 void signalHandler(int signum) {
 	std::cout << "\nReceived signal " << signum << ". Shutting down gracefully..." << std::endl;
 	g_running = false;
+
+	// CRITICAL: Stop motors immediately on signal
+	emergencyMotorStop();
 
 	// Avoid CUDA operations during signal handling - they can cause core dumps
 	// Just set the flag and let the main cleanup handle CUDA resources
@@ -79,6 +137,11 @@ class MPCIntegratedApp : public QObject {
 		bool verbose_logging = false;
 		bool recording_active = false;
 
+		// Constant speed mode for real-world testing
+		bool constant_speed_mode = false;
+		double target_constant_speed = DEFAULT_CONSTANT_SPEED; // Use macro for easy adjustment
+		double constant_throttle = DEFAULT_CONSTANT_THROTTLE;  // Use macro for easy adjustment
+
 	public:
 		MPCIntegratedApp(int argc, char **argv, QObject *parent = nullptr)
 		    : QObject(parent), controls_manager(nullptr), mpc_planner(nullptr), mpc_timer(nullptr) {
@@ -89,6 +152,11 @@ class MPCIntegratedApp : public QObject {
 			try {
 				// Inicializar o sistema de controles existente
 				controls_manager = new ControlsManager(argc, argv, this);
+
+				// Register for emergency motor stop
+				g_emergency_controls = controls_manager;
+				std::cout << "[MPCIntegratedApp] Emergency motor stop system registered"
+				          << std::endl;
 
 				// Inicializar MPC
 				mpc_planner = new MPCPlanner();
@@ -108,6 +176,7 @@ class MPCIntegratedApp : public QObject {
 				          << std::endl;
 				std::cout << "- Pressione 's' para mostrar status do sistema" << std::endl;
 				std::cout << "- Pressione 'c' para limpar trajetória gravada" << std::endl;
+				std::cout << "- Pressione 'e' para EMERGENCY STOP (parada imediata)" << std::endl;
 				std::cout << "- Pressione 'q' para sair" << std::endl;
 
 				// Conectar stdin para comandos
@@ -125,7 +194,7 @@ class MPCIntegratedApp : public QObject {
 					std::cerr << "[MPCIntegratedApp] Failed to initialize TensorRT inferencer: "
 					          << e.what() << std::endl;
 					// Continue without local inference - will use remote inference
-				};
+				}
 			} catch(const std::exception &e) {
 				std::cerr << "[MPCIntegratedApp] Initialization error: " << e.what() << std::endl;
 				throw;
@@ -136,19 +205,54 @@ class MPCIntegratedApp : public QObject {
 			std::cout << "[~MPCIntegratedApp] Starting cleanup..." << std::endl;
 
 			try {
+				// CRITICAL: Stop motors first thing in cleanup
+				std::cout << "[~MPCIntegratedApp] FAILSAFE: Stopping all motors..." << std::endl;
+				emergencyMotorStop();
+
+				// Set global flag to stop all operations
+				g_running = false;
+
+				// Clear the global emergency controls pointer
+				g_emergency_controls = nullptr;
+
 				// Stop all timers first
 				if(mpc_timer) {
 					mpc_timer->stop();
+					mpc_timer->deleteLater();
 					mpc_timer = nullptr;
 				}
 
 				if(m_visualizationTimer) {
 					m_visualizationTimer->stop();
+					m_visualizationTimer->deleteLater();
 					m_visualizationTimer = nullptr;
 				}
 
-				// Close OpenCV windows
-				cv::destroyAllWindows();
+				// Close OpenCV windows safely
+				try {
+					cv::destroyAllWindows();
+					cv::waitKey(1); // Process any pending events
+
+					// Clean up member matrices safely (avoid release() on fixed-size matrices)
+					if(!m_currentLaneMask.empty()) {
+						m_currentLaneMask = cv::Mat(); // Safe cleanup without release()
+					}
+					if(!m_processedFrame.empty()) {
+						m_processedFrame = cv::Mat(); // Safe cleanup without release()
+					}
+
+					// Force cleanup of OpenCV internal memory (safer method)
+					cv::Mat temp;
+					temp.create(1, 1, CV_8UC1);
+					temp = cv::Mat(); // Safe cleanup
+					std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+				} catch(const cv::Exception &e) {
+					std::cerr << "[~MPCIntegratedApp] OpenCV cleanup warning: " << e.what()
+					          << std::endl;
+				} catch(...) {
+					// Ignore other OpenCV cleanup errors
+				}
 
 				// For SIGINT shutdowns, avoid CUDA operations entirely
 				if(m_inferencer) {
@@ -164,12 +268,20 @@ class MPCIntegratedApp : public QObject {
 					}
 				}
 
-				// Reset other smart pointers
-				m_laneDetectionSubscriber.reset();
+				// Reset other smart pointers safely
+				try {
+					m_laneDetectionSubscriber.reset();
+				} catch(...) {
+					// Ignore subscriber cleanup errors
+				}
 
-				// Delete MPC planner
+				// Delete MPC planner safely
 				if(mpc_planner) {
-					delete mpc_planner;
+					try {
+						delete mpc_planner;
+					} catch(...) {
+						// Ignore MPC cleanup errors
+					}
 					mpc_planner = nullptr;
 				}
 
@@ -193,16 +305,46 @@ class MPCIntegratedApp : public QObject {
 			}
 
 			try {
+				// CRITICAL: Always try to get fresh lane detection data for MPC
+				// This ensures MPC has the latest trajectory data independent of visualization
+				getLaneDetectionFrame();
+
 				// Use MPC predicted trajectory if available, otherwise fall back to recorded
 				// waypoints
 				std::vector<Point2D> reference_trajectory;
 
 				if(!m_predictedTrajectory.empty()) {
 					reference_trajectory = m_predictedTrajectory;
+
+					// Log when using lane detection trajectory
+					static int lane_traj_counter = 0;
+					if(++lane_traj_counter % 100 == 0) {
+						std::cout << "[MPC] Using LANE DETECTION trajectory ("
+						          << m_predictedTrajectory.size() << " points)" << std::endl;
+					}
 				} else if(recorded_waypoints.size() >= 3) {
 					reference_trajectory = recorded_waypoints;
+
+					// Log when falling back to recorded waypoints
+					static int recorded_traj_counter = 0;
+					if(++recorded_traj_counter % 100 == 0) {
+						std::cout << "[MPC] Using RECORDED waypoints (" << recorded_waypoints.size()
+						          << " points)" << std::endl;
+					}
 				} else {
-					std::cout << "[MPC] No trajectory available for control" << std::endl;
+					// Enhanced logging for no trajectory case
+					static int no_traj_counter = 0;
+					if(++no_traj_counter % 50 == 0) {
+						std::cout << "[MPC] WARNING: No trajectory available for control!"
+						          << std::endl;
+						std::cout << "[MPC] - Lane detection trajectory: "
+						          << m_predictedTrajectory.size() << " points" << std::endl;
+						std::cout << "[MPC] - Recorded waypoints: " << recorded_waypoints.size()
+						          << " points" << std::endl;
+						std::cout << "[MPC] - Check ZeroMQ connection on port 5556 for lane "
+						             "detection data"
+						          << std::endl;
+					}
 					return;
 				}
 
@@ -215,6 +357,33 @@ class MPCIntegratedApp : public QObject {
 
 				ControlCommand control = mpc_planner->plan(current_state_from_controls,
 				                                           reference_trajectory, &lane_info);
+
+				// Apply constant speed mode if enabled
+				if(constant_speed_mode) {
+					// Override throttle for constant speed
+					control.throttle = constant_throttle;
+
+					// Optional: limit steering rate for smoother operation
+					static double last_steering = 0.0;
+					double max_steering_change = 0.05; // rad per step
+					double steering_diff = control.steer - last_steering;
+
+					if(std::abs(steering_diff) > max_steering_change) {
+						control.steer = last_steering + (steering_diff > 0 ? max_steering_change
+						                                                   : -max_steering_change);
+					}
+					last_steering = control.steer;
+
+					// Log constant speed mode
+					if(step_counter % 100 == 0) {
+						std::cout << "[CONSTANT SPEED] Target: " << std::fixed
+						          << std::setprecision(1) << (target_constant_speed * 3.6)
+						          << " km/h (" << std::setprecision(2) << target_constant_speed
+						          << " m/s)"
+						          << ", Throttle: " << std::setprecision(3) << control.throttle
+						          << ", Steering: " << control.steer << " rad" << std::endl;
+					}
+				}
 
 				// Add MPC diagnostic logging
 				if(verbose_logging && step_counter % 50 == 0) {
@@ -368,8 +537,10 @@ class MPCIntegratedApp : public QObject {
 			} else if(input == "7") {
 				// LIMPEZA DE MEMÓRIA
 				std::cout << "Executando limpeza de memória..." << std::endl;
-				// Force OpenCV cleanup
-				cv::Mat().copyTo(cv::Mat());
+				// Force OpenCV cleanup (safer method)
+				cv::Mat temp;
+				temp.create(1, 1, CV_8UC1);
+				temp = cv::Mat(); // Safe cleanup
 // Force CUDA memory cleanup if available
 #ifdef CUDA_AVAILABLE
 				try {
@@ -383,6 +554,63 @@ class MPCIntegratedApp : public QObject {
 				}
 #endif
 				std::cout << "Limpeza de memória concluída" << std::endl;
+			} else if(input == "8") {
+				// ATIVAR modo velocidade constante
+				if(!controls_manager->isConstantSpeedMode()) {
+					controls_manager->setConstantSpeedMode(true, target_constant_speed,
+					                                       constant_throttle);
+					constant_speed_mode = true; // Update local flag for UI consistency
+				} else {
+					std::cout << "Modo velocidade constante já está ATIVO" << std::endl;
+				}
+			} else if(input == "9") {
+				// DESATIVAR modo velocidade constante
+				if(controls_manager->isConstantSpeedMode()) {
+					controls_manager->setConstantSpeedMode(false);
+					constant_speed_mode = false; // Update local flag for UI consistency
+					std::cout << "MODO VELOCIDADE CONSTANTE DESATIVADO" << std::endl;
+					std::cout << "MPC voltará a controlar velocidade normalmente" << std::endl;
+				} else {
+					std::cout << "Modo velocidade constante já está DESATIVO" << std::endl;
+				}
+			} else if(input == "0") {
+				// Ajustar velocidade constante
+				double current_kmh = target_constant_speed * 3.6; // Convert m/s to km/h
+				std::cout << "Digite nova velocidade:" << std::endl;
+				std::cout << "  Em km/h [atual: " << std::fixed << std::setprecision(1)
+				          << current_kmh << " km/h]: ";
+				std::string speed_input;
+				std::getline(std::cin, speed_input);
+				try {
+					double new_speed_kmh = std::stod(speed_input);
+					double new_speed_ms = new_speed_kmh / 3.6; // Convert km/h to m/s
+
+					if(new_speed_ms >= MIN_SAFE_SPEED && new_speed_ms <= MAX_SAFE_SPEED) {
+						target_constant_speed = new_speed_ms;
+						// Adjust throttle proportionally using intelligent scaling
+						// Base throttle + proportional adjustment based on speed ratio
+						double speed_ratio = new_speed_ms / DEFAULT_CONSTANT_SPEED;
+						constant_throttle = DEFAULT_CONSTANT_THROTTLE * speed_ratio;
+						// Clamp to safe throttle range
+						constant_throttle = std::clamp(constant_throttle, 0.05, 0.35);
+
+						std::cout << "✓ Nova velocidade: " << std::fixed << std::setprecision(1)
+						          << (target_constant_speed * 3.6) << " km/h ("
+						          << std::setprecision(2) << target_constant_speed << " m/s)"
+						          << std::endl;
+						std::cout << "✓ Throttle ajustado: " << std::setprecision(3)
+						          << constant_throttle << " (" << (constant_throttle * 100) << "%)"
+						          << std::endl;
+					} else {
+						double min_kmh = MIN_SAFE_SPEED * 3.6;
+						double max_kmh = MAX_SAFE_SPEED * 3.6;
+						std::cout << "❌ Velocidade deve estar entre " << std::fixed
+						          << std::setprecision(1) << min_kmh << " e " << max_kmh << " km/h"
+						          << std::endl;
+					}
+				} catch(...) {
+					std::cout << "Valor inválido. Mantendo velocidade atual." << std::endl;
+				}
 			} else if(input == "c") {
 				// Limpar waypoints
 				recorded_waypoints.clear();
@@ -391,20 +619,95 @@ class MPCIntegratedApp : public QObject {
 			} else if(input == "s") {
 				// Mostrar status
 				showStatus();
+			} else if(input == "z") {
+				// Test ZeroMQ connection manually
+				testZeroMQConnection();
 			} else if(input == "h" || input == "help") {
 				// Mostrar ajuda
-				std::cout << "=== COMANDOS DISPONÍVEIS ===" << std::endl;
+				std::cout << "\n=== COMANDOS DISPONÍVEIS ===" << std::endl;
+				std::cout << "=== CONTROLE BÁSICO ===" << std::endl;
 				std::cout << "1: Ativar MPC" << std::endl;
 				std::cout << "2: Ativar Manual" << std::endl;
+				std::cout << "=== GRAVAÇÃO ===" << std::endl;
 				std::cout << "3: Iniciar Gravação" << std::endl;
 				std::cout << "4: Parar Gravação" << std::endl;
+				std::cout << "=== DEBUG ===" << std::endl;
 				std::cout << "5: Ativar Logs Detalhados" << std::endl;
 				std::cout << "6: Desativar Logs Detalhados" << std::endl;
 				std::cout << "7: Limpeza de Memória" << std::endl;
+				std::cout << "=== VELOCIDADE CONSTANTE (TESTE REAL) ===" << std::endl;
+				std::cout << "8: Ativar Modo Velocidade Constante" << std::endl;
+				std::cout << "9: Desativar Modo Velocidade Constante" << std::endl;
+				std::cout << "0: Ajustar Velocidade Constante" << std::endl;
+				std::cout << "=== UTILIDADES ===" << std::endl;
 				std::cout << "s: Mostrar Status" << std::endl;
+				std::cout << "z: Testar Conexão ZeroMQ" << std::endl;
 				std::cout << "c: Limpar Waypoints" << std::endl;
 				std::cout << "h: Mostrar esta Ajuda" << std::endl;
+				std::cout << "e: EMERGENCY STOP (parar motores imediatamente)" << std::endl;
+				std::cout << "test: Testar Sistema de Emergência" << std::endl;
 				std::cout << "q: Sair" << std::endl;
+				std::cout << "===========================" << std::endl;
+			} else if(input == "e" || input == "E" || input == "emergency") {
+				// EMERGENCY STOP - parada imediata dos motores
+				std::cout << "\n*** TERMINAL EMERGENCY STOP ACTIVATED ***" << std::endl;
+
+				// Use ControlsManager's emergency stop method
+				controls_manager->emergencyMotorStop();
+
+				// Also deactivate MPC for safety
+				if(mpc_active) {
+					mpc_active = false;
+					mpc_timer->stop();
+					std::cout << "MPC DESATIVADO por parada de emergência" << std::endl;
+				}
+
+				std::cout << "*** Veículo em modo PARADO ***" << std::endl;
+				std::cout << "*** Digite '2' para retomar controle manual ***" << std::endl;
+			} else if(input == "test" || input == "emergency-test") {
+				// Test emergency stop system
+				testEmergencyStop();
+			} else if(input == "soft") {
+				// Toggle soft start
+				bool current_enabled = controls_manager->isSoftStartEnabled();
+				controls_manager->setSoftStartEnabled(!current_enabled);
+				std::cout << "Soft Start agora está: "
+				          << (!current_enabled ? "ATIVADO" : "DESATIVADO") << std::endl;
+			} else if(input == "softp") {
+				// Configure soft start parameters
+				std::cout << "=== CONFIGURAÇÃO DE SOFT START ===" << std::endl;
+				std::cout
+				    << "Digite nova taxa máxima de mudança por passo (% por iteração) [atual: "
+				    << (controls_manager->isSoftStartEnabled() ? "1" : "N/A") << "]: ";
+				std::string change_input;
+				std::getline(std::cin, change_input);
+
+				std::cout << "Digite novo limite inicial (% durante aquecimento) [atual: 5]: ";
+				std::string limit_input;
+				std::getline(std::cin, limit_input);
+
+				std::cout << "Digite duração do aquecimento (segundos) [atual: 3.0]: ";
+				std::string duration_input;
+				std::getline(std::cin, duration_input);
+
+				try {
+					double max_change =
+					    change_input.empty() ? 0.01 : std::stod(change_input) / 100.0;
+					double initial_limit =
+					    limit_input.empty() ? 0.05 : std::stod(limit_input) / 100.0;
+					double warmup_duration =
+					    duration_input.empty() ? 3.0 : std::stod(duration_input);
+
+					// Validate ranges
+					max_change = std::clamp(max_change, 0.001, 0.1);      // 0.1% to 10% per step
+					initial_limit = std::clamp(initial_limit, 0.01, 0.3); // 1% to 30% initial limit
+					warmup_duration = std::clamp(warmup_duration, 0.5, 10.0); // 0.5s to 10s warmup
+
+					controls_manager->setSoftStartParameters(max_change, initial_limit,
+					                                         warmup_duration);
+				} catch(...) {
+					std::cout << "Valores inválidos. Mantendo configuração atual." << std::endl;
+				}
 			} else if(input == "q") {
 				// Sair
 				g_running = false;
@@ -412,169 +715,43 @@ class MPCIntegratedApp : public QObject {
 			} else {
 				std::cout << "Comando não reconhecido. Digite 'h' para ajuda ou use:" << std::endl;
 				std::cout << "1:MPC  2:Manual  3:InicGrav  4:PararGrav  5:LogsON  6:LogsOFF  "
-				             "s:Status  q:Sair"
+				             "s:Status  z:TestZMQ  q:Sair"
 				          << std::endl;
 			}
 		}
 
 		void getCameraFrame() {
-			try {
-				// Only use ZeroMQ connection - don't try to access camera directly
-				static bool first_connection_attempt = true;
-				static std::chrono::time_point<std::chrono::steady_clock> last_zmq_attempt;
-				static bool zmq_connection_failed = false;
-
-				auto now = std::chrono::steady_clock::now();
-
-				// Try ZeroMQ connection periodically, but not too often
-				if(first_connection_attempt ||
-				   (!zmq_connection_failed &&
-				    std::chrono::duration_cast<std::chrono::seconds>(now - last_zmq_attempt)
-				            .count() > 2)) {
-
-					first_connection_attempt = false;
-					last_zmq_attempt = now;
-
-					try {
-						// Try raw camera frames first (from port 5558)
-						Subscriber camera_sub;
-						camera_sub.connect("tcp://localhost:5558");
-						camera_sub.subscribe("camera_frame");
-
-						zmq::pollitem_t items[] = {
-						    {static_cast<void *>(camera_sub.getSocket()), 0, ZMQ_POLLIN, 0}};
-						zmq::poll(items, 1, 200); // Longer timeout for connection attempt
-
-						if(items[0].revents & ZMQ_POLLIN) {
-							zmq::message_t message;
-							if(camera_sub.getSocket().recv(&message, ZMQ_DONTWAIT)) {
-								std::string received_msg(static_cast<char *>(message.data()),
-								                         message.size());
-
-								if(received_msg.find("camera_frame ") == 0) {
-									std::string frame_data =
-									    received_msg.substr(13); // "camera_frame ".length()
-
-									std::vector<uchar> buffer(frame_data.begin(), frame_data.end());
-									cv::Mat decoded_frame = cv::imdecode(buffer, cv::IMREAD_COLOR);
-
-									if(!decoded_frame.empty()) {
-										m_currentCameraFrame = decoded_frame.clone();
-										m_cameraFrameAvailable = true;
-										zmq_connection_failed = false;
-
-										// Execute local lane detection inference
-										executeLocalInference(decoded_frame);
-										return;
-									}
-								}
-							}
-						}
-
-						// If raw camera fails, try inference frames from port 5556
-						Subscriber inference_sub;
-						inference_sub.connect("tcp://localhost:5556");
-						inference_sub.subscribe("inference_frame");
-
-						zmq::poll(items, 1, 100);
-						if(items[0].revents & ZMQ_POLLIN) {
-							zmq::message_t message;
-							if(inference_sub.getSocket().recv(&message, ZMQ_DONTWAIT)) {
-								std::string received_msg(static_cast<char *>(message.data()),
-								                         message.size());
-
-								if(received_msg.find("inference_frame ") == 0) {
-									std::cout << "[DEBUG] Found inference data from CameraStreamer"
-									          << std::endl;
-									zmq_connection_failed = false;
-								}
-							}
-						}
-
-						static int no_frame_counter = 0;
-						no_frame_counter++;
-						if(no_frame_counter % 50 ==
-						   0) { // Only log every 50 attempts (~100 seconds)
-							std::cout
-							    << "[DEBUG] CameraStreamer is running but no frames yet (attempt "
-							    << no_frame_counter << ")" << std::endl;
-						}
-
-					} catch(const std::exception &e) {
-						if(!zmq_connection_failed) {
-							std::cout << "[DEBUG] ZeroMQ connection failed: " << e.what()
-							          << std::endl;
-							zmq_connection_failed = true;
-						}
-					}
-				}
-
-				// If ZeroMQ is not working, use synthetic feed
-				if(zmq_connection_failed || !m_cameraFrameAvailable) {
-					// TODO: Implement createSyntheticCameraFeed();
-					// std::cerr << "[getCameraFrame] Warning: Camera feed not available" <<
-					// std::endl;
-				}
-
-			} catch(const std::exception &e) {
-				// std::cerr << "[getCameraFrame] Error: " << e.what() << std::endl;
-				// TODO: Implement createSyntheticCameraFeed();
-				// std::cerr << "[getCameraFrame] Warning: Falling back to synthetic feed not
-				// implemented" << std::endl;
+			// This method is now only for visualization - lane detection is handled separately
+			// Create a simple status indicator frame for visualization
+			static cv::Mat status_frame;
+			if(status_frame.empty()) {
+				status_frame = cv::Mat::zeros(240, 320, CV_8UC3);
+				cv::putText(status_frame, "External Camera", cv::Point(80, 120),
+				            cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(100, 100, 100), 2);
+				cv::putText(status_frame, "Mode Active", cv::Point(100, 150),
+				            cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(100, 100, 100), 2);
 			}
+			m_currentCameraFrame = status_frame.clone();
+			m_cameraFrameAvailable = true;
 		}
 
 		void executeLocalInference(const cv::Mat &frame) {
-			if(!m_inferencer || frame.empty()) {
-				// Fallback to remote inference if local inferencer not available
-				getLaneDetectionFrame();
-				return;
-			}
-
-			try {
-				// Execute local inference (same logic as lane_detection_video_test.cpp)
-				m_inferencer->doInference(frame);
-				cv::Mat mask = m_inferencer->getLastMask();
-
-				if(!mask.empty()) {
-					// Process the mask for MPC trajectory generation
-					createLaneVisualization(mask);
-
-					// Log lane detection data
-					static int inference_counter = 0;
-					if(++inference_counter % 30 == 0) { // Log every 30th inference
-						std::cout << "\n=== LANE DETECTION DATA ===" << std::endl;
-						std::cout << "[LaneDetection] Mask size: " << mask.cols << "x" << mask.rows
-						          << std::endl;
-
-						// Count white pixels (detected lanes)
-						int white_pixels = cv::countNonZero(mask);
-						double lane_coverage = (white_pixels * 100.0) / (mask.cols * mask.rows);
-						std::cout << "[LaneDetection] Lane pixels: " << white_pixels << " ("
-						          << std::fixed << std::setprecision(1) << lane_coverage
-						          << "% coverage)" << std::endl;
-
-						if(!m_predictedTrajectory.empty()) {
-							std::cout << "[LaneDetection] Generated "
-							          << m_predictedTrajectory.size()
-							          << " trajectory points for MPC" << std::endl;
-						}
-						std::cout << "===========================\n" << std::endl;
-					}
-				} else {
-					std::cerr << "[executeLocalInference] Warning: Empty mask from inference"
-					          << std::endl;
-				}
-			} catch(const std::exception &e) {
-				std::cerr << "[executeLocalInference] Error: " << e.what() << std::endl;
-				// Fallback to remote inference
-				getLaneDetectionFrame();
-			}
+			// Since we removed CameraStreamer, always fallback to remote inference
+			// The frame parameter is kept for compatibility but not used
+			getLaneDetectionFrame();
 		}
 
 		void getLaneDetectionFrame() {
 			if(!m_laneDetectionSubscriber) {
-				// std::cout << "[DEBUG] Lane detection subscriber not initialized" << std::endl;
+				static int no_sub_counter = 0;
+				if(++no_sub_counter % 300 == 0) { // Log every ~5 seconds
+					std::cout << "[getLaneDetectionFrame] ERROR: Lane detection subscriber not "
+					             "initialized!"
+					          << std::endl;
+					std::cout
+					    << "[getLaneDetectionFrame] MPC will not work without lane detection data!"
+					    << std::endl;
+				}
 				return;
 			}
 
@@ -590,6 +767,16 @@ class MPCIntegratedApp : public QObject {
 						std::string received_msg(static_cast<char *>(message.data()),
 						                         message.size());
 
+						static int message_counter = 0;
+						message_counter++;
+
+						if(message_counter % 60 == 0) { // Log every 60 messages (~2 seconds)
+							std::cout << "[getLaneDetectionFrame] ✓ Received message "
+							          << message_counter << ", size: " << received_msg.size()
+							          << " bytes" << std::endl;
+						}
+
+						// Check for inference_frame topic
 						if(received_msg.find("inference_frame ") == 0) {
 							std::string mask_data =
 							    received_msg.substr(16); // "inference_frame ".length()
@@ -599,12 +786,62 @@ class MPCIntegratedApp : public QObject {
 
 							if(!binary_mask.empty()) {
 								createLaneVisualization(binary_mask);
+
+								if(message_counter % 60 == 0) {
+									std::cout
+									    << "[getLaneDetectionFrame] ✓ Successfully decoded mask: "
+									    << binary_mask.cols << "x" << binary_mask.rows
+									    << ", generated " << m_predictedTrajectory.size()
+									    << " trajectory points" << std::endl;
+								}
 								return;
+							} else {
+								if(message_counter % 60 == 0) {
+									std::cout
+									    << "[getLaneDetectionFrame] ✗ Failed to decode mask data"
+									    << std::endl;
+								}
+							}
+						} else {
+							// Check for binary_mask topic (alternative)
+							if(received_msg.find("binary_mask ") == 0) {
+								std::string mask_data =
+								    received_msg.substr(12); // "binary_mask ".length()
+
+								std::vector<uchar> buffer(mask_data.begin(), mask_data.end());
+								cv::Mat binary_mask = cv::imdecode(buffer, cv::IMREAD_GRAYSCALE);
+
+								if(!binary_mask.empty()) {
+									createLaneVisualization(binary_mask);
+
+									if(message_counter % 60 == 0) {
+										std::cout
+										    << "[getLaneDetectionFrame] ✓ Successfully decoded "
+										       "binary_mask: "
+										    << binary_mask.cols << "x" << binary_mask.rows
+										    << ", generated " << m_predictedTrajectory.size()
+										    << " trajectory points" << std::endl;
+									}
+									return;
+								}
+							} else {
+								if(message_counter % 60 == 0) {
+									std::cout << "[getLaneDetectionFrame] ✗ Unknown topic: "
+									          << received_msg.substr(0, 30) << "..." << std::endl;
+								}
 							}
 						}
 					}
 				} else {
-					// std::cout << "[DEBUG] No lane detection data available" << std::endl;
+					static int no_data_counter = 0;
+					if(++no_data_counter % 600 == 0) { // Log every ~10 seconds
+						std::cout << "[getLaneDetectionFrame] ⚠ No inference data available on "
+						             "port 5556 (waiting "
+						          << no_data_counter << " attempts)" << std::endl;
+						std::cout << "[getLaneDetectionFrame] ⚠ MPC needs lane detection data to "
+						             "work properly!"
+						          << std::endl;
+					}
 				}
 
 			} catch(const std::exception &e) {
@@ -618,6 +855,9 @@ class MPCIntegratedApp : public QObject {
 			}
 
 			try {
+				// Always try to get fresh lane detection data for MPC
+				getLaneDetectionFrame();
+
 				// Adjust for 1024x600 screen - create smaller visualization (900x550)
 				m_visualizationFrame = cv::Mat::zeros(550, 900, CV_8UC3);
 
@@ -626,7 +866,7 @@ class MPCIntegratedApp : public QObject {
 				cv::Rect processedRegion(10, 260, 420, 240);  // Smaller processed view
 				cv::Rect trajectoryRegion(440, 10, 450, 450); // Trajectory area
 
-				// Get camera frame from CameraStreamer
+				// Get camera frame from ZeroMQ stream (for visualization only)
 				getCameraFrame();
 
 				// Draw camera feed
@@ -739,7 +979,10 @@ class MPCIntegratedApp : public QObject {
 				} else if(key == '7') {
 					// Limpeza de memória
 					std::cout << "Executando limpeza de memória..." << std::endl;
-					cv::Mat().copyTo(cv::Mat());
+					// Safe OpenCV memory cleanup
+					cv::Mat temp;
+					temp.create(1, 1, CV_8UC1);
+					temp = cv::Mat(); // Safe cleanup
 #ifdef CUDA_AVAILABLE
 					try {
 						cudaDeviceSynchronize();
@@ -759,6 +1002,23 @@ class MPCIntegratedApp : public QObject {
 					std::cout << "1:MPC  2:Manual  3:InicGrav  4:PararGrav" << std::endl;
 					std::cout << "5:LogsON  6:LogsOFF  7:LimpMem  s:Status  c:Limpar  q:Sair"
 					          << std::endl;
+					std::cout << "e:EMERGENCY STOP (parar motores imediatamente)" << std::endl;
+				} else if(key == 'e' || key == 'E') {
+					// EMERGENCY STOP - parada imediata dos motores
+					std::cout << "\n*** OPENCV EMERGENCY STOP ACTIVATED ***" << std::endl;
+
+					// Use ControlsManager's emergency stop method
+					controls_manager->emergencyMotorStop();
+
+					// Also deactivate MPC for safety
+					if(mpc_active) {
+						mpc_active = false;
+						mpc_timer->stop();
+						std::cout << "MPC DESATIVADO por parada de emergência" << std::endl;
+					}
+
+					std::cout << "*** Veículo em modo PARADO ***" << std::endl;
+					std::cout << "*** Pressione '2' para retomar controle manual ***" << std::endl;
 				}
 
 			} catch(const std::exception &e) {
@@ -780,15 +1040,39 @@ class MPCIntegratedApp : public QObject {
 			            cv::Point(status_x, status_y + line_height), cv::FONT_HERSHEY_SIMPLEX, 0.4,
 			            cv::Scalar(255, 255, 255), 1);
 
+			// Add emergency status indicator
+			if(g_emergency_controls) {
+				cv::putText(m_visualizationFrame, "EMERGENCY: Ready",
+				            cv::Point(status_x, status_y + 2 * line_height),
+				            cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(0, 255, 0),
+				            1); // Green when ready
+			} else {
+				cv::putText(m_visualizationFrame, "EMERGENCY: N/A",
+				            cv::Point(status_x, status_y + 2 * line_height),
+				            cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(0, 0, 255),
+				            1); // Red when not available
+			}
+
+			// Add constant speed mode indicator
+			if(controls_manager && controls_manager->isConstantSpeedMode()) {
+				cv::putText(
+				    m_visualizationFrame,
+				    "CONST SPEED: " +
+				        std::to_string(controls_manager->getTargetConstantSpeed()).substr(0, 3) +
+				        "m/s",
+				    cv::Point(status_x, status_y + 3 * line_height), cv::FONT_HERSHEY_SIMPLEX, 0.4,
+				    cv::Scalar(0, 255, 255), 1); // Yellow for constant speed mode
+			}
+
 			cv::putText(m_visualizationFrame,
 			            "Pos: (" + std::to_string(current_state.x).substr(0, 4) + "," +
 			                std::to_string(current_state.y).substr(0, 4) + ")",
-			            cv::Point(status_x, status_y + 2 * line_height), cv::FONT_HERSHEY_SIMPLEX,
+			            cv::Point(status_x, status_y + 4 * line_height), cv::FONT_HERSHEY_SIMPLEX,
 			            0.4, cv::Scalar(255, 255, 255), 1);
 
 			cv::putText(m_visualizationFrame,
 			            "Vel: " + std::to_string(current_state.velocity).substr(0, 4),
-			            cv::Point(status_x, status_y + 3 * line_height), cv::FONT_HERSHEY_SIMPLEX,
+			            cv::Point(status_x, status_y + 5 * line_height), cv::FONT_HERSHEY_SIMPLEX,
 			            0.4, cv::Scalar(255, 255, 255), 1);
 
 			// Enhanced camera status
@@ -813,7 +1097,7 @@ class MPCIntegratedApp : public QObject {
 			            1);
 
 			// Compact instructions
-			cv::putText(m_visualizationFrame, "m:mode r:rec c:clear s:status q:quit",
+			cv::putText(m_visualizationFrame, "m:mode r:rec c:clear s:status e:EMERGENCY q:quit",
 			            cv::Point(10, 530), cv::FONT_HERSHEY_SIMPLEX, 0.4,
 			            cv::Scalar(200, 200, 200), 1);
 		}
@@ -833,20 +1117,35 @@ class MPCIntegratedApp : public QObject {
 				m_laneDetectionSubscriber = std::make_unique<Subscriber>();
 				m_laneDetectionSubscriber->connect("tcp://localhost:5556");
 				m_laneDetectionSubscriber->subscribe("inference_frame");
-				std::cout << "[DEBUG] Lane detection subscriber initialized (fallback mode)"
+				std::cout << "[setupVisualization] Lane detection subscriber initialized for MPC"
 				          << std::endl;
 			} catch(const std::exception &e) {
 				std::cerr << "[setupVisualization] Failed to initialize lane detection subscriber: "
 				          << e.what() << std::endl;
+				std::cerr << "[setupVisualization] MPC will not receive lane detection data!"
+				          << std::endl;
 			}
 		}
 
 		void setupKeyboardInput() {
-			std::cout << "=== COMANDOS DISPONÍVEIS ===" << std::endl;
+			std::cout << "\n=== COMANDOS DISPONÍVEIS ===" << std::endl;
+			std::cout << "=== BÁSICO ===" << std::endl;
 			std::cout << "1: Ativar MPC       2: Ativar Manual" << std::endl;
 			std::cout << "3: Iniciar Gravação 4: Parar Gravação" << std::endl;
 			std::cout << "5: Logs ON          6: Logs OFF        7: Limpeza Memória" << std::endl;
-			std::cout << "s: Status    c: Limpar    h: Ajuda    q: Sair" << std::endl;
+			std::cout << "=== VELOCIDADE CONSTANTE (TESTE REAL) ===" << std::endl;
+			std::cout << "8: Ativar Vel. Const.   9: Desativar Vel. Const." << std::endl;
+			std::cout << "0: Ajustar Velocidade (entrada em km/h)" << std::endl;
+			std::cout << "=== ACELERAÇÃO GRADUAL (SOFT START) ===" << std::endl;
+			std::cout << "soft: Toggle Soft Start    softp: Configurar Parâmetros" << std::endl;
+			std::cout << "=== SEGURANÇA ===" << std::endl;
+			std::cout << "e: EMERGENCY STOP   test: Testar Sistema Emergência" << std::endl;
+			std::cout << "=== UTILIDADES ===" << std::endl;
+			std::cout << "s: Status    z: Test ZMQ    c: Limpar    h: Ajuda    q: Sair"
+			          << std::endl;
+			std::cout << "===============================================" << std::endl;
+			std::cout << "⚠️  EMERGENCY STOP: Pressione 'e' para parar motores imediatamente"
+			          << std::endl;
 			std::cout << "Digite o comando ou use as teclas na janela OpenCV:" << std::endl;
 
 			// Timer para verificar input
@@ -896,6 +1195,13 @@ class MPCIntegratedApp : public QObject {
 			mpc_active = false;
 			// Mudar para modo manual
 			controls_manager->setMode(DrivingMode::Manual);
+
+			// Reset emergency stop flag when switching to manual mode
+			if(controls_manager->isEmergencyStopActive()) {
+				std::cout << "Resetando flag de emergência..." << std::endl;
+				controls_manager->resetEmergencyStop();
+			}
+
 			mpc_timer->stop();
 			std::cout << "MANUAL ATIVADO - Use joystick" << std::endl;
 		}
@@ -947,11 +1253,60 @@ class MPCIntegratedApp : public QObject {
 			std::cout << "Trajetória MPC (lane detection): " << m_predictedTrajectory.size()
 			          << " pontos" << std::endl;
 
+			// DIAGNÓSTICO CRÍTICO: Lane Detection Status
+			std::cout << "\n--- LANE DETECTION STATUS ---" << std::endl;
+			std::cout << "ZeroMQ Subscriber (port 5556): "
+			          << (m_laneDetectionSubscriber ? "CONNECTED" : "NOT_CONNECTED") << std::endl;
+
+			if(!m_predictedTrajectory.empty()) {
+				std::cout << "✓ Lane trajectory: AVAILABLE (" << m_predictedTrajectory.size()
+				          << " points)" << std::endl;
+				// Show first few points
+				std::cout << "  First 3 points: ";
+				for(size_t i = 0; i < std::min(size_t(3), m_predictedTrajectory.size()); i++) {
+					std::cout << "(" << std::fixed << std::setprecision(2)
+					          << m_predictedTrajectory[i].x << "," << m_predictedTrajectory[i].y
+					          << ") ";
+				}
+				std::cout << std::endl;
+			} else {
+				std::cout << "✗ Lane trajectory: NOT_AVAILABLE" << std::endl;
+				std::cout << "  ⚠ MPC cannot work without lane detection data!" << std::endl;
+				std::cout << "  ⚠ Check if inference system is publishing on port 5556"
+				          << std::endl;
+			}
+
+			if(!m_currentLaneMask.empty()) {
+				int white_pixels = cv::countNonZero(m_currentLaneMask);
+				double coverage =
+				    (white_pixels * 100.0) / (m_currentLaneMask.cols * m_currentLaneMask.rows);
+				std::cout << "✓ Lane mask: " << m_currentLaneMask.cols << "x"
+				          << m_currentLaneMask.rows << " (" << std::fixed << std::setprecision(1)
+				          << coverage << "% coverage)" << std::endl;
+			} else {
+				std::cout << "✗ Lane mask: NOT_AVAILABLE" << std::endl;
+			}
+
 			std::cout << "\n--- Estado do Veículo ---" << std::endl;
 			std::cout << "Posição atual: (" << std::fixed << std::setprecision(2) << current_state.x
 			          << ", " << current_state.y << ")" << std::endl;
-			std::cout << "Velocidade: " << current_state.velocity << " m/s" << std::endl;
-			std::cout << "Orientação: " << current_state.yaw * 180 / M_PI << " graus" << std::endl;
+			std::cout << "Velocidade: " << std::setprecision(1) << (current_state.velocity * 3.6)
+			          << " km/h (" << std::setprecision(2) << current_state.velocity << " m/s)"
+			          << std::endl;
+			std::cout << "Orientação: " << std::setprecision(1) << (current_state.yaw * 180 / M_PI)
+			          << " graus" << std::endl;
+
+			std::cout << "\n--- Controle de Velocidade ---" << std::endl;
+			std::cout << "Modo velocidade constante: "
+			          << (constant_speed_mode ? "ATIVO" : "INATIVO") << std::endl;
+			if(constant_speed_mode) {
+				std::cout << "Velocidade alvo: " << std::setprecision(1)
+				          << (target_constant_speed * 3.6) << " km/h (" << std::setprecision(2)
+				          << target_constant_speed << " m/s)" << std::endl;
+				std::cout << "Throttle fixo: " << constant_throttle << std::endl;
+			} else {
+				std::cout << "Controle de velocidade: MPC automático" << std::endl;
+			}
 
 			std::cout << "\n--- Sistema de Visão ---" << std::endl;
 			std::cout << "Camera frame disponível: " << (m_cameraFrameAvailable ? "SIM" : "NÃO")
@@ -961,16 +1316,55 @@ class MPCIntegratedApp : public QObject {
 			std::cout << "Processed frame: " << (!m_processedFrame.empty() ? "SIM" : "NÃO")
 			          << std::endl;
 
-			if(!m_currentLaneMask.empty()) {
-				int white_pixels = cv::countNonZero(m_currentLaneMask);
-				double coverage =
-				    (white_pixels * 100.0) / (m_currentLaneMask.cols * m_currentLaneMask.rows);
-				std::cout << "Lane mask: " << m_currentLaneMask.cols << "x"
-				          << m_currentLaneMask.rows << " (" << std::fixed << std::setprecision(1)
-				          << coverage << "% cobertura)" << std::endl;
+			// MPC READINESS CHECK
+			std::cout << "\n--- MPC READINESS ---" << std::endl;
+			bool mpc_ready = !m_predictedTrajectory.empty() || recorded_waypoints.size() >= 3;
+			std::cout << "MPC Operational: " << (mpc_ready ? "✓ READY" : "✗ NOT_READY")
+			          << std::endl;
+
+			if(!mpc_ready) {
+				std::cout << "  Issues:" << std::endl;
+				if(m_predictedTrajectory.empty()) {
+					std::cout << "  - No lane detection trajectory (check port 5556)" << std::endl;
+				}
+				if(recorded_waypoints.size() < 3) {
+					std::cout << "  - No recorded waypoints (record at least 3 points)"
+					          << std::endl;
+				}
+				std::cout << "  Solutions:" << std::endl;
+				std::cout << "  - Start external inference system on port 5556" << std::endl;
+				std::cout << "  - OR record waypoints using manual mode (press 3)" << std::endl;
 			}
 
 			std::cout << "===================================\n" << std::endl;
+		}
+
+		void testEmergencyStop() {
+			std::cout << "\n=== TESTE DO SISTEMA DE EMERGÊNCIA ===" << std::endl;
+			std::cout << "⚠️  ATENÇÃO: Este teste irá parar todos os motores!" << std::endl;
+			std::cout << "Confirma teste? (s/N): ";
+
+			std::string confirmation;
+			std::getline(std::cin, confirmation);
+
+			if(confirmation == "s" || confirmation == "S" || confirmation == "sim") {
+				std::cout << "Executando teste de emergência..." << std::endl;
+
+				// Use ControlsManager's emergency stop method
+				controls_manager->emergencyMotorStop();
+
+				// Also stop MPC
+				if(mpc_active) {
+					mpc_active = false;
+					mpc_timer->stop();
+					std::cout << "MPC parado durante teste de emergência" << std::endl;
+				}
+
+				std::cout << "✅ Teste de emergência concluído" << std::endl;
+				std::cout << "💡 Para retomar operação, pressione '2' (modo manual)" << std::endl;
+			} else {
+				std::cout << "Teste cancelado" << std::endl;
+			}
 		}
 
 		void createLaneVisualization(const cv::Mat &binary_mask) {
@@ -1295,6 +1689,46 @@ class MPCIntegratedApp : public QObject {
 		bool isPointInRegion(const cv::Point &point, const cv::Rect &region) {
 			return point.x >= region.x && point.x <= region.x + region.width &&
 			       point.y >= region.y && point.y <= region.y + region.height;
+		}
+
+		void testZeroMQConnection() {
+			std::cout << "\n=== TESTE DE CONEXÃO ZEROMQ ===" << std::endl;
+
+			try {
+				// Test subscriber connection to port 5556
+				std::cout << "Testando conexão com porta 5556..." << std::endl;
+
+				if(m_laneDetectionSubscriber) {
+					std::cout << "✅ Subscriber já inicializado" << std::endl;
+
+					// Try to receive data with short timeout
+					std::cout << "Testando recepção de dados..." << std::endl;
+
+					zmq::pollitem_t items[] = {
+					    {static_cast<void *>(m_laneDetectionSubscriber->getSocket()), 0, ZMQ_POLLIN,
+					     0}};
+					int poll_result = zmq::poll(items, 1, 1000); // 1 second timeout
+
+					if(poll_result > 0 && (items[0].revents & ZMQ_POLLIN)) {
+						std::cout << "✅ Dados disponíveis na porta 5556!" << std::endl;
+					} else if(poll_result == 0) {
+						std::cout << "⚠️  Timeout: Nenhum dado recebido em 1 segundo" << std::endl;
+						std::cout
+						    << "   Verifique se o sistema de inferência está rodando na porta 5556"
+						    << std::endl;
+					} else {
+						std::cout << "❌ Erro no polling" << std::endl;
+					}
+				} else {
+					std::cout << "❌ Subscriber não inicializado" << std::endl;
+					std::cout << "   Tente reinicializar o sistema" << std::endl;
+				}
+
+			} catch(const std::exception &e) {
+				std::cout << "❌ Erro na conexão ZeroMQ: " << e.what() << std::endl;
+			}
+
+			std::cout << "=== FIM DO TESTE ===" << std::endl;
 		}
 };
 

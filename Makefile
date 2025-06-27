@@ -142,8 +142,9 @@ lane_detection_video_test: lane_detection_video_test.cpp \
 	$(CXX) $(CXXFLAGS) $(INCLUDE_PATHS) $^ -o $@ $(LDFLAGS) $(ALL_LIBS)
 
 # Clean
-clean:
-	rm -f $(OBJECTS) $(MOC_FILES) $(TARGET)
+clean: # remove gcno recursivally
+	rm -f $(OBJECTS) $(MOC_FILES) $(TARGET) */**.gcno */*/*.gcno */*/*/*.gcno
+
 
 install-deps:
 	sudo apt update
@@ -219,9 +220,9 @@ jetson:
 		CXXFLAGS="$(CXXFLAGS) --sysroot=/home/michel/new_qtjetson/sysroot" \
 		LDFLAGS="$(LDFLAGS) --sysroot=/home/michel/new_qtjetson/sysroot" \
 		INCLUDE_PATHS="-I. -IZeroMQ -Icar_controls/includes -Icar_controls/includes/inference -Icar_controls/includes/objectDetection -I/home/michel/new_qtjetson/sysroot/usr/include/eigen3 -I/home/michel/new_qtjetson/sysroot/usr/include/opencv4" \
-		CUDA_PATH="/home/michel/new_qtjetson/sysroot/usr/local/cuda-10.2" \
-		CUDA_INCLUDE="/home/michel/new_qtjetson/sysroot/usr/local/cuda-10.2/include" \
-		CUDA_LIB="/home/michel/new_qtjetson/sysroot/usr/local/cuda-10.2/lib64" \
+		CUDA_PATH="/home/michel/new_qtjetson/sysroot/usr/local/cuda" \
+		CUDA_INCLUDE="/home/michel/new_qtjetson/sysroot/usr/local/cuda/include" \
+		CUDA_LIB="/home/michel/new_qtjetson/sysroot/usr/local/cuda/lib64" \
 		all
 	@echo "✅ Jetson build complete! Binary: main (ARM64)"
 	@file main | grep -q ARM && echo "✅ Confirmed ARM64 binary" || echo "⚠️  Warning: Binary architecture verification failed"
