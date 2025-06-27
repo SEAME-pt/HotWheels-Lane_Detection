@@ -141,7 +141,6 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
 	// Inicialização mais inteligente baseada no estado atual
 	std::vector<double> u0(2 * MPCConfig::horizon, 0.0);
 
-
 	// Calcular steering inicial baseado no cte e epsi
 	double initial_steering = 0.0;
 	if(std::abs(cte0) > 0.01 || std::abs(epsi0) > 0.05) {
@@ -158,13 +157,11 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
 		}
 	}
 
-
 	for(int i = 0; i < MPCConfig::horizon; ++i) {
 		u0[2 * i] = 0.3;                                    // throttle moderado
 		u0[2 * i] = 0.3;                                    // throttle moderado
 		u0[2 * i + 1] = initial_steering * (1.0 - i * 0.1); // steering com decay
 	}
-
 
 	if(debug_this_call) {
 		std::ostringstream msg;
@@ -191,7 +188,6 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
 			}
 			return {0.2, 0.0};
 		}
-
 
 		if(debug_this_call) {
 			Debugger::getInstance()->logMPCControls(u0[0], u0[1], min_cost);
@@ -296,13 +292,11 @@ double MPCOptimizer::_costFunction(const std::vector<double> &u, const std::vect
 
 	double total_cte_cost = 0.0, total_epsi_cost = 0.0, total_steer_cost = 0.0;
 
-
 	for(int t = 0; t < MPCConfig::horizon; ++t) {
 		double throttle = u[2 * t];
 		double steer = u[2 * t + 1];
 		// Modelo 6 estados usando coeficientes armazenados
 		_kinematicModel(x, y, yaw, v, cte, epsi, throttle, steer, _current_poly_coeffs);
-
 
 		// Penalizar cte e epsi explicitamente
 		double cte_cost = w_cte * cte * cte;
@@ -334,101 +328,100 @@ double MPCOptimizer::_costFunction(const std::vector<double> &u, const std::vect
 		}
 	}
 
-
 	// Debug ocasional para diagnosticar problemas
 	static int cost_debug_counter = 0;
 	if(++cost_debug_counter % 1000 == 0) {
 		std::cout << "[Cost Debug] Total cost: " << cost << " CTE: " << total_cte_cost
-		          << " EPSI: " << total_epsi_cost << " Steer: " << total_steer_cost
-	if(++cost_debug_counter % 1000 == 0) {
-		std::cout << "[Cost Debug] Total cost: " << cost << " CTE: " << total_cte_cost
-		          << " EPSI: " << total_epsi_cost << " Steer: " << total_steer_cost
-		          << " First steer: " << u[1] << std::endl;
+		          << " EPSI: " << total_epsi_cost
+		          << " Steer: " << total_steer_cost if(++cost_debug_counter % 1000 == 0) {
+			std::cout << "[Cost Debug] Total cost: " << cost << " CTE: " << total_cte_cost
+			          << " EPSI: " << total_epsi_cost << " Steer: " << total_steer_cost
+			          << " First steer: " << u[1] << std::endl;
+		}
+
+		return cost;
 	}
 
-	return cost;
-}
-
-// Atualize o modelo cinemático para 6 estados
-void MPCOptimizer::_kinematicModel(double &x, double &y, double &yaw, double &v, double &cte,
-                                   double &epsi, double throttle, double steer,
-                                   const std::vector<double> &poly_coeffs) const {
-	double f = 0.0, psides = 0.0;
-	if(!poly_coeffs.empty()) {
-		for(size_t i = 0; i < poly_coeffs.size(); ++i)
-			f += poly_coeffs[i] * std::pow(x, poly_coeffs.size() - 1 - i);
-		double df = 0.0;
-		for(size_t i = 0; i < poly_coeffs.size() - 1; ++i)
-			df += (poly_coeffs.size() - 1 - i) * poly_coeffs[i] *
-			      std::pow(x, poly_coeffs.size() - 2 - i);
-		psides = std::atan(df);
-	}
-	x += v * std::cos(yaw) * MPCConfig::dt;
-	y += v * std::sin(yaw) * MPCConfig::dt;
-	yaw += (v / MPCConfig::wheelbase) * std::tan(steer) * MPCConfig::dt;
-	v += throttle * MPCConfig::dt;
-	cte = f - y + v * std::sin(epsi) * MPCConfig::dt;
-	epsi = yaw - psides + (v / MPCConfig::wheelbase) * std::tan(steer) * MPCConfig::dt;
-	yaw = _normalizeAngle(yaw);
-	epsi = _normalizeAngle(epsi);
-	v = std::max(0.0, std::min(v, 10.0));
-}
-
-double MPCOptimizer::_calculateCurveCurvature(const std::vector<double> &x_coords,
-                                              const std::vector<double> &y_coords) const {
-	if(x_coords.size() < 3 || y_coords.size() < 3)
-		return 0.0;
-
-	std::vector<double> dx(x_coords.size()), dy(y_coords.size());
-	std::vector<double> ddx(x_coords.size()), ddy(y_coords.size());
-
-	// Cálculo das derivadas (gradiente simples)
-	for(size_t i = 1; i < x_coords.size() - 1; ++i) {
-		dx[i] = (x_coords[i + 1] - x_coords[i - 1]) / 2.0;
-		dy[i] = (y_coords[i + 1] - y_coords[i - 1]) / 2.0;
-	}
-	dx[0] = dx[1];
-	dx.back() = dx[dx.size() - 2];
-	dy[0] = dy[1];
-	dy.back() = dy[dy.size() - 2];
-
-	for(size_t i = 1; i < dx.size() - 1; ++i) {
-		ddx[i] = (dx[i + 1] - dx[i - 1]) / 2.0;
-		ddy[i] = (dy[i + 1] - dy[i - 1]) / 2.0;
-	}
-	ddx[0] = ddx[1];
-	ddx.back() = ddx[ddx.size() - 2];
-	ddy[0] = ddy[1];
-	ddy.back() = ddy[ddy.size() - 2];
-
-	std::vector<double> curvature(x_coords.size());
-	for(size_t i = 0; i < x_coords.size(); ++i) {
-		double numerator = std::abs(dx[i] * ddy[i] - dy[i] * ddx[i]);
-		double denom = std::pow(dx[i] * dx[i] + dy[i] * dy[i], 1.5);
-		if(denom < 1e-6)
-			denom = 1e-6; // evitar divisão por zero
-		curvature[i] = numerator / denom;
+	// Atualize o modelo cinemático para 6 estados
+	void MPCOptimizer::_kinematicModel(double &x, double &y, double &yaw, double &v, double &cte,
+	                                   double &epsi, double throttle, double steer,
+	                                   const std::vector<double> &poly_coeffs) const {
+		double f = 0.0, psides = 0.0;
+		if(!poly_coeffs.empty()) {
+			for(size_t i = 0; i < poly_coeffs.size(); ++i)
+				f += poly_coeffs[i] * std::pow(x, poly_coeffs.size() - 1 - i);
+			double df = 0.0;
+			for(size_t i = 0; i < poly_coeffs.size() - 1; ++i)
+				df += (poly_coeffs.size() - 1 - i) * poly_coeffs[i] *
+				      std::pow(x, poly_coeffs.size() - 2 - i);
+			psides = std::atan(df);
+		}
+		x += v * std::cos(yaw) * MPCConfig::dt;
+		y += v * std::sin(yaw) * MPCConfig::dt;
+		yaw += (v / MPCConfig::wheelbase) * std::tan(steer) * MPCConfig::dt;
+		v += throttle * MPCConfig::dt;
+		cte = f - y + v * std::sin(epsi) * MPCConfig::dt;
+		epsi = yaw - psides + (v / MPCConfig::wheelbase) * std::tan(steer) * MPCConfig::dt;
+		yaw = _normalizeAngle(yaw);
+		epsi = _normalizeAngle(epsi);
+		v = std::max(0.0, std::min(v, 10.0));
 	}
 
-	// Retorna a média da curvatura
-	double sum = std::accumulate(curvature.begin(), curvature.end(), 0.0);
-	return sum / curvature.size();
-}
+	double MPCOptimizer::_calculateCurveCurvature(const std::vector<double> &x_coords,
+	                                              const std::vector<double> &y_coords) const {
+		if(x_coords.size() < 3 || y_coords.size() < 3)
+			return 0.0;
 
-std::vector<double> MPCOptimizer::_predictStateWithLatency(double x0, double y0, double yaw0,
-                                                           double v0, double throttle, double steer,
-                                                           double latency) const {
-	// Prever estado futuro considerando latência
-	double x = x0, y = y0, yaw = yaw0, v = v0;
-	double cte = 0.0, epsi = 0.0; // Para compatibilidade com novo modelo
-	double steps = latency / MPCConfig::dt;
+		std::vector<double> dx(x_coords.size()), dy(y_coords.size());
+		std::vector<double> ddx(x_coords.size()), ddy(y_coords.size());
 
-	// Use coeficientes vazios para predição de latência (simplificação)
-	std::vector<double> empty_coeffs;
+		// Cálculo das derivadas (gradiente simples)
+		for(size_t i = 1; i < x_coords.size() - 1; ++i) {
+			dx[i] = (x_coords[i + 1] - x_coords[i - 1]) / 2.0;
+			dy[i] = (y_coords[i + 1] - y_coords[i - 1]) / 2.0;
+		}
+		dx[0] = dx[1];
+		dx.back() = dx[dx.size() - 2];
+		dy[0] = dy[1];
+		dy.back() = dy[dy.size() - 2];
 
-	for(int i = 0; i < (int)steps; ++i) {
-		_kinematicModel(x, y, yaw, v, cte, epsi, throttle, steer, empty_coeffs);
+		for(size_t i = 1; i < dx.size() - 1; ++i) {
+			ddx[i] = (dx[i + 1] - dx[i - 1]) / 2.0;
+			ddy[i] = (dy[i + 1] - dy[i - 1]) / 2.0;
+		}
+		ddx[0] = ddx[1];
+		ddx.back() = ddx[ddx.size() - 2];
+		ddy[0] = ddy[1];
+		ddy.back() = ddy[ddy.size() - 2];
+
+		std::vector<double> curvature(x_coords.size());
+		for(size_t i = 0; i < x_coords.size(); ++i) {
+			double numerator = std::abs(dx[i] * ddy[i] - dy[i] * ddx[i]);
+			double denom = std::pow(dx[i] * dx[i] + dy[i] * dy[i], 1.5);
+			if(denom < 1e-6)
+				denom = 1e-6; // evitar divisão por zero
+			curvature[i] = numerator / denom;
+		}
+
+		// Retorna a média da curvatura
+		double sum = std::accumulate(curvature.begin(), curvature.end(), 0.0);
+		return sum / curvature.size();
 	}
 
-	return {x, y, yaw, v};
-}
+	std::vector<double> MPCOptimizer::_predictStateWithLatency(double x0, double y0, double yaw0,
+	                                                           double v0, double throttle,
+	                                                           double steer, double latency) const {
+		// Prever estado futuro considerando latência
+		double x = x0, y = y0, yaw = yaw0, v = v0;
+		double cte = 0.0, epsi = 0.0; // Para compatibilidade com novo modelo
+		double steps = latency / MPCConfig::dt;
+
+		// Use coeficientes vazios para predição de latência (simplificação)
+		std::vector<double> empty_coeffs;
+
+		for(int i = 0; i < (int)steps; ++i) {
+			_kinematicModel(x, y, yaw, v, cte, epsi, throttle, steer, empty_coeffs);
+		}
+
+		return {x, y, yaw, v};
+	}
