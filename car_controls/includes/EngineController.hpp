@@ -53,6 +53,10 @@ class EngineController : public QObject {
 		void set_speed(int speed);
 		void set_steering(int angle);
 
+		// === CRITICAL SAFETY: Emergency stop methods ===
+		void forcedMotorStop();       // Forces all motors to zero - bypasses all logic
+		void emergencyHardwareStop(); // Multiple redundant hardware stops
+
 	signals:
 		void directionUpdated(CarDirection newDirection);
 		void steeringUpdated(int newAngle);
