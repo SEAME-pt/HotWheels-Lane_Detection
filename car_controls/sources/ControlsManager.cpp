@@ -17,6 +17,8 @@
 
 #include "ControlsManager.hpp"
 #include <QDebug>
+#include <chrono>
+#include <condition_variable>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
