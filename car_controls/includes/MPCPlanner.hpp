@@ -36,7 +36,9 @@ class MPCPlanner {
 		                                               int img_width, int img_height) const;
 
 		// Novo método para acessar a trajetória prevista do MPC
-		const std::vector<Point2D>& getPredictedTrajectory() const { return _optimizer.getPredictedTrajectory(); }
+		const std::vector<Point2D> &getPredictedTrajectory() const {
+			return _optimizer.getPredictedTrajectory();
+		}
 };
 
 #endif /* !MPCPlanner */

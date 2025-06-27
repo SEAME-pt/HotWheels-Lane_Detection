@@ -1,15 +1,15 @@
-#include <iostream>
-#include <fstream>
-#include <vector>
-#include <opencv2/opencv.hpp>
-#include <opencv2/cudawarping.hpp>
-#include <opencv2/cudaimgproc.hpp>
-#include <opencv2/highgui.hpp>
-#include <opencv2/core/cuda.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-#include <cuda_runtime.h>
 #include <NvInfer.h>
 #include <chrono>
+#include <cuda_runtime.h>
+#include <fstream>
+#include <iostream>
+#include <opencv2/core/cuda.hpp>
+#include <opencv2/cudaimgproc.hpp>
+#include <opencv2/cudawarping.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/opencv.hpp>
+#include <vector>
 
 /**
  * @class LabelManager

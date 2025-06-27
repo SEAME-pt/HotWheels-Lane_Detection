@@ -258,7 +258,8 @@ cv::cuda::GpuMat TensorRTInferencer::makePrediction(const cv::cuda::GpuMat &gpuI
 		height = static_cast<int>(outputDims.d[0]);
 		width = static_cast<int>(outputDims.d[1]);
 	} else {
-		std::cerr << "[TensorRTInferencer] Unsupported output dimensions: " << outputDims.nbDims << std::endl;
+		std::cerr << "[TensorRTInferencer] Unsupported output dimensions: " << outputDims.nbDims
+		          << std::endl;
 		throw std::runtime_error("Unsupported output tensor dimensions");
 	}
 

@@ -18,6 +18,8 @@
 #include "ControlsManager.hpp"
 #include "Debugger.hpp"
 #include <QDebug>
+#include <chrono>
+#include <condition_variable>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -456,9 +458,8 @@ void ControlsManager::autonomousControlLoop() {
 				          << "%, Final=" << final_throttle_pct << "%, Steering=" << steer_angle
 				          << "° (MPC raw: " << std::fixed << std::setprecision(3) << control.steer
 				          << " rad)" << std::endl;
-				std::cout << "[MPC DEBUG] Throttle: " << control.throttle << " → " << final_throttle
-				          << ", Steering: " << control.steer << " rad → " << steer_angle << "°"
-				          << std::endl;
+				INFO_STREAM("ControlsManager") << "[MPC DEBUG] Throttle: " << control.throttle << " → " << final_throttle
+						  << ", Steering: " << control.steer << " rad → " << steer_angle << "°";
 			}
 
 			// Apply controls to hardware

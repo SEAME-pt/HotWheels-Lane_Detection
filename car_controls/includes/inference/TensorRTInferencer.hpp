@@ -3,21 +3,21 @@
 #include <string>
 #include <vector>
 
-#include <opencv2/opencv.hpp>
 #include <opencv2/cudaimgproc.hpp>
 #include <opencv2/cudawarping.hpp>
+#include <opencv2/opencv.hpp>
 
 #include <NvInfer.h>
-#include <cuda_runtime_api.h>
 #include <cuda_fp16.h>
+#include <cuda_runtime_api.h>
 
 #include "IInferencer.hpp"
-#include "LanePostProcessor.hpp"
 #include "LaneCurveFitter.hpp"
+#include "LanePostProcessor.hpp"
 #include "Logger.hpp"
 
-#include "../../../ZeroMQ/Subscriber.hpp"
 #include "../../../ZeroMQ/Publisher.hpp"
+#include "../../../ZeroMQ/Subscriber.hpp"
 
 class TensorRTInferencer : public IInferencer {
 	private:

@@ -141,6 +141,7 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
 	// Inicialização mais inteligente baseada no estado atual
 	std::vector<double> u0(2 * MPCConfig::horizon, 0.0);
 
+
 	// Calcular steering inicial baseado no cte e epsi
 	double initial_steering = 0.0;
 	if(std::abs(cte0) > 0.01 || std::abs(epsi0) > 0.05) {
@@ -157,10 +158,13 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
 		}
 	}
 
+
 	for(int i = 0; i < MPCConfig::horizon; ++i) {
+		u0[2 * i] = 0.3;                                    // throttle moderado
 		u0[2 * i] = 0.3;                                    // throttle moderado
 		u0[2 * i + 1] = initial_steering * (1.0 - i * 0.1); // steering com decay
 	}
+
 
 	if(debug_this_call) {
 		std::ostringstream msg;
@@ -187,6 +191,7 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
 			}
 			return {0.2, 0.0};
 		}
+
 
 		if(debug_this_call) {
 			Debugger::getInstance()->logMPCControls(u0[0], u0[1], min_cost);
@@ -291,11 +296,13 @@ double MPCOptimizer::_costFunction(const std::vector<double> &u, const std::vect
 
 	double total_cte_cost = 0.0, total_epsi_cost = 0.0, total_steer_cost = 0.0;
 
+
 	for(int t = 0; t < MPCConfig::horizon; ++t) {
 		double throttle = u[2 * t];
 		double steer = u[2 * t + 1];
 		// Modelo 6 estados usando coeficientes armazenados
 		_kinematicModel(x, y, yaw, v, cte, epsi, throttle, steer, _current_poly_coeffs);
+
 
 		// Penalizar cte e epsi explicitamente
 		double cte_cost = w_cte * cte * cte;
@@ -327,8 +334,12 @@ double MPCOptimizer::_costFunction(const std::vector<double> &u, const std::vect
 		}
 	}
 
+
 	// Debug ocasional para diagnosticar problemas
 	static int cost_debug_counter = 0;
+	if(++cost_debug_counter % 1000 == 0) {
+		std::cout << "[Cost Debug] Total cost: " << cost << " CTE: " << total_cte_cost
+		          << " EPSI: " << total_epsi_cost << " Steer: " << total_steer_cost
 	if(++cost_debug_counter % 1000 == 0) {
 		std::cout << "[Cost Debug] Total cost: " << cost << " CTE: " << total_cte_cost
 		          << " EPSI: " << total_epsi_cost << " Steer: " << total_steer_cost
