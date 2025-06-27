@@ -1,19 +1,19 @@
-#include <iostream>
-#include <fstream>
-#include <vector>
-#include <opencv2/opencv.hpp>
-#include <opencv2/cudawarping.hpp>
-#include <opencv2/cudaimgproc.hpp>
-#include <opencv2/highgui.hpp>
-#include <opencv2/core/cuda.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-#include <cuda_runtime.h>
+#include "../../../ZeroMQ/Publisher.hpp"
+#include "../../../ZeroMQ/Subscriber.hpp"
+#include "../inference/Logger.hpp"
+#include "LabelManager.hpp"
 #include <NvInfer.h>
 #include <chrono>
-#include "LabelManager.hpp"
-#include "../inference/Logger.hpp"
-#include "../../../ZeroMQ/Subscriber.hpp"
-#include "../../../ZeroMQ/Publisher.hpp"
+#include <cuda_runtime.h>
+#include <fstream>
+#include <iostream>
+#include <opencv2/core/cuda.hpp>
+#include <opencv2/cudaimgproc.hpp>
+#include <opencv2/cudawarping.hpp>
+#include <opencv2/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/opencv.hpp>
+#include <vector>
 
 using namespace nvinfer1;
 
