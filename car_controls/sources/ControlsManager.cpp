@@ -420,8 +420,24 @@ void ControlsManager::autonomousControlLoop() {
 			}
 
 			// 6. Apply controls with safety limits
-			int throttle_pct = static_cast<int>(std::clamp(control.throttle * 100, 0.0, 50.0));
-			int steer_angle = static_cast<int>(std::clamp(control.steer * 45, -45.0, 45.0));
+			int throttle_pct = static_cast<int>(std::clamp(control.throttle * 100, 0.0, 20.0)); // REDUZIDO para 20% máximo
+			
+			// === SERVO PROTECTION: Limite extremamente baixo para proteger servo frágil ===
+			int steer_angle = static_cast<int>(std::clamp(control.steer * 15, -15.0, 15.0)); // REDUZIDO para ±15° máximo
+			
+			// === SERVO PROTECTION: Rate limiting para evitar movimentos bruscos ===
+			static int last_servo_angle = 0;
+			int max_servo_change = 2; // Máximo 2° por iteração (muito suave)
+			int servo_diff = steer_angle - last_servo_angle;
+			
+			if(std::abs(servo_diff) > max_servo_change) {
+				steer_angle = last_servo_angle + (servo_diff > 0 ? max_servo_change : -max_servo_change);
+				if(control_counter % 20 == 0) {
+					std::cout << "[SERVO PROTECTION] Limitando mudança de " 
+					          << servo_diff << "° para " << (steer_angle - last_servo_angle) << "°" << std::endl;
+				}
+			}
+			last_servo_angle = steer_angle;
 
 			// === SOFT START: Apply gradual acceleration to prevent sudden motor movement ===
 			double target_throttle = throttle_pct / 100.0; // Convert to 0-1 range
@@ -435,7 +451,9 @@ void ControlsManager::autonomousControlLoop() {
 			if(control_counter % 40 == 0) {
 				std::cout << "Controls: Target=" << throttle_pct
 				          << "%, Final=" << final_throttle_pct << "%, Steering=" << steer_angle
-				          << "°" << std::endl;
+				          << "° (MPC raw: " << std::fixed << std::setprecision(3) << control.steer << " rad)" << std::endl;
+				std::cout << "[MPC DEBUG] Throttle: " << control.throttle << " → " << final_throttle
+				          << ", Steering: " << control.steer << " rad → " << steer_angle << "°" << std::endl;
 			}
 
 			// Apply controls to hardware

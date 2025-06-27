@@ -40,13 +40,13 @@
 
 // === CONFIGURATION MACROS FOR EASY ADJUSTMENT ===
 #ifndef DEFAULT_CONSTANT_SPEED_KMH
-#define DEFAULT_CONSTANT_SPEED_KMH 2 // km/h - Target speed in km/h (will be converted to m/s)
+#define DEFAULT_CONSTANT_SPEED_KMH 2.0 // km/h - Velocidade normal dos motores
 #endif
 #ifndef DEFAULT_CONSTANT_SPEED
 #define DEFAULT_CONSTANT_SPEED (DEFAULT_CONSTANT_SPEED_KMH / 3.6) // Auto conversion to m/s
 #endif
 #ifndef DEFAULT_CONSTANT_THROTTLE
-#define DEFAULT_CONSTANT_THROTTLE 0.15 // Throttle value (0.0 to 1.0) for constant speed mode
+#define DEFAULT_CONSTANT_THROTTLE 0.15 // Throttle normal (15%) - motores são robustos
 #endif
 
 /*!
@@ -149,10 +149,9 @@ class ControlsManager : public QObject {
 		struct SoftStartConfig {
 				bool enabled = true;
 				double max_throttle_change_per_step =
-				    0.01; // Maximum throttle change per control loop iteration (1% per step)
-				double initial_throttle_limit =
-				    0.05; // Maximum throttle during first few seconds (5%)
-				double warmup_duration_seconds = 3.0; // Duration of soft start period
+				    0.01; // 1% por iteração - aceleração normal do motor
+				double initial_throttle_limit = 0.05; // 5% máximo durante aquecimento
+				double warmup_duration_seconds = 3.0; // 3 segundos de aquecimento
 				double current_throttle_output = 0.0; // Current actual throttle being applied
 				std::chrono::steady_clock::time_point start_time; // When autonomous mode started
 		} m_softStart;

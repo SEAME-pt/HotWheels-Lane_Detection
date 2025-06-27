@@ -21,20 +21,20 @@
 //
 // DEFAULT_CONSTANT_SPEED_KMH: Velocidade alvo em km/h (será convertida automaticamente para m/s)
 //   - Valores seguros: 1 a 5 km/h
-//   - Valor padrão: 2 km/h (velocidade muito segura para testes)
+//   - Valor padrão: 2 km/h (velocidade normal para testes)
 //   - Para testes mais rápidos: 4 km/h
 //
 // DEFAULT_CONSTANT_THROTTLE: Valor do throttle (0.0 a 1.0) para velocidade constante
-//   - Valores seguros: 0.1 a 0.3
-//   - Valor padrão: 0.15 (15% de potência - muito seguro)
-//   - Para mais velocidade: 0.25 (25% de potência)
-//   - ATENÇÃO: Valores acima de 0.3 podem ser perigosos!
+//   - Valores seguros: 0.1 a 0.5 (motores são robustos)
+//   - Valor padrão: 0.15 (15% de potência)
+//   - Para mais velocidade: 0.3 (30% de potência)
+//   - NOTA: Throttle NÃO afeta o servo - apenas os motores das rodas
 //
-#define DEFAULT_CONSTANT_SPEED_KMH 1 // km/h - Target speed in km/h (will be converted to m/s)
+#define DEFAULT_CONSTANT_SPEED_KMH 2.0 // km/h - Velocidade normal dos motores
 #define DEFAULT_CONSTANT_SPEED (DEFAULT_CONSTANT_SPEED_KMH / 3.6) // Auto conversion to m/s
-#define DEFAULT_CONSTANT_THROTTLE 0.15 // Throttle value (0.0 to 1.0) for constant speed mode
-#define MIN_SAFE_SPEED_KMH 0.5         // km/h - Minimum safe speed
-#define MAX_SAFE_SPEED_KMH 7.0         // km/h - Maximum safe speed for testing
+#define DEFAULT_CONSTANT_THROTTLE 0.15            // Throttle normal (15%) - motores são robustos
+#define MIN_SAFE_SPEED_KMH 0.2                    // km/h - Minimum safe speed
+#define MAX_SAFE_SPEED_KMH 2.0                    // km/h - REDUZIDO para proteger servo frágil
 #define MIN_SAFE_SPEED (MIN_SAFE_SPEED_KMH / 3.6) // Auto conversion to m/s
 #define MAX_SAFE_SPEED (MAX_SAFE_SPEED_KMH / 3.6) // Auto conversion to m/s
 
