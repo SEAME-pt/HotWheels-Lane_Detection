@@ -17,14 +17,14 @@
 #include "PeripheralController.hpp"
 #include <QDebug>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <fcntl.h>
+#include <iostream>
 #include <linux/i2c-dev.h>
 #include <sys/ioctl.h>
-#include <unistd.h>
-#include <chrono>
 #include <thread>
-#include <iostream>
+#include <unistd.h>
 
 /*!
  * @brief Clamps a value to a given range.
