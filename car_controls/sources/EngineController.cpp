@@ -14,6 +14,7 @@
  */
 
 #include "EngineController.hpp"
+#include "Debugger.hpp"
 #include "PeripheralController.hpp"
 #include <QDebug>
 #include <atomic>
@@ -117,7 +118,7 @@ void EngineController::setDirection(CarDirection newDirection) {
  */
 
 void EngineController::set_speed(int speed) {
-
+	// MOTOR: Funcionamento normal - motores são robustos e aceitam inputs extremos
 	speed = clamp(speed, -100, 100);
 	int pwm_value = static_cast<int>(std::abs(speed) / 100.0 * 4096);
 
@@ -138,20 +139,10 @@ void EngineController::set_speed(int speed) {
 		pcontrol->set_motor_pwm(7, pwm_value);
 		setDirection(CarDirection::Drive);
 	} else { // Stop - CRITICAL SAFETY: Force all motor channels to 0
-
 		// Force ALL motor channels to 0 for safety
 		for(int channel = 0; channel <= 15; ++channel) { // Expanded range for safety
 			pcontrol->set_motor_pwm(channel, 0);
 		}
-
-		// Double-check critical motor channels
-		pcontrol->set_motor_pwm(0, 0); // Motor channel 0
-		pcontrol->set_motor_pwm(1, 0); // Motor channel 1
-		pcontrol->set_motor_pwm(2, 0); // Motor channel 2
-		pcontrol->set_motor_pwm(5, 0); // Motor channel 5
-		pcontrol->set_motor_pwm(6, 0); // Motor channel 6
-		pcontrol->set_motor_pwm(7, 0); // Motor channel 7
-
 		setDirection(CarDirection::Stop);
 	}
 	m_current_speed = speed;
@@ -168,7 +159,37 @@ void EngineController::set_speed(int speed) {
  * the steeringUpdated signal.
  */
 void EngineController::set_steering(int angle) {
+	// === SERVO PROTECTION: Proteção específica para servo frágil ===
+	static const int SAFE_MAX_ANGLE = 20; // Limite seguro para proteger servo frágil
+	static int last_angle = 0;
+	static auto last_servo_time = std::chrono::steady_clock::now();
+
+	// Rate limiting temporal: mínimo 80ms entre comandos do servo
+	auto now = std::chrono::steady_clock::now();
+	auto elapsed =
+	    std::chrono::duration_cast<std::chrono::milliseconds>(now - last_servo_time).count();
+	if(elapsed < 80) {
+		// Comando muito rápido para o servo - usar último ângulo seguro
+		INFO_LOG("[SERVO PROTECTION] Comando muito rápido ("
+		         << elapsed << "ms) - aguardando para proteger servo");
+		return; // Não executar comando muito rápido
+	}
+
+	// Clamp inicial para limite de segurança do servo
+	angle = clamp(angle, -SAFE_MAX_ANGLE, SAFE_MAX_ANGLE);
+
+	// Rate limiting por mudança: máximo 5° por comando para proteger servo
+	int max_change = 5;
+	int angle_diff = angle - last_angle;
+	if(std::abs(angle_diff) > max_change) {
+		angle = last_angle + (angle_diff > 0 ? max_change : -max_change);
+		INFO_LOG("[SERVO PROTECTION] Limitando mudança de "
+		         << angle_diff << "° para " << (angle - last_angle) << "° (protegendo servo)");
+	}
+
+	// Aplicar clamp final do sistema original
 	angle = clamp(angle, -MAX_ANGLE, MAX_ANGLE);
+
 	int pwm = 0;
 	if(angle < 0) {
 		pwm = SERVO_CENTER_PWM + static_cast<int>((angle / static_cast<float>(MAX_ANGLE)) *
@@ -182,6 +203,14 @@ void EngineController::set_steering(int angle) {
 
 	pcontrol->set_servo_pwm(STEERING_CHANNEL, 0, pwm);
 	m_current_angle = angle;
+	last_angle = angle;
+	last_servo_time = now;
+
+	// Log apenas quando há mudança significativa
+	if(std::abs(angle_diff) > 1) {
+		INFO_LOG("[SERVO] Ângulo: " << angle << "° (PWM: " << pwm << ")");
+	}
+
 	emit this->steeringUpdated(angle);
 }
 

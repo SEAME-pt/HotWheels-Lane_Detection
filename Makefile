@@ -51,6 +51,7 @@ endif
 SOURCES = main.cpp \
 			ZeroMQ/Publisher.cpp \
 			ZeroMQ/Subscriber.cpp \
+			car_controls/sources/Debugger.cpp \
 			car_controls/sources/EngineController.cpp \
 			car_controls/sources/ControlsManager.cpp \
 			car_controls/sources/PeripheralController.cpp \

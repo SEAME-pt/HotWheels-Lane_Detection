@@ -14,6 +14,7 @@
  */
 
 #include "PeripheralController.hpp"
+#include "Debugger.hpp"
 
 /*!
  * @union i2c_smbus_data

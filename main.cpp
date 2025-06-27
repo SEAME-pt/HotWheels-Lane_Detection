@@ -1,3 +1,4 @@
+#include "Debugger.hpp"
 #include "ZeroMQ/Subscriber.hpp"
 #include "car_controls/includes/CommonTypes.hpp"
 #include "car_controls/includes/ControlsManager.hpp"
@@ -21,20 +22,20 @@
 //
 // DEFAULT_CONSTANT_SPEED_KMH: Velocidade alvo em km/h (será convertida automaticamente para m/s)
 //   - Valores seguros: 1 a 5 km/h
-//   - Valor padrão: 2 km/h (velocidade muito segura para testes)
+//   - Valor padrão: 2 km/h (velocidade normal para testes)
 //   - Para testes mais rápidos: 4 km/h
 //
 // DEFAULT_CONSTANT_THROTTLE: Valor do throttle (0.0 a 1.0) para velocidade constante
-//   - Valores seguros: 0.1 a 0.3
-//   - Valor padrão: 0.15 (15% de potência - muito seguro)
-//   - Para mais velocidade: 0.25 (25% de potência)
-//   - ATENÇÃO: Valores acima de 0.3 podem ser perigosos!
+//   - Valores seguros: 0.1 a 0.5 (motores são robustos)
+//   - Valor padrão: 0.15 (15% de potência)
+//   - Para mais velocidade: 0.3 (30% de potência)
+//   - NOTA: Throttle NÃO afeta o servo - apenas os motores das rodas
 //
-#define DEFAULT_CONSTANT_SPEED_KMH 1 // km/h - Target speed in km/h (will be converted to m/s)
+#define DEFAULT_CONSTANT_SPEED_KMH 2.0 // km/h - Velocidade normal dos motores
 #define DEFAULT_CONSTANT_SPEED (DEFAULT_CONSTANT_SPEED_KMH / 3.6) // Auto conversion to m/s
-#define DEFAULT_CONSTANT_THROTTLE 0.15 // Throttle value (0.0 to 1.0) for constant speed mode
-#define MIN_SAFE_SPEED_KMH 0.5         // km/h - Minimum safe speed
-#define MAX_SAFE_SPEED_KMH 7.0         // km/h - Maximum safe speed for testing
+#define DEFAULT_CONSTANT_THROTTLE 0.15            // Throttle normal (15%) - motores são robustos
+#define MIN_SAFE_SPEED_KMH 0.2                    // km/h - Minimum safe speed
+#define MAX_SAFE_SPEED_KMH 2.0                    // km/h - REDUZIDO para proteger servo frágil
 #define MIN_SAFE_SPEED (MIN_SAFE_SPEED_KMH / 3.6) // Auto conversion to m/s
 #define MAX_SAFE_SPEED (MAX_SAFE_SPEED_KMH / 3.6) // Auto conversion to m/s
 
@@ -57,16 +58,16 @@ void emergencyMotorStop() {
 			std::cout << "[EMERGENCY] Motors stopped successfully" << std::endl;
 
 		} catch(const std::exception &e) {
-			std::cerr << "[EMERGENCY] Error stopping motors: " << e.what() << std::endl;
+			ERROR_STREAM("Main") << "[EMERGENCY] Error stopping motors: " << e.what();
 			// Try direct hardware stop as last resort
 			try {
 				std::cout << "[EMERGENCY] Attempting direct motor stop..." << std::endl;
 				g_emergency_controls->emergencyMotorStop();
 			} catch(...) {
-				std::cerr << "[EMERGENCY] CRITICAL: All motor stop attempts failed!" << std::endl;
+				ERROR_LOG("Main", "[EMERGENCY] CRITICAL: All motor stop attempts failed!");
 			}
 		} catch(...) {
-			std::cerr << "[EMERGENCY] Unknown error stopping motors" << std::endl;
+			ERROR_LOG("Main", "[EMERGENCY] Unknown error stopping motors");
 		}
 	} else {
 		std::cout << "[EMERGENCY] No controls manager available for motor stop" << std::endl;
@@ -196,7 +197,7 @@ class MPCIntegratedApp : public QObject {
 					// Continue without local inference - will use remote inference
 				}
 			} catch(const std::exception &e) {
-				std::cerr << "[MPCIntegratedApp] Initialization error: " << e.what() << std::endl;
+				ERROR_STREAM("Main") << "[MPCIntegratedApp] Initialization error: " << e.what();
 				throw;
 			}
 		}
@@ -292,9 +293,9 @@ class MPCIntegratedApp : public QObject {
 				std::cout << "[~MPCIntegratedApp] Cleanup complete" << std::endl;
 
 			} catch(const std::exception &e) {
-				std::cerr << "[~MPCIntegratedApp] Error during cleanup: " << e.what() << std::endl;
+				ERROR_STREAM("Main") << "[~MPCIntegratedApp] Error during cleanup: " << e.what();
 			} catch(...) {
-				std::cerr << "[~MPCIntegratedApp] Unknown error during cleanup" << std::endl;
+				ERROR_LOG("Main", "[~MPCIntegratedApp] Unknown error during cleanup");
 			}
 		}
 
@@ -473,7 +474,7 @@ class MPCIntegratedApp : public QObject {
 				// updateVehicleState(control.throttle, control.steer); // Now using ControlsManager
 				// state instead
 			} catch(const std::exception &e) {
-				std::cerr << "Erro no MPC: " << e.what() << std::endl;
+				ERROR_STREAM("Main") << "Erro no MPC: " << e.what();
 			}
 		}
 
@@ -845,7 +846,7 @@ class MPCIntegratedApp : public QObject {
 				}
 
 			} catch(const std::exception &e) {
-				std::cerr << "[getLaneDetectionFrame] Error: " << e.what() << std::endl;
+				ERROR_STREAM("Main") << "[getLaneDetectionFrame] Error: " << e.what();
 			}
 		}
 
@@ -1022,7 +1023,7 @@ class MPCIntegratedApp : public QObject {
 				}
 
 			} catch(const std::exception &e) {
-				std::cerr << "Visualization error: " << e.what() << std::endl;
+				ERROR_STREAM("Main") << "Visualization error: " << e.what();
 			}
 		}
 
@@ -1414,7 +1415,7 @@ class MPCIntegratedApp : public QObject {
 				            cv::Scalar(255, 255, 255), 2);
 
 			} catch(const std::exception &e) {
-				std::cerr << "[createLaneVisualization] Error: " << e.what() << std::endl;
+				ERROR_STREAM("Main") << "[createLaneVisualization] Error: " << e.what();
 				// Create a simple error visualization
 				m_processedFrame = cv::Mat::zeros(binary_mask.size(), CV_8UC3);
 				cv::putText(m_processedFrame, "Lane Processing Error",
@@ -1550,7 +1551,7 @@ class MPCIntegratedApp : public QObject {
 				}
 
 			} catch(const std::exception &e) {
-				std::cerr << "[generateMPCTrajectory] Error: " << e.what() << std::endl;
+				ERROR_STREAM("Main") << "[generateMPCTrajectory] Error: " << e.what();
 			}
 		}
 
@@ -1665,7 +1666,7 @@ class MPCIntegratedApp : public QObject {
 				            cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 255, 255), 1);
 
 			} catch(const std::exception &e) {
-				std::cerr << "[drawTrajectoryVisualization] Error: " << e.what() << std::endl;
+				ERROR_STREAM("Main") << "[drawTrajectoryVisualization] Error: " << e.what();
 				// Draw error message
 				cv::putText(m_visualizationFrame, "Trajectory Error",
 				            cv::Point(region.x + 50, region.y + region.height / 2),
@@ -1749,7 +1750,7 @@ int main(int argc, char *argv[]) {
 		try {
 			integrated_app = std::make_unique<MPCIntegratedApp>(argc, argv);
 		} catch(const std::exception &e) {
-			std::cerr << "Failed to initialize application: " << e.what() << std::endl;
+			ERROR_STREAM("Main") << "Failed to initialize application: " << e.what();
 			return 1;
 		}
 
@@ -1793,23 +1794,23 @@ int main(int argc, char *argv[]) {
 			try {
 				Publisher::destroyAll();
 			} catch(const std::exception &e) {
-				std::cerr << "[main] Warning during Publisher cleanup: " << e.what() << std::endl;
+				ERROR_STREAM("Main") << "[main] Warning during Publisher cleanup: " << e.what();
 			}
 
 			std::cout << "[main] Application cleanup complete" << std::endl;
 		} catch(const std::exception &e) {
-			std::cerr << "[main] Error during cleanup: " << e.what() << std::endl;
+			ERROR_STREAM("Main") << "[main] Error during cleanup: " << e.what();
 		}
 
 		return result;
 
 	} catch(const std::exception &e) {
-		std::cerr << "Erro: " << e.what() << std::endl;
+		ERROR_STREAM("Main") << "Erro: " << e.what();
 		try {
 			cv::destroyAllWindows();
 			Publisher::destroyAll();
 		} catch(...) {
-			std::cerr << "[main] Additional errors during exception cleanup" << std::endl;
+			ERROR_LOG("Main", "[main] Additional errors during exception cleanup");
 		}
 		return 1;
 	}

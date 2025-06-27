@@ -36,7 +36,8 @@ class Polyfitter {
 		static constexpr double EPS = 5.0;
 		static constexpr int MIN_SAMPLES = 5;
 		static constexpr int NUM_WINDOWS = 40;
-		static constexpr double STRAIGHT_LINE_THRESHOLD = 0.98;
+		static constexpr double STRAIGHT_LINE_THRESHOLD =
+		    0.999; // Mais restritivo para detectar curvas
 		static constexpr double CURVE_THRESHOLD = 0.0012;
 		static constexpr int LANE_WIDTH_PX = 300;
 

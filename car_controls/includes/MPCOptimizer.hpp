@@ -4,9 +4,13 @@
 #include "CommonTypes.hpp"
 #include "MPCConfig.hpp"
 #include <cmath>
+#include <ctime>
 #include <experimental/filesystem>
+#include <fstream>
+#include <iomanip>
 #include <nlopt.hpp>
 #include <numeric>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -22,6 +26,11 @@ class MPCOptimizer {
 		const LaneInfo *_current_lane_info;
 		std::vector<double> _current_poly_coeffs; // Add this line
 		std::vector<Point2D> _predicted_trajectory;
+
+		// Debug system (simplified - uses centralized Debugger)
+		bool debug_enabled;
+		bool output_debug_to_file;
+		int debug_counter;
 
 	public:
 		MPCOptimizer(void);
@@ -42,6 +51,14 @@ class MPCOptimizer {
 		}
 		const std::vector<Point2D> &getPredictedTrajectory() const {
 			return _predicted_trajectory;
+		}
+
+		// Debug methods (simplified - uses centralized Debugger)
+		void enableDebug(bool enable = true) {
+			debug_enabled = enable;
+		}
+		void setDebugOutputToFile(bool enable = true) {
+			output_debug_to_file = enable;
 		}
 
 		// Declaração da função solve

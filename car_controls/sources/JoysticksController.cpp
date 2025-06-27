@@ -16,6 +16,7 @@
  */
 
 #include "JoysticksController.hpp"
+#include "Debugger.hpp"
 #include <QDebug>
 #include <QThread>
 
@@ -58,7 +59,7 @@ JoysticksController::~JoysticksController() {
  */
 bool JoysticksController::init() {
 	if(SDL_Init(SDL_INIT_JOYSTICK) < 0) {
-		qDebug() << "Failed to initialize SDL:" << SDL_GetError();
+		INFO_STREAM("JoysticksController") << "Failed to initialize SDL: " << SDL_GetError();
 		return false;
 	}
 
@@ -92,7 +93,7 @@ void JoysticksController::processInput() {
 	m_running = true;
 
 	if(!m_joystick) {
-		qDebug() << "Joystick not initialized.";
+		INFO_LOG("JoysticksController", "Joystick not initialized.");
 		emit finished();
 		return;
 	}
@@ -111,7 +112,7 @@ void JoysticksController::processInput() {
 		QThread::msleep(10);
 	}
 
-	// qDebug() << "Joystick controller loop finished.";
+	// INFO_LOG("JoysticksController", "Joystick controller loop finished.");
 	emit finished();
 }
 

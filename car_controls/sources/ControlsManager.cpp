@@ -16,6 +16,7 @@
  */
 
 #include "ControlsManager.hpp"
+#include "Debugger.hpp"
 #include <QDebug>
 #include <chrono>
 #include <condition_variable>
@@ -58,7 +59,7 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
 	    });
 
 	if(!m_manualController->init()) {
-		qDebug() << "Failed to initialize joystick controller.";
+		ERROR_LOG("ControlsManager", "Failed to initialize joystick controller");
 		return;
 	}
 
@@ -79,7 +80,7 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
 			m_cameraStreamerObject = new CameraStreamer(0.5);
 			m_cameraStreamerObject->start();
 		} catch(const std::exception &e) {
-			std::cerr << "Error: " << e.what() << std::endl;
+			ERROR_STREAM("ControlsManager") << "Error: " << e.what();
 		}
 	});
 	m_cameraStreamerThread->start();
@@ -117,7 +118,7 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
 					}
 				}
 			} catch(const zmq::error_t &e) {
-				std::cerr << "[Subscriber] ZMQ error: " << e.what() << std::endl;
+				ERROR_STREAM("ControlsManager") << "[Subscriber] ZMQ error: " << e.what();
 				break; // exit safely if socket is closed
 			}
 		}
@@ -135,8 +136,7 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
 	m_obstacleSubscriber = std::make_unique<Subscriber>();
 	m_obstacleDataThread = QThread::create([this]() { obstacleDataUpdateLoop(); });
 	m_obstacleDataThread->start();
-
-	qDebug() << "ControlsManager initialized with optimized thread architecture";
+	INFO_LOG("ControlsManager", "ControlsManager initialized with optimized thread architecture");
 }
 
 /*!
@@ -157,7 +157,7 @@ ControlsManager::~ControlsManager() {
 		m_engineController.emergencyHardwareStop();
 		std::cout << "[~ControlsManager] Motors stopped successfully" << std::endl;
 	} catch(const std::exception &e) {
-		std::cerr << "[~ControlsManager] Error stopping motors: " << e.what() << std::endl;
+		ERROR_STREAM("ControlsManager") << "[~ControlsManager] Error stopping motors: " << e.what();
 		// Try direct engine stop as fallback
 		try {
 			m_engineController.set_speed(0);
@@ -297,14 +297,14 @@ void ControlsManager::stopAutonomousControl() {
 	if(!m_autonomousMode)
 		return;
 
-	qDebug() << "Stopping autonomous control...";
+	INFO_LOG("ControlsManager", "Stopping autonomous control...");
 
 	m_autonomousMode = false;
 
 	if(m_autonomousControlThread) {
 		m_autonomousControlThread->quit();
 		if(!m_autonomousControlThread->wait(2000)) {
-			qDebug() << "Warning: Autonomous thread did not finish gracefully";
+			WARNING_LOG("ControlsManager", "Autonomous thread did not finish gracefully");
 			m_autonomousControlThread->terminate();
 			m_autonomousControlThread->wait(1000);
 		}
@@ -319,8 +319,7 @@ void ControlsManager::stopAutonomousControl() {
 
 	m_engineController.set_speed(0);
 	m_engineController.set_steering(0);
-
-	qDebug() << "Autonomous control stopped successfully";
+	INFO_LOG("ControlsManager", "Autonomous control stopped successfully");
 }
 
 void ControlsManager::autonomousControlLoop() {
@@ -330,14 +329,14 @@ void ControlsManager::autonomousControlLoop() {
 	// Add external reference to global running flag
 	extern std::atomic<bool> g_running;
 
-	qDebug() << "Autonomous control loop started with optimized architecture";
+	INFO_LOG("ControlsManager", "Autonomous control loop started with optimized architecture");
 
 	while(m_autonomousMode && m_running && g_running.load()) {
 		// CRITICAL SAFETY: Check emergency stop flag first
 		if(m_emergencyStop.load()) {
 			m_engineController.set_speed(0);
 			m_engineController.set_steering(0);
-			qDebug() << "Emergency stop is active - motors stopped";
+			INFO_LOG("ControlsManager", "Emergency stop is active - motors stopped");
 			std::this_thread::sleep_for(std::chrono::milliseconds(50));
 			continue;
 		}
@@ -367,7 +366,8 @@ void ControlsManager::autonomousControlLoop() {
 		}
 
 		if(control_counter % 40 == 0) { // Log every 40th iteration (every ~2 seconds)
-			qDebug() << "Autonomous control loop #" << control_counter << "- Using cached data";
+			INFO_STREAM("ControlsManager")
+			    << "Autonomous control loop #" << control_counter << "- Using cached data";
 		}
 
 		try {
@@ -390,7 +390,7 @@ void ControlsManager::autonomousControlLoop() {
 			if(getCachedEmergencyStop()) {
 				m_engineController.set_speed(0);
 				if(control_counter % 40 == 0) {
-					qDebug() << "Emergency stop activated!";
+					INFO_LOG("ControlsManager", "Emergency stop activated!");
 				}
 				continue;
 			}
@@ -422,8 +422,27 @@ void ControlsManager::autonomousControlLoop() {
 			}
 
 			// 6. Apply controls with safety limits
-			int throttle_pct = static_cast<int>(std::clamp(control.throttle * 100, 0.0, 50.0));
-			int steer_angle = static_cast<int>(std::clamp(control.steer * 45, -45.0, 45.0));
+			int throttle_pct = static_cast<int>(
+			    std::clamp(control.throttle * 100, 0.0, 20.0)); // REDUZIDO para 20% máximo
+
+			// === SERVO PROTECTION: Limite extremamente baixo para proteger servo frágil ===
+			int steer_angle = static_cast<int>(
+			    std::clamp(control.steer * 15, -15.0, 15.0)); // REDUZIDO para ±15° máximo
+
+			// === SERVO PROTECTION: Rate limiting para evitar movimentos bruscos ===
+			static int last_servo_angle = 0;
+			int max_servo_change = 2; // Máximo 2° por iteração (muito suave)
+			int servo_diff = steer_angle - last_servo_angle;
+
+			if(std::abs(servo_diff) > max_servo_change) {
+				steer_angle =
+				    last_servo_angle + (servo_diff > 0 ? max_servo_change : -max_servo_change);
+				if(control_counter % 20 == 0) {
+					std::cout << "[SERVO PROTECTION] Limitando mudança de " << servo_diff
+					          << "° para " << (steer_angle - last_servo_angle) << "°" << std::endl;
+				}
+			}
+			last_servo_angle = steer_angle;
 
 			// === SOFT START: Apply gradual acceleration to prevent sudden motor movement ===
 			double target_throttle = throttle_pct / 100.0; // Convert to 0-1 range
@@ -437,7 +456,11 @@ void ControlsManager::autonomousControlLoop() {
 			if(control_counter % 40 == 0) {
 				std::cout << "Controls: Target=" << throttle_pct
 				          << "%, Final=" << final_throttle_pct << "%, Steering=" << steer_angle
-				          << "°" << std::endl;
+				          << "° (MPC raw: " << std::fixed << std::setprecision(3) << control.steer
+				          << " rad)" << std::endl;
+				INFO_STREAM("ControlsManager")
+				    << "[MPC DEBUG] Throttle: " << control.throttle << " → " << final_throttle
+				    << ", Steering: " << control.steer << " rad → " << steer_angle << "°";
 			}
 
 			// Apply controls to hardware
@@ -448,13 +471,13 @@ void ControlsManager::autonomousControlLoop() {
 			m_engineController.set_steering(steer_angle);
 
 		} catch(const std::exception &e) {
-			std::cerr << "Autonomous control error: " << e.what() << std::endl;
-			qDebug() << "Autonomous control error:" << e.what();
+			ERROR_STREAM("ControlsManager") << "Autonomous control error: " << e.what();
+			INFO_STREAM("ControlsManager") << "Autonomous control error:" << e.what();
 			m_engineController.set_speed(0); // Safety stop
 		}
 	}
 
-	qDebug() << "Autonomous control loop ended";
+	INFO_LOG("ControlsManager", "Autonomous control loop ended");
 }
 
 // === ENHANCED: Vehicle state estimation with sensor fusion ===
@@ -589,9 +612,9 @@ std::vector<Point2D> ControlsManager::getWaypointsFromVision() {
 			}
 		}
 	} catch(const zmq::error_t &e) {
-		std::cerr << "[getWaypointsFromVision] ZMQ error: " << e.what() << std::endl;
+		ERROR_STREAM("ControlsManager") << "[getWaypointsFromVision] ZMQ error: " << e.what();
 	} catch(...) {
-		std::cerr << "[getWaypointsFromVision] Unknown error" << std::endl;
+		ERROR_LOG("ControlsManager", "[getWaypointsFromVision] Unknown error");
 	}
 
 	// Fallback: straight waypoints if no data received
@@ -632,9 +655,9 @@ LaneInfo ControlsManager::getLaneInfoFromVision() {
 			}
 		}
 	} catch(const zmq::error_t &e) {
-		std::cerr << "[getLaneInfoFromVision] ZMQ error: " << e.what() << std::endl;
+		ERROR_STREAM("ControlsManager") << "[getLaneInfoFromVision] ZMQ error: " << e.what();
 	} catch(...) {
-		std::cerr << "[getLaneInfoFromVision] Unknown error" << std::endl;
+		ERROR_LOG("ControlsManager", "[getLaneInfoFromVision] Unknown error");
 	}
 
 	return LaneInfo(0.0, 0.0); // fallback
@@ -660,9 +683,9 @@ bool ControlsManager::checkEmergencyObstacles() {
 			}
 		}
 	} catch(const zmq::error_t &e) {
-		std::cerr << "[checkEmergencyObstacles] ZMQ error: " << e.what() << std::endl;
+		ERROR_STREAM("ControlsManager") << "[checkEmergencyObstacles] ZMQ error: " << e.what();
 	} catch(...) {
-		std::cerr << "[checkEmergencyObstacles] Unknown error" << std::endl;
+		ERROR_LOG("ControlsManager", "[checkEmergencyObstacles] Unknown error");
 	}
 
 	return false; // Safe default
@@ -729,9 +752,9 @@ void ControlsManager::showVisionDebug() {
 			}
 		}
 	} catch(const zmq::error_t &e) {
-		std::cerr << "[showVisionDebug] ZMQ error: " << e.what() << std::endl;
+		ERROR_STREAM("ControlsManager") << "[showVisionDebug] ZMQ error: " << e.what();
 	} catch(...) {
-		std::cerr << "[showVisionDebug] Unknown error" << std::endl;
+		ERROR_LOG("ControlsManager", "[showVisionDebug] Unknown error");
 	}
 }
 
@@ -802,7 +825,7 @@ void ControlsManager::visionDataUpdateLoop() {
 	m_visionSubscriber->connect("tcp://localhost:5556");
 	m_visionSubscriber->subscribe("binary_mask");
 
-	qDebug() << "Vision data update thread started";
+	INFO_LOG("ControlsManager", "Vision data update thread started");
 
 	while(m_running && g_running.load()) {
 		auto now = std::chrono::steady_clock::now();
@@ -829,7 +852,7 @@ void ControlsManager::visionDataUpdateLoop() {
 			}
 
 		} catch(const std::exception &e) {
-			std::cerr << "Vision data update error: " << e.what() << std::endl;
+			ERROR_STREAM("ControlsManager") << "Vision data update error: " << e.what();
 			// Mark data as invalid on error
 			{
 				std::lock_guard<std::mutex> lock(m_cachedVisionData.mutex);
@@ -838,7 +861,7 @@ void ControlsManager::visionDataUpdateLoop() {
 		}
 	}
 
-	qDebug() << "Vision data update thread ended";
+	INFO_LOG("ControlsManager", "Vision data update thread ended");
 }
 
 void ControlsManager::obstacleDataUpdateLoop() {
@@ -851,7 +874,7 @@ void ControlsManager::obstacleDataUpdateLoop() {
 	m_obstacleSubscriber->connect("tcp://localhost:5557");
 	m_obstacleSubscriber->subscribe("emergency_stop");
 
-	qDebug() << "Obstacle data update thread started";
+	INFO_LOG("ControlsManager", "Obstacle data update thread started");
 
 	while(m_running && g_running.load()) {
 		auto now = std::chrono::steady_clock::now();
@@ -876,7 +899,7 @@ void ControlsManager::obstacleDataUpdateLoop() {
 			}
 
 		} catch(const std::exception &e) {
-			std::cerr << "Obstacle data update error: " << e.what() << std::endl;
+			ERROR_STREAM("ControlsManager") << "Obstacle data update error: " << e.what();
 			// Mark data as invalid on error
 			{
 				std::lock_guard<std::mutex> lock(m_cachedObstacleData.mutex);
@@ -885,14 +908,14 @@ void ControlsManager::obstacleDataUpdateLoop() {
 		}
 	}
 
-	qDebug() << "Obstacle data update thread ended";
+	INFO_LOG("ControlsManager", "Obstacle data update thread ended");
 }
 
 // === NEW: Enhanced sensor integration interface ===
 
 void ControlsManager::enableRealSensors(bool enable) {
 	m_stateEstimator.m_useRealSensors.store(enable);
-	qDebug() << "Real sensors" << (enable ? "enabled" : "disabled");
+	INFO_STREAM("ControlsManager") << "Real sensors " << (enable ? "enabled" : "disabled");
 }
 
 void ControlsManager::updateRealVelocity(double velocity) {
@@ -923,13 +946,15 @@ VehicleState ControlsManager::getVehicleStateWithDiagnostics() {
 	diagnostic_counter++;
 
 	if(diagnostic_counter % 50 == 0) { // Every ~2.5 seconds at 20Hz
-		qDebug() << "Vehicle State Diagnostics:";
-		qDebug() << "  Position: (" << state.x << ", " << state.y << ")";
-		qDebug() << "  Velocity: " << state.velocity << " m/s";
-		qDebug() << "  Yaw: " << state.yaw * 180.0 / M_PI << " degrees";
-		qDebug() << "  Real sensors: " << (m_stateEstimator.m_useRealSensors.load() ? "ON" : "OFF");
-		qDebug() << "  Applied throttle: " << m_lastThrottle.load();
-		qDebug() << "  Applied steering: " << m_lastSteering.load() * 180.0 / M_PI << " degrees";
+		INFO_LOG("ControlsManager", "Vehicle State Diagnostics:");
+		INFO_STREAM("ControlsManager") << "  Position: (" << state.x << ", " << state.y << ")";
+		INFO_STREAM("ControlsManager") << "  Velocity: " << state.velocity << " m/s";
+		INFO_STREAM("ControlsManager") << "  Yaw: " << state.yaw * 180.0 / M_PI << " degrees";
+		INFO_STREAM("ControlsManager")
+		    << "  Real sensors: " << (m_stateEstimator.m_useRealSensors.load() ? "ON" : "OFF");
+		INFO_STREAM("ControlsManager") << "  Applied throttle: " << m_lastThrottle.load();
+		INFO_STREAM("ControlsManager")
+		    << "  Applied steering: " << m_lastSteering.load() * 180.0 / M_PI << " degrees";
 	}
 
 	return state;
@@ -1053,13 +1078,13 @@ void ControlsManager::emergencyMotorStop() {
 		m_engineController.emergencyHardwareStop();
 
 	} catch(const std::exception &e) {
-		std::cerr << "[EMERGENCY] Error in primary stop: " << e.what() << std::endl;
+		ERROR_STREAM("ControlsManager") << "[EMERGENCY] Error in primary stop: " << e.what();
 
 		// Fallback: try forced stop
 		try {
 			m_engineController.forcedMotorStop();
 		} catch(...) {
-			std::cerr << "[EMERGENCY] CRITICAL: All motor stop methods failed!" << std::endl;
+			ERROR_LOG("ControlsManager", "[EMERGENCY] CRITICAL: All motor stop methods failed!");
 		}
 	}
 
@@ -1067,7 +1092,7 @@ void ControlsManager::emergencyMotorStop() {
 	try {
 		m_engineController.set_steering(0);
 	} catch(...) {
-		std::cerr << "[EMERGENCY] Warning: Could not center steering" << std::endl;
+		ERROR_LOG("ControlsManager", "[EMERGENCY] Warning: Could not center steering");
 	}
 
 	// Disable constant speed mode for safety
@@ -1099,14 +1124,15 @@ void ControlsManager::emergencyStop() {
 		std::cout << "*** PRIMARY EMERGENCY STOP COMPLETED ***" << std::endl;
 
 	} catch(const std::exception &e) {
-		std::cerr << "[EMERGENCY] Error in primary emergency stop: " << e.what() << std::endl;
+		ERROR_STREAM("ControlsManager")
+		    << "[EMERGENCY] Error in primary emergency stop: " << e.what();
 
 		// Fallback 1: Try forced motor stop
 		try {
 			m_engineController.forcedMotorStop();
 			std::cout << "*** FALLBACK FORCED STOP COMPLETED ***" << std::endl;
 		} catch(const std::exception &e2) {
-			std::cerr << "[EMERGENCY] Error in forced stop: " << e2.what() << std::endl;
+			ERROR_STREAM("ControlsManager") << "[EMERGENCY] Error in forced stop: " << e2.what();
 
 			// Fallback 2: Basic set_speed(0) calls
 			try {
@@ -1116,7 +1142,8 @@ void ControlsManager::emergencyStop() {
 				}
 				std::cout << "*** BASIC STOP FALLBACK COMPLETED ***" << std::endl;
 			} catch(...) {
-				std::cerr << "[EMERGENCY] CRITICAL: ALL MOTOR STOP METHODS FAILED!" << std::endl;
+				ERROR_LOG("ControlsManager",
+				          "[EMERGENCY] CRITICAL: ALL MOTOR STOP METHODS FAILED!");
 			}
 		}
 	}
@@ -1125,7 +1152,7 @@ void ControlsManager::emergencyStop() {
 	try {
 		m_engineController.set_steering(0);
 	} catch(...) {
-		std::cerr << "[EMERGENCY] Warning: Could not center steering" << std::endl;
+		ERROR_LOG("ControlsManager", "[EMERGENCY] Warning: Could not center steering");
 	}
 
 	std::cout << "*** EMERGENCY STOP COMPLETE - ALL SYSTEMS HALTED ***" << std::endl;

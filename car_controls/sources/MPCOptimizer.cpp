@@ -1,8 +1,17 @@
 #include "MPCOptimizer.hpp"
+#include "Debugger.hpp"
 #include "Polyfitter.hpp"
 
 MPCOptimizer::MPCOptimizer()
-    : _current_state(), _current_reference(), _current_lane_info(nullptr) {}
+    : _current_state(), _current_reference(), _current_lane_info(nullptr), debug_counter(0) {
+
+	// Initialize debug system
+	debug_enabled = false;
+	output_debug_to_file = true;
+
+	// Use centralized debugger instead of individual files
+	MPC_INFO("MPCOptimizer initialized for Jetracer (wheelbase=150mm)");
+}
 
 MPCOptimizer::MPCOptimizer(const MPCOptimizer &origin) {
 	*this = origin;
@@ -14,7 +23,9 @@ MPCOptimizer &MPCOptimizer::operator=(const MPCOptimizer &origin) {
 	return *this;
 }
 
-MPCOptimizer::~MPCOptimizer(void) {}
+MPCOptimizer::~MPCOptimizer(void) {
+	MPC_INFO("MPCOptimizer destroyed");
+}
 
 static double costWrapper(unsigned n, const double *x, double *grad, void *data) {
 	(void)grad; // Suppress unused parameter warning
@@ -33,11 +44,31 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
 	Polyfitter polyfitter;
 	std::vector<double> poly_coeffs = polyfitter.getPolynomialCoeffs(reference);
 
-	// Calcular cte e epsi iniciais
+	// Calcular cte e epsi iniciais baseado na posição real do veículo
 	double cte0 = 0.0, epsi0 = 0.0;
-	if(!poly_coeffs.empty()) {
-		cte0 = polyfitter.calculateCTE(poly_coeffs, x0, y0);
-		epsi0 = polyfitter.calculateEPSI(poly_coeffs, x0, yaw0);
+	if(!poly_coeffs.empty() && reference.size() > 0) {
+		// Usar a posição real do veículo para calcular erros
+		cte0 = polyfitter.calculateCTE(poly_coeffs, 0.0, y0);     // Veículo na origem X, erro em Y
+		epsi0 = polyfitter.calculateEPSI(poly_coeffs, 0.0, yaw0); // Orientação do veículo
+
+		// Se há trajetória válida mas CTE/EPSI são zero, calcular manualmente
+		if(std::abs(cte0) < 0.01 && std::abs(epsi0) < 0.01 && reference.size() >= 2) {
+			// Calcular erro cross-track baseado no primeiro ponto da trajetória
+			cte0 = reference[0].y; // Distância lateral do primeiro ponto
+
+			// Calcular erro de orientação baseado na direção da trajetória
+			if(reference.size() >= 2) {
+				double trajectory_angle =
+				    std::atan2(reference[1].y - reference[0].y, reference[1].x - reference[0].x);
+				epsi0 = yaw0 - trajectory_angle;
+
+				// Normalizar ângulo
+				while(epsi0 > M_PI)
+					epsi0 -= 2.0 * M_PI;
+				while(epsi0 < -M_PI)
+					epsi0 += 2.0 * M_PI;
+			}
+		}
 	}
 
 	// Tratar latência
@@ -68,19 +99,30 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
 	nlopt::opt optimizer(nlopt::LD_SLSQP, 2 * MPCConfig::horizon); // SLSQP é melhor para MPC
 
 	// Add debug to understand steering behavior
-	static int debug_counter = 0;
-	bool debug_this_call = (++debug_counter % 100 == 0); // Debug every 100th call
+	bool debug_this_call = (++debug_counter % 10 == 0); // Debug every 10th call
 
-	if(debug_this_call) {
-		std::cout << "[MPC Debug] Poly coefficients: ";
+	if(debug_this_call || debug_enabled) {
+		MPC_DEBUG("=== MPC SOLVE CALL " + std::to_string(debug_counter) + " ===");
+
+		// Log input state
+		Debugger::getInstance()->logMPCState(x0, y0, yaw0, v0, cte0, epsi0);
+
+		// Log polynomial coefficients
+		std::ostringstream poly_msg;
+		poly_msg << "Poly coefficients: ";
 		for(double coeff : poly_coeffs) {
-			std::cout << std::fixed << std::setprecision(3) << coeff << " ";
+			poly_msg << std::fixed << std::setprecision(3) << coeff << " ";
 		}
-		std::cout << std::endl;
-		std::cout << "[MPC Debug] Initial state: x=" << state_with_latency[0]
-		          << " y=" << state_with_latency[1] << " yaw=" << state_with_latency[2]
-		          << " vel=" << state_with_latency[3] << " cte=" << cte0 << " epsi=" << epsi0
-		          << std::endl;
+		MPC_DEBUG(poly_msg.str());
+
+		// Log reference trajectory
+		if(reference.size() >= 3) {
+			std::vector<std::pair<double, double>> ref_pairs;
+			for(size_t i = 0; i < std::min(size_t(3), reference.size()); ++i) {
+				ref_pairs.emplace_back(reference[i].x, reference[i].y);
+			}
+			Debugger::getInstance()->logMPCReferences(ref_pairs);
+		}
 	}
 
 	// Limites das variáveis de controle
@@ -101,19 +143,31 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
 
 	// Calcular steering inicial baseado no cte e epsi
 	double initial_steering = 0.0;
-	if(std::abs(cte0) > 0.05 || std::abs(epsi0) > 0.1) {
-		// Se há erro lateral significativo, inicializar com correção proporcional
-		initial_steering = std::max(-0.2, std::min(0.2, cte0 * 0.8 + epsi0 * 0.5));
+	if(std::abs(cte0) > 0.01 || std::abs(epsi0) > 0.05) {
+		// Se há erro lateral ou orientação significativo, inicializar com correção proporcional
+		initial_steering = std::max(-0.3, std::min(0.3, cte0 * 2.0 + epsi0 * 1.5));
+	}
+	// Se a trajetória tem curvatura, adicionar steering baseado na geometria
+	if(reference.size() >= 3) {
+		double curvature = _calculatePathCurvature(reference);
+		if(std::abs(curvature) > 0.01) {
+			double curve_steering = std::max(-0.2, std::min(0.2, curvature * 10.0));
+			initial_steering += curve_steering;
+			initial_steering = std::max(-0.35, std::min(0.35, initial_steering));
+		}
 	}
 
 	for(int i = 0; i < MPCConfig::horizon; ++i) {
+		u0[2 * i] = 0.3;                                    // throttle moderado
 		u0[2 * i] = 0.3;                                    // throttle moderado
 		u0[2 * i + 1] = initial_steering * (1.0 - i * 0.1); // steering com decay
 	}
 
 	if(debug_this_call) {
-		std::cout << "[MPC Debug] Initial steering guess: " << initial_steering
-		          << " (based on cte=" << cte0 << " epsi=" << epsi0 << ")" << std::endl;
+		std::ostringstream msg;
+		msg << "Initial steering guess: " << initial_steering << " (based on cte=" << cte0
+		    << " epsi=" << epsi0 << ")";
+		MPC_DEBUG(msg.str());
 	}
 
 	optimizer.set_min_objective(costWrapper, this);
@@ -130,21 +184,19 @@ std::pair<double, double> MPCOptimizer::solve(double x0, double y0, double yaw0,
 		if(result < 0) {
 			// Fallback: retornar controles seguros
 			if(debug_this_call) {
-				std::cout << "[MPC Debug] Optimization failed, returning fallback controls"
-				          << std::endl;
+				MPC_DEBUG("Optimization failed, returning fallback controls");
 			}
 			return {0.2, 0.0};
 		}
 
 		if(debug_this_call) {
-			std::cout << "[MPC Debug] Optimization succeeded. First controls: throttle=" << u0[0]
-			          << " steering=" << u0[1] << std::endl;
-			std::cout << "[MPC Debug] Cost: " << min_cost << std::endl;
+			Debugger::getInstance()->logMPCControls(u0[0], u0[1], min_cost);
+			MPC_DEBUG("Optimization succeeded");
 		}
 	} catch(const std::exception &e) {
 		// Fallback: retornar controles seguros
 		if(debug_this_call) {
-			std::cout << "[MPC Debug] Optimization exception: " << e.what() << std::endl;
+			MPC_DEBUG("Optimization exception: " + std::string(e.what()));
 		}
 		return {0.2, 0.0};
 	}
@@ -280,93 +332,96 @@ double MPCOptimizer::_costFunction(const std::vector<double> &u, const std::vect
 	static int cost_debug_counter = 0;
 	if(++cost_debug_counter % 1000 == 0) {
 		std::cout << "[Cost Debug] Total cost: " << cost << " CTE: " << total_cte_cost
-		          << " EPSI: " << total_epsi_cost << " Steer: " << total_steer_cost
-		          << " First steer: " << u[1] << std::endl;
+		          << " EPSI: " << total_epsi_cost
+		          << " Steer: " << total_steer_cost if(++cost_debug_counter % 1000 == 0) {
+			std::cout << "[Cost Debug] Total cost: " << cost << " CTE: " << total_cte_cost
+			          << " EPSI: " << total_epsi_cost << " Steer: " << total_steer_cost
+			          << " First steer: " << u[1] << std::endl;
+		}
+
+		return cost;
 	}
 
-	return cost;
-}
-
-// Atualize o modelo cinemático para 6 estados
-void MPCOptimizer::_kinematicModel(double &x, double &y, double &yaw, double &v, double &cte,
-                                   double &epsi, double throttle, double steer,
-                                   const std::vector<double> &poly_coeffs) const {
-	double f = 0.0, psides = 0.0;
-	if(!poly_coeffs.empty()) {
-		for(size_t i = 0; i < poly_coeffs.size(); ++i)
-			f += poly_coeffs[i] * std::pow(x, poly_coeffs.size() - 1 - i);
-		double df = 0.0;
-		for(size_t i = 0; i < poly_coeffs.size() - 1; ++i)
-			df += (poly_coeffs.size() - 1 - i) * poly_coeffs[i] *
-			      std::pow(x, poly_coeffs.size() - 2 - i);
-		psides = std::atan(df);
-	}
-	x += v * std::cos(yaw) * MPCConfig::dt;
-	y += v * std::sin(yaw) * MPCConfig::dt;
-	yaw += (v / MPCConfig::wheelbase) * std::tan(steer) * MPCConfig::dt;
-	v += throttle * MPCConfig::dt;
-	cte = f - y + v * std::sin(epsi) * MPCConfig::dt;
-	epsi = yaw - psides + (v / MPCConfig::wheelbase) * std::tan(steer) * MPCConfig::dt;
-	yaw = _normalizeAngle(yaw);
-	epsi = _normalizeAngle(epsi);
-	v = std::max(0.0, std::min(v, 10.0));
-}
-
-double MPCOptimizer::_calculateCurveCurvature(const std::vector<double> &x_coords,
-                                              const std::vector<double> &y_coords) const {
-	if(x_coords.size() < 3 || y_coords.size() < 3)
-		return 0.0;
-
-	std::vector<double> dx(x_coords.size()), dy(y_coords.size());
-	std::vector<double> ddx(x_coords.size()), ddy(y_coords.size());
-
-	// Cálculo das derivadas (gradiente simples)
-	for(size_t i = 1; i < x_coords.size() - 1; ++i) {
-		dx[i] = (x_coords[i + 1] - x_coords[i - 1]) / 2.0;
-		dy[i] = (y_coords[i + 1] - y_coords[i - 1]) / 2.0;
-	}
-	dx[0] = dx[1];
-	dx.back() = dx[dx.size() - 2];
-	dy[0] = dy[1];
-	dy.back() = dy[dy.size() - 2];
-
-	for(size_t i = 1; i < dx.size() - 1; ++i) {
-		ddx[i] = (dx[i + 1] - dx[i - 1]) / 2.0;
-		ddy[i] = (dy[i + 1] - dy[i - 1]) / 2.0;
-	}
-	ddx[0] = ddx[1];
-	ddx.back() = ddx[ddx.size() - 2];
-	ddy[0] = ddy[1];
-	ddy.back() = ddy[ddy.size() - 2];
-
-	std::vector<double> curvature(x_coords.size());
-	for(size_t i = 0; i < x_coords.size(); ++i) {
-		double numerator = std::abs(dx[i] * ddy[i] - dy[i] * ddx[i]);
-		double denom = std::pow(dx[i] * dx[i] + dy[i] * dy[i], 1.5);
-		if(denom < 1e-6)
-			denom = 1e-6; // evitar divisão por zero
-		curvature[i] = numerator / denom;
+	// Atualize o modelo cinemático para 6 estados
+	void MPCOptimizer::_kinematicModel(double &x, double &y, double &yaw, double &v, double &cte,
+	                                   double &epsi, double throttle, double steer,
+	                                   const std::vector<double> &poly_coeffs) const {
+		double f = 0.0, psides = 0.0;
+		if(!poly_coeffs.empty()) {
+			for(size_t i = 0; i < poly_coeffs.size(); ++i)
+				f += poly_coeffs[i] * std::pow(x, poly_coeffs.size() - 1 - i);
+			double df = 0.0;
+			for(size_t i = 0; i < poly_coeffs.size() - 1; ++i)
+				df += (poly_coeffs.size() - 1 - i) * poly_coeffs[i] *
+				      std::pow(x, poly_coeffs.size() - 2 - i);
+			psides = std::atan(df);
+		}
+		x += v * std::cos(yaw) * MPCConfig::dt;
+		y += v * std::sin(yaw) * MPCConfig::dt;
+		yaw += (v / MPCConfig::wheelbase) * std::tan(steer) * MPCConfig::dt;
+		v += throttle * MPCConfig::dt;
+		cte = f - y + v * std::sin(epsi) * MPCConfig::dt;
+		epsi = yaw - psides + (v / MPCConfig::wheelbase) * std::tan(steer) * MPCConfig::dt;
+		yaw = _normalizeAngle(yaw);
+		epsi = _normalizeAngle(epsi);
+		v = std::max(0.0, std::min(v, 10.0));
 	}
 
-	// Retorna a média da curvatura
-	double sum = std::accumulate(curvature.begin(), curvature.end(), 0.0);
-	return sum / curvature.size();
-}
+	double MPCOptimizer::_calculateCurveCurvature(const std::vector<double> &x_coords,
+	                                              const std::vector<double> &y_coords) const {
+		if(x_coords.size() < 3 || y_coords.size() < 3)
+			return 0.0;
 
-std::vector<double> MPCOptimizer::_predictStateWithLatency(double x0, double y0, double yaw0,
-                                                           double v0, double throttle, double steer,
-                                                           double latency) const {
-	// Prever estado futuro considerando latência
-	double x = x0, y = y0, yaw = yaw0, v = v0;
-	double cte = 0.0, epsi = 0.0; // Para compatibilidade com novo modelo
-	double steps = latency / MPCConfig::dt;
+		std::vector<double> dx(x_coords.size()), dy(y_coords.size());
+		std::vector<double> ddx(x_coords.size()), ddy(y_coords.size());
 
-	// Use coeficientes vazios para predição de latência (simplificação)
-	std::vector<double> empty_coeffs;
+		// Cálculo das derivadas (gradiente simples)
+		for(size_t i = 1; i < x_coords.size() - 1; ++i) {
+			dx[i] = (x_coords[i + 1] - x_coords[i - 1]) / 2.0;
+			dy[i] = (y_coords[i + 1] - y_coords[i - 1]) / 2.0;
+		}
+		dx[0] = dx[1];
+		dx.back() = dx[dx.size() - 2];
+		dy[0] = dy[1];
+		dy.back() = dy[dy.size() - 2];
 
-	for(int i = 0; i < (int)steps; ++i) {
-		_kinematicModel(x, y, yaw, v, cte, epsi, throttle, steer, empty_coeffs);
+		for(size_t i = 1; i < dx.size() - 1; ++i) {
+			ddx[i] = (dx[i + 1] - dx[i - 1]) / 2.0;
+			ddy[i] = (dy[i + 1] - dy[i - 1]) / 2.0;
+		}
+		ddx[0] = ddx[1];
+		ddx.back() = ddx[ddx.size() - 2];
+		ddy[0] = ddy[1];
+		ddy.back() = ddy[ddy.size() - 2];
+
+		std::vector<double> curvature(x_coords.size());
+		for(size_t i = 0; i < x_coords.size(); ++i) {
+			double numerator = std::abs(dx[i] * ddy[i] - dy[i] * ddx[i]);
+			double denom = std::pow(dx[i] * dx[i] + dy[i] * dy[i], 1.5);
+			if(denom < 1e-6)
+				denom = 1e-6; // evitar divisão por zero
+			curvature[i] = numerator / denom;
+		}
+
+		// Retorna a média da curvatura
+		double sum = std::accumulate(curvature.begin(), curvature.end(), 0.0);
+		return sum / curvature.size();
 	}
 
-	return {x, y, yaw, v};
-}
+	std::vector<double> MPCOptimizer::_predictStateWithLatency(double x0, double y0, double yaw0,
+	                                                           double v0, double throttle,
+	                                                           double steer, double latency) const {
+		// Prever estado futuro considerando latência
+		double x = x0, y = y0, yaw = yaw0, v = v0;
+		double cte = 0.0, epsi = 0.0; // Para compatibilidade com novo modelo
+		double steps = latency / MPCConfig::dt;
+
+		// Use coeficientes vazios para predição de latência (simplificação)
+		std::vector<double> empty_coeffs;
+
+		for(int i = 0; i < (int)steps; ++i) {
+			_kinematicModel(x, y, yaw, v, cte, epsi, throttle, steer, empty_coeffs);
+		}
+
+		return {x, y, yaw, v};
+	}

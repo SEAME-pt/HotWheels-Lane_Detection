@@ -1,4 +1,5 @@
 #include "MPCPlanner.hpp"
+#include "Debugger.hpp"
 #include "Polyfitter.hpp"
 
 MPCPlanner::MPCPlanner(void) {}
