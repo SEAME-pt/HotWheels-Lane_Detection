@@ -16,7 +16,6 @@
 #include "EngineController.hpp"
 #include "Debugger.hpp"
 #include "PeripheralController.hpp"
-#include "Debugger.hpp"
 #include <QDebug>
 #include <atomic>
 #include <chrono>
