@@ -1,7 +1,8 @@
 /**
  * @file CameraStreamer.hpp
  * @brief Header for CameraStreamer - Real-Time Multi-Threaded AI Vision System
- *
+ * @version 0.1
+ * @date 2025-07-01
  * @details This header defines the CameraStreamer class and supporting infrastructure
  * 			for a high-performance computer vision pipeline designed for autonomous vehicle
  * 			perception systems. The architecture combines hardware-accelerated camera capture

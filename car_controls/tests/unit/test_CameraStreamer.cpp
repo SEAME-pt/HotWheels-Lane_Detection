@@ -1,7 +1,7 @@
 // test_TensorRTInferencer.cpp
 
-#include "../includes/inference/CameraStreamer.hpp"
-#include "../mocks/MockInferencer.hpp"
+#include "CameraStreamer.hpp"
+#include "MockInferencer.hpp"
 #include <gtest/gtest.h>
 
 /* TEST(CameraStreamerTest, ConstructorInitializesCamera) {

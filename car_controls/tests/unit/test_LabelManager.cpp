@@ -1,4 +1,4 @@
-#include "../includes/objectDetection/LabelManager.hpp"
+#include "LabelManager.hpp"
 #include <gtest/gtest.h>
 
 // Helper to create a temporary label file for testing

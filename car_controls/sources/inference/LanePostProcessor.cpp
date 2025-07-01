@@ -1,4 +1,4 @@
-#include "../../includes/inference/LanePostProcessor.hpp"
+#include "LanePostProcessor.hpp"
 #include <cmath>
 #include <numeric>
 #include <opencv2/cudaarithm.hpp>

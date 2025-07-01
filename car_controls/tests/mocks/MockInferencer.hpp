@@ -1,7 +1,7 @@
 #ifndef MOCKINFERENCER_HPP
 #define MOCKINFERENCER_HPP
 
-#include "../../includes/inference/IInferencer.hpp"
+#include "IInferencer.hpp"
 #include <gmock/gmock.h>
 
 using ::testing::AtLeast;

@@ -2,8 +2,10 @@
 #define MPCPLANNER_HPP
 
 #include "MPCOptimizer.hpp"
+#include "inference/PolyfitterInferencer.hpp"
 #include <Eigen/Dense>
 #include <cstddef>
+#include <memory>
 #include <vector>
 
 class MPCPlanner {
@@ -14,6 +16,10 @@ class MPCPlanner {
 		                  const std::vector<Eigen::Vector2d> &global_waypoints) const;
 
 		MPCOptimizer _optimizer;
+
+		// Direct integration with enhanced inferencer
+		std::shared_ptr<PolyfitterInferencer> m_polyfitterInferencer;
+		bool m_useDirectInference;
 
 		// Adicionar método para mapear comandos para hardware
 		ControlCommand _mapCommandsToHardware(double throttle, double steer) const;
@@ -26,9 +32,21 @@ class MPCPlanner {
 
 		MPCPlanner(const MPCOptimizer &optimizer);
 
+		// Enhanced constructor with direct inferencer integration
+		MPCPlanner(std::shared_ptr<PolyfitterInferencer> inferencer);
+
+		// Set direct inference mode
+		void setPolyfitterInferencer(std::shared_ptr<PolyfitterInferencer> inferencer);
+		void enableDirectInference(bool enable = true) {
+			m_useDirectInference = enable;
+		}
+
 		ControlCommand plan(const VehicleState &current_state,
 		                    const std::vector<Point2D> &global_waypoints,
 		                    const LaneInfo *lane_info = NULL);
+
+		// Enhanced planning method with direct inference
+		ControlCommand planWithDirectInference(const VehicleState &current_state);
 
 		std::vector<Point2D> convertImagePointsToWorld(const std::vector<int> &center_x,
 		                                               const std::vector<int> &center_y,
@@ -39,6 +57,10 @@ class MPCPlanner {
 		const std::vector<Point2D> &getPredictedTrajectory() const {
 			return _optimizer.getPredictedTrajectory();
 		}
+
+		// Access to direct inference data
+		bool hasValidTrajectoryData() const;
+		const std::vector<Point2D> &getCurrentTrajectory() const;
 };
 
 #endif /* !MPCPlanner */

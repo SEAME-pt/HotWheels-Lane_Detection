@@ -1,7 +1,7 @@
-#include "../../../ZeroMQ/Publisher.hpp"
-#include "../../../ZeroMQ/Subscriber.hpp"
-#include "../inference/Logger.hpp"
+#include "Logger.hpp"
 #include "LabelManager.hpp"
+#include "ZeroMQ/Publisher.hpp"
+#include "ZeroMQ/Subscriber.hpp"
 #include <NvInfer.h>
 #include <chrono>
 #include <cuda_runtime.h>

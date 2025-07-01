@@ -1,3 +1,14 @@
+/**
+ * @file Debugger.hpp
+ * @author Michel Batista (michel_fab@outlook.com)
+ * @brief Centralized debugging and logging system for the car controls project.
+ * @version 0.1
+ * @date 2025-06-27
+ * 
+ * @copyright Copyright (c) 2025
+ * 
+ */
+
 #ifndef DEBUGGER_HPP
 #define DEBUGGER_HPP
 
@@ -12,12 +23,25 @@
 #include <utility>
 #include <vector>
 
+/**
+ * @brief Enumeration for log levels.
+ */
 enum class LogLevel { DEBUG = 0, INFO = 1, WARNING = 2, ERROR = 3, CRITICAL = 4 };
 
-// Forward declaration
+/**
+ * @brief Forward declaration of Debugger class.
+ * 
+ * This is used to allow the DebugStream class to reference Debugger without
+ * needing the full definition at this point.
+ */
 class Debugger;
 
-// Helper class for stream-like logging
+/**
+ * @brief Helper class for stream-like logging.
+ * 
+ * This class allows for more natural C++-style logging using the stream operator
+ * (<<) while still integrating with the Debugger's logging system.
+ */
 class DebugStream {
 	private:
 		Debugger *debugger;
@@ -42,6 +66,13 @@ class DebugStream {
 		}
 };
 
+/**
+ * @brief Centralized debugging and logging system for the car controls project.
+ * 
+ * This class provides a unified interface for logging messages from different
+ * components of the system, including console output, file output, and custom
+ * log levels.
+ */
 class Debugger {
 	private:
 		static std::unique_ptr<Debugger> instance;
@@ -147,7 +178,11 @@ class Debugger {
 		Debugger &operator=(const Debugger &) = delete;
 };
 
-// Convenience macros for easy usage
+/**
+ * @brief Convenience macros for easy usage.
+ * This section defines macros for logging at different levels and for different components.
+ * It also includes specialized macros for MPC, Vision, and Control subsystems
+ */
 #define DEBUG_LOG(component, message) Debugger::getInstance()->debug(component, message)
 #define INFO_LOG(component, message) Debugger::getInstance()->info(component, message)
 #define WARNING_LOG(component, message) Debugger::getInstance()->warning(component, message)

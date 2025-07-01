@@ -1,6 +1,6 @@
 // test_TensorRTInferencer.cpp
 
-#include "../includes/inference/TensorRTInferencer.hpp"
+#include "TensorRTInferencer.hpp"
 #include <gtest/gtest.h>
 
 #include <opencv2/core.hpp>

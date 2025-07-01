@@ -1,4 +1,4 @@
-#include "../../includes/inference/ONNXInferencer.hpp"
+#include "ONNXInferencer.hpp"
 #include <exception>
 #include <iostream>
 

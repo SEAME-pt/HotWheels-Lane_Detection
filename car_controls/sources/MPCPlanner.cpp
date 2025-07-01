@@ -2,9 +2,9 @@
 #include "Debugger.hpp"
 #include "Polyfitter.hpp"
 
-MPCPlanner::MPCPlanner(void) {}
+MPCPlanner::MPCPlanner(void) : m_useDirectInference(false) {}
 
-MPCPlanner::MPCPlanner(const MPCPlanner &origin) {
+MPCPlanner::MPCPlanner(const MPCPlanner &origin) : m_useDirectInference(false) {
 	*this = origin;
 }
 
@@ -16,7 +16,19 @@ MPCPlanner &MPCPlanner::operator=(const MPCPlanner &origin) {
 
 MPCPlanner::~MPCPlanner(void) {}
 
-MPCPlanner::MPCPlanner(const MPCOptimizer &optimizer) : _optimizer(optimizer) {}
+MPCPlanner::MPCPlanner(const MPCOptimizer &optimizer)
+    : _optimizer(optimizer), m_useDirectInference(false) {}
+
+// Enhanced constructor with direct inferencer integration
+MPCPlanner::MPCPlanner(std::shared_ptr<PolyfitterInferencer> inferencer)
+    : m_polyfitterInferencer(inferencer), m_useDirectInference(true) {
+	DEBUG_LOG("MPCPlanner", "Initialized with direct PolyfitterInferencer integration");
+}
+
+void MPCPlanner::setPolyfitterInferencer(std::shared_ptr<PolyfitterInferencer> inferencer) {
+	m_polyfitterInferencer = inferencer;
+	DEBUG_LOG("MPCPlanner", "PolyfitterInferencer integration enabled");
+}
 
 ControlCommand MPCPlanner::plan(const VehicleState &current_state,
                                 const std::vector<Point2D> &global_waypoints,
@@ -176,4 +188,83 @@ std::vector<Point2D> MPCPlanner::convertImagePointsToWorld(
 	}
 
 	return waypoints_world;
+}
+
+// Enhanced planning method with direct inference
+ControlCommand MPCPlanner::planWithDirectInference(const VehicleState &current_state) {
+	if(!m_polyfitterInferencer || !m_useDirectInference) {
+		DEBUG_LOG("MPCPlanner",
+		          "Direct inference not available, falling back to standard planning");
+		return ControlCommand(0.0, 0.0); // Safe fallback
+	}
+
+	// Check if we have valid trajectory data from direct inference
+	if(!m_polyfitterInferencer->hasValidTrajectory()) {
+		DEBUG_LOG("MPCPlanner", "No valid trajectory data from direct inference");
+		return ControlCommand(0.0, 0.0); // Safe fallback
+	}
+
+	// Get trajectory and lane info directly from inferencer
+	const auto &trajectory = m_polyfitterInferencer->getCurrentTrajectory();
+	const auto &laneInfo = m_polyfitterInferencer->getCurrentLaneInfo();
+
+	// Convert trajectory to local coordinate system (simplified version)
+	std::vector<Point2D> local_ref;
+	double cos_yaw = std::cos(-current_state.yaw);
+	double sin_yaw = std::sin(-current_state.yaw);
+
+	for(const auto &point : trajectory) {
+		double dx = point.x - current_state.x;
+		double dy = point.y - current_state.y;
+		double local_x = cos_yaw * dx - sin_yaw * dy;
+		double local_y = sin_yaw * dx + cos_yaw * dy;
+
+		if(local_x > 0) { // Only consider points ahead of the vehicle
+			local_ref.emplace_back(local_x, local_y);
+		}
+	}
+
+	if(local_ref.size() < 3) {
+		DEBUG_LOG("MPCPlanner", "Insufficient local reference points for MPC");
+		return ControlCommand(0.0, 0.0); // Safe fallback
+	}
+
+	// Calculate CTE and EPSI directly from the inferencer
+	double cte0 =
+	    m_polyfitterInferencer->calculateCTE(0.0, 0.0); // Vehicle is at origin in local coords
+	double epsi0 = m_polyfitterInferencer->calculateEPSI(0.0, 0.0);
+
+	// Ensure minimum velocity for stability
+	double current_velocity = std::max(0.5, current_state.velocity);
+
+	// Handle latency prediction
+	double latency = 0.1;
+	double steer0 = 0.0, throttle0 = 0.0;
+	std::vector<double> state_with_latency = _optimizer._predictStateWithLatency(
+	    0.0, 0.0, 0.0, current_velocity, throttle0, steer0, latency);
+	state_with_latency.push_back(cte0);
+	state_with_latency.push_back(epsi0);
+
+	// Solve MPC optimization with direct inference data
+	auto [throttle, steer] =
+	    _optimizer.solve(state_with_latency[0], state_with_latency[1], state_with_latency[2],
+	                     state_with_latency[3], local_ref, &laneInfo);
+
+	DEBUG_STREAM("MPCPlanner") << "Direct inference MPC: throttle=" << throttle
+	                           << ", steer=" << steer << ", CTE=" << cte0 << ", EPSI=" << epsi0
+	                           << ", traj_points=" << local_ref.size();
+
+	return _mapCommandsToHardware(throttle, steer);
+}
+
+bool MPCPlanner::hasValidTrajectoryData() const {
+	return m_polyfitterInferencer && m_polyfitterInferencer->hasValidTrajectory();
+}
+
+const std::vector<Point2D> &MPCPlanner::getCurrentTrajectory() const {
+	static std::vector<Point2D> empty_trajectory;
+	if(m_polyfitterInferencer) {
+		return m_polyfitterInferencer->getCurrentTrajectory();
+	}
+	return empty_trajectory;
 }

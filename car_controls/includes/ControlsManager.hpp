@@ -15,13 +15,13 @@
 #ifndef CONTROLSMANAGER_HPP
 #define CONTROLSMANAGER_HPP
 
-#include "CameraStreamer.hpp"
 #include "EngineController.hpp"
 #include "JoysticksController.hpp"
 #include "MPCPlanner.hpp"
 #include "Polyfitter.hpp"
 #include "Publisher.hpp"
 #include "Subscriber.hpp"
+#include "inference/CameraStreamer.hpp"
 #include <QObject>
 #include <QProcess>
 #include <QThread>
@@ -177,6 +177,14 @@ class ControlsManager : public QObject {
 		    double yaw_rate); // For external yaw rate measurements (vision-based, etc.)
 		VehicleState getVehicleStateWithDiagnostics();
 		void resetVehicleState(const VehicleState &initial_state = {0.0, 0.0, 0.0, 0.0});
+
+		// === NEW: Direct control methods for enhanced MPC ===
+		void applyControlCommand(const ControlCommand &command);
+		void applyThrottle(double throttle);
+		void applySteering(double steering);
+		DrivingMode getCurrentMode() const {
+			return m_currentMode;
+		}
 
 		// === NEW: Constant speed control and emergency stop ===
 		void setConstantSpeedMode(bool enable, double target_speed = DEFAULT_CONSTANT_SPEED,

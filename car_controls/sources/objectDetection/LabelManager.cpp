@@ -1,4 +1,4 @@
-#include "../../includes/objectDetection/LabelManager.hpp"
+#include "LabelManager.hpp"
 
 /**
  * @brief Construtor que carrega as labels de um arquivo.

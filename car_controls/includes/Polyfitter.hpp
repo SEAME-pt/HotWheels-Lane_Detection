@@ -2,21 +2,16 @@
 #define POLYFITTER_HPP
 
 #include "CommonTypes.hpp"
-#include <iostream>
-#include <opencv2/opencv.hpp>
-#include <vector>
-
-// Conditional CUDA include
-#ifdef CUDA_AVAILABLE
-#include <cuda_runtime.h>
-#endif
-
 #include <NvInfer.h>
+#include <cuda_runtime.h>
+#include <iostream>
 #include <opencv2/core/cuda.hpp>
 #include <opencv2/cudaimgproc.hpp>
 #include <opencv2/cudawarping.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/opencv.hpp>
+#include <vector>
 
 struct Lane {
 		std::vector<Point2D> centroids;

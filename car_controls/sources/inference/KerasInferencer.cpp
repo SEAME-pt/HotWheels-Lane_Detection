@@ -1,4 +1,4 @@
-#include "../../includes/inference/KerasInferencer.hpp"
+#include "KerasInferencer.hpp"
 #include <fstream>
 #include <iostream>
 #include <stdexcept>

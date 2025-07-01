@@ -1238,4 +1238,32 @@ double ControlsManager::applySoftStart(double target_throttle) {
 	return m_softStart.current_throttle_output;
 }
 
+// === NEW: Direct control methods for enhanced MPC ===
+void ControlsManager::applyControlCommand(const ControlCommand &command) {
+	applyThrottle(command.throttle);
+	applySteering(command.steer);
+}
+
+void ControlsManager::applyThrottle(double throttle) {
+	// Clamp throttle to safe range
+	throttle = std::max(-1.0, std::min(1.0, throttle));
+
+	// Convert to PWM range (assuming -100 to 100)
+	int throttle_pwm = static_cast<int>(throttle * 100);
+
+	m_engineController.set_speed(throttle_pwm);
+	m_lastThrottle.store(throttle);
+}
+
+void ControlsManager::applySteering(double steering) {
+	// Clamp steering to safe range
+	steering = std::max(-1.0, std::min(1.0, steering));
+
+	// Convert to PWM range (assuming -100 to 100)
+	int steering_pwm = static_cast<int>(steering * 100);
+
+	m_engineController.set_steering(steering_pwm);
+	m_lastSteering.store(steering);
+}
+
 #include "ControlsManager.moc"
