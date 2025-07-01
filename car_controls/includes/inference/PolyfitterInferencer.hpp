@@ -1,7 +1,7 @@
 #pragma once
 
-#include "TensorRTInferencer.hpp"
 #include "../Polyfitter.hpp"
+#include "TensorRTInferencer.hpp"
 
 /**
  * @brief Enhanced TensorRT inferencer with integrated polynomial fitting for MPC

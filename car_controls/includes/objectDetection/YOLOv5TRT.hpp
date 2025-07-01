@@ -1,5 +1,5 @@
-#include "Logger.hpp"
 #include "LabelManager.hpp"
+#include "Logger.hpp"
 #include "ZeroMQ/Publisher.hpp"
 #include "ZeroMQ/Subscriber.hpp"
 #include <NvInfer.h>
