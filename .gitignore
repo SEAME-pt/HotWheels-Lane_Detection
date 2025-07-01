@@ -3,6 +3,7 @@
 !**/.clang-format
 **.o
 **/*.txt
+outputs/
 **/.*
 **/__pycache__
 **/build/
