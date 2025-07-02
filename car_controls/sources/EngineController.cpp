@@ -281,5 +281,3 @@ void EngineController::emergencyHardwareStop() {
 	m_current_speed = 0;
 	setDirection(CarDirection::Stop);
 }
-
-#include "EngineController.moc"

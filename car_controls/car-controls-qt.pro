@@ -1,24 +1,14 @@
 # Configuração para cross-compilation
 contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
-    # Usar ferramentas MOC do host para cross-compilation
-    QMAKE_MOC = /usr/lib/qt5/bin/moc
-    QMAKE_UIC = /usr/lib/qt5/bin/uic
-    QMAKE_RCC = /usr/lib/qt5/bin/rcc
-    
     # Configurar sysroot
     QMAKE_SYSROOT = /home/michel/new_qtjetson/sysroot
     
-    # Configurar compiladores
-    QMAKE_CC = aarch64-linux-gnu-gcc
-    QMAKE_CXX = aarch64-linux-gnu-g++
-    QMAKE_LINK = aarch64-linux-gnu-g++
+    # Configurar compiladores (usando GCC 9 compatível com Jetson)
+    QMAKE_CC = aarch64-linux-gnu-gcc-9
+    QMAKE_CXX = aarch64-linux-gnu-g++-9
+    QMAKE_LINK = aarch64-linux-gnu-g++-9
     QMAKE_AR = aarch64-linux-gnu-ar
     QMAKE_STRIP = aarch64-linux-gnu-strip
-
-	HEADERS += \
-        car_controls/includes/ControlsManager.hpp \
-        car_controls/includes/EngineController.hpp \
-        car_controls/includes/JoysticksController.hpp
 }
 
 QT = core
@@ -57,12 +47,14 @@ SOURCES += \
 	sources/inference/InferenceManager.cpp \
 	sources/inference/LanePostProcessor.cpp \
 	sources/inference/LaneCurveFitter.cpp \
+	sources/inference/PolyfitterInferencer.cpp \
 	sources/objectDetection/LabelManager.cpp \
 	sources/objectDetection/YOLOv5TRT.cpp \
 	sources/ControlsManager.cpp \
 	sources/JoysticksController.cpp \
 	sources/EngineController.cpp \
 	sources/PeripheralController.cpp \
+	sources/Debugger.cpp \
 	sources/main.cpp
 
 SOURCES += \
@@ -81,6 +73,7 @@ HEADERS += \
 	includes/inference/IInferencer.hpp \
 	includes/inference/LanePostProcessor.hpp \
 	includes/inference/LaneCurveFitter.hpp \
+	includes/inference/PolyfitterInferencer.hpp \
 	includes/objectDetection/LabelManager.hpp \
 	includes/objectDetection/YOLOv5TRT.hpp \
 	includes/ControlsManager.hpp \
@@ -88,6 +81,7 @@ HEADERS += \
 	includes/EngineController.hpp \
 	includes/PeripheralController.hpp \
 	includes/IPeripheralController.hpp \
+	includes/Debugger.hpp \
 	includes/enums.hpp
 
 HEADERS += \
@@ -144,7 +138,6 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
 	LIBS += -L$${JETSON_SYSROOT}/usr/local/lib
 	LIBS += -L$${JETSON_SYSROOT}/usr/local/cuda-10.2/lib64
 	LIBS += -L$${JETSON_SYSROOT}/usr/local/cuda-10.2/targets/aarch64-linux/lib
-	LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu
 	LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu/tegra
 	LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu/openblas
 
@@ -157,6 +150,11 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
 	LIBS += -lopencv_dnn -lopencv_cudaarithm -lopencv_cudawarping -lopencv_cudaimgproc -lopencv_cudacodec
 	LIBS += -lcublasLt -llapack -lblas
 	LIBS += -lnvmedia -lnvdla_compiler
+	
+	# OpenMP from sysroot to avoid GLIBC version conflicts
+	LIBS += -L$${JETSON_SYSROOT}/usr/lib/gcc/aarch64-linux-gnu/9
+	LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu
+	LIBS += $${JETSON_SYSROOT}/usr/lib/gcc/aarch64-linux-gnu/9/libgomp.a
 
 	# GStreamer libraries
 	LIBS += -lgstreamer-1.0 -lgobject-2.0 -lglib-2.0
@@ -173,7 +171,24 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
 	QMAKE_LFLAGS += -Wl,-rpath-link,$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu
 	QMAKE_LFLAGS += -Wl,-rpath-link,$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu/tegra
 	QMAKE_LFLAGS += -Wl,-rpath-link,$${JETSON_SYSROOT}/usr/local/cuda-10.2/lib64
+	QMAKE_LFLAGS += -Wl,-rpath-link,$${JETSON_SYSROOT}/usr/lib/gcc/aarch64-linux-gnu/9
+	
+	# Force using sysroot libraries for glibc compatibility
+	QMAKE_LFLAGS += -Wl,-rpath-link,$${JETSON_SYSROOT}/lib/aarch64-linux-gnu
+	QMAKE_LFLAGS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu
+	QMAKE_LFLAGS += -L$${JETSON_SYSROOT}/lib/aarch64-linux-gnu
+	
+	# Static link with compatible libstdc++ to avoid glibc version conflicts
+	QMAKE_LFLAGS += -static-libstdc++ -static-libgcc
 }
 
 # Adicionando flags de compilação para warnings e erros
 # QMAKE_CXXFLAGS += -Wall -Werror -Wextra -pedantic
+
+# Debug flags para análise de segfaults
+QMAKE_CXXFLAGS += -g
+QMAKE_CFLAGS += -g
+
+# OpenMP support
+QMAKE_CXXFLAGS += -fopenmp
+QMAKE_CFLAGS += -fopenmp
