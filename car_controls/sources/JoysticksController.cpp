@@ -115,5 +115,3 @@ void JoysticksController::processInput() {
 	// INFO_LOG("JoysticksController", "Joystick controller loop finished.");
 	emit finished();
 }
-
-#include "JoysticksController.moc"

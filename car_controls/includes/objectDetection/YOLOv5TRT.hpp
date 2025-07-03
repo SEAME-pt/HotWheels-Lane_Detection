@@ -1,7 +1,7 @@
 #include "LabelManager.hpp"
 #include "Logger.hpp"
-#include "ZeroMQ/Publisher.hpp"
-#include "ZeroMQ/Subscriber.hpp"
+#include "Publisher.hpp"
+#include "Subscriber.hpp"
 #include <NvInfer.h>
 #include <chrono>
 #include <cuda_runtime.h>

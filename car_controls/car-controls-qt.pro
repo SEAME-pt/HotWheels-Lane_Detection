@@ -1,26 +1,3 @@
-# Configuração para cross-compilation
-contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
-    # Usar ferramentas MOC do host para cross-compilation
-    QMAKE_MOC = /usr/lib/qt5/bin/moc
-    QMAKE_UIC = /usr/lib/qt5/bin/uic
-    QMAKE_RCC = /usr/lib/qt5/bin/rcc
-    
-    # Configurar sysroot
-    QMAKE_SYSROOT = /home/michel/new_qtjetson/sysroot
-    
-    # Configurar compiladores
-    QMAKE_CC = aarch64-linux-gnu-gcc
-    QMAKE_CXX = aarch64-linux-gnu-g++
-    QMAKE_LINK = aarch64-linux-gnu-g++
-    QMAKE_AR = aarch64-linux-gnu-ar
-    QMAKE_STRIP = aarch64-linux-gnu-strip
-
-	HEADERS += \
-        car_controls/includes/ControlsManager.hpp \
-        car_controls/includes/EngineController.hpp \
-        car_controls/includes/JoysticksController.hpp
-}
-
 QT = core
 
 CONFIG += c++17 cmdline
@@ -31,13 +8,10 @@ TEMPLATE = app
 
 # Include Paths (explicit inheritance from root)
 INCLUDEPATH += \
+	$$PWD/../ZeroMQ \
 	$$PWD/includes \
 	$$PWD/includes/inference \
 	$$PWD/includes/objectDetection
-
-#include ZeroMQ
-
-INCLUDEPATH += $$PWD/../ZeroMQ
 
 # Eigen (header-only)
 INCLUDEPATH += /usr/include/eigen3
@@ -45,63 +19,59 @@ INCLUDEPATH += /usr/include/eigen3
 # OpenCV includes (for host compilation)
 INCLUDEPATH += /usr/include/opencv4
 
-
 # Application Sources
 SOURCES += \
+	sources/main.cpp \
+	sources/Debugger.cpp \
+    sources/MPCPlanner.cpp \
+    sources/Polyfitter.cpp \
 	../ZeroMQ/Publisher.cpp \
 	../ZeroMQ/Subscriber.cpp \
-	sources/inference/CameraStreamer.cpp \
-	# sources/inference/ONNXInferencer.cpp \
-	sources/inference/TensorRTInferencer.cpp \
-	sources/inference/KerasInferencer.cpp \
-	sources/inference/InferenceManager.cpp \
-	sources/inference/LanePostProcessor.cpp \
-	sources/inference/LaneCurveFitter.cpp \
-	sources/objectDetection/LabelManager.cpp \
-	sources/objectDetection/YOLOv5TRT.cpp \
-	sources/ControlsManager.cpp \
-	sources/JoysticksController.cpp \
-	sources/EngineController.cpp \
-	sources/PeripheralController.cpp \
-	sources/main.cpp
-
-SOURCES += \
     sources/MPCOptimizer.cpp \
-    sources/MPCPlanner.cpp \
-    sources/Polyfitter.cpp
+	sources/ControlsManager.cpp \
+	sources/EngineController.cpp \
+	sources/JoysticksController.cpp \
+	sources/PeripheralController.cpp \
+	sources/inference/CameraStreamer.cpp \
+	sources/inference/KerasInferencer.cpp \
+	sources/inference/LaneCurveFitter.cpp \
+	sources/objectDetection/YOLOv5TRT.cpp \
+	sources/inference/InferenceManager.cpp \
+	# sources/inference/ONNXInferencer.cpp \
+	sources/inference/LanePostProcessor.cpp \
+	sources/objectDetection/LabelManager.cpp \
+	sources/inference/TensorRTInferencer.cpp \
+	sources/inference/PolyfitterInferencer.cpp
 
 HEADERS += \
+	includes/enums.hpp \
+	includes/Debugger.hpp \
+    includes/MPCConfig.hpp \
+    includes/MPCPlanner.hpp \
+    includes/Polyfitter.hpp \
 	../ZeroMQ/Publisher.hpp \
 	../ZeroMQ/Subscriber.hpp \
-	includes/inference/CameraStreamer.hpp \
-	includes/inference/TensorRTInferencer.hpp \
-	# includes/inference/ONNXInferencer.hpp \
-	includes/inference/KerasInferencer.hpp \
-	includes/inference/InferenceManager.hpp \
-	includes/inference/IInferencer.hpp \
-	includes/inference/LanePostProcessor.hpp \
-	includes/inference/LaneCurveFitter.hpp \
-	includes/objectDetection/LabelManager.hpp \
-	includes/objectDetection/YOLOv5TRT.hpp \
-	includes/ControlsManager.hpp \
-	includes/JoysticksController.hpp \
-	includes/EngineController.hpp \
-	includes/PeripheralController.hpp \
-	includes/IPeripheralController.hpp \
-	includes/enums.hpp
-
-HEADERS += \
     includes/CommonTypes.hpp \
-    includes/MPCConfig.hpp \
     includes/MPCOptimizer.hpp \
-    includes/MPCPlanner.hpp \
-    includes/Polyfitter.hpp
+	includes/ControlsManager.hpp \
+	includes/EngineController.hpp \
+	includes/JoysticksController.hpp \
+	includes/PeripheralController.hpp \
+	includes/inference/IInferencer.hpp \
+	includes/IPeripheralController.hpp \
+	includes/inference/CameraStreamer.hpp \
+	includes/inference/KerasInferencer.hpp \
+	includes/inference/LaneCurveFitter.hpp \
+	includes/objectDetection/YOLOv5TRT.hpp \
+	# includes/inference/ONNXInferencer.hpp \
+	includes/inference/InferenceManager.hpp \
+	includes/inference/LanePostProcessor.hpp \
+	includes/inference/TensorRTInferencer.hpp \
+	includes/objectDetection/LabelManager.hpp \
+	includes/inference/PolyfitterInferencer.hpp
 
 # Common Libraries
-LIBS += -lSDL2 -lrt -lzmq
-# Dependências adicionais
-LIBS += -lnlopt -lmlpack
-LIBS += -lboost_system -lstdc++fs
+LIBS += -lSDL2 -lrt -lzmq -lnlopt -lmlpack -lboost_system -lstdc++fs
 
 # Conditionally add paths for cross-compilation
 contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
@@ -144,7 +114,6 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
 	LIBS += -L$${JETSON_SYSROOT}/usr/local/lib
 	LIBS += -L$${JETSON_SYSROOT}/usr/local/cuda-10.2/lib64
 	LIBS += -L$${JETSON_SYSROOT}/usr/local/cuda-10.2/targets/aarch64-linux/lib
-	LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu
 	LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu/tegra
 	LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu/openblas
 
@@ -157,6 +126,11 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
 	LIBS += -lopencv_dnn -lopencv_cudaarithm -lopencv_cudawarping -lopencv_cudaimgproc -lopencv_cudacodec
 	LIBS += -lcublasLt -llapack -lblas
 	LIBS += -lnvmedia -lnvdla_compiler
+	
+	# OpenMP from sysroot to avoid GLIBC version conflicts
+	LIBS += -L$${JETSON_SYSROOT}/usr/lib/gcc/aarch64-linux-gnu/9
+	LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu
+	LIBS += -L$${JETSON_SYSROOT}/usr/lib/gcc/aarch64-linux-gnu/9/libgomp.a
 
 	# GStreamer libraries
 	LIBS += -lgstreamer-1.0 -lgobject-2.0 -lglib-2.0
@@ -173,7 +147,20 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
 	QMAKE_LFLAGS += -Wl,-rpath-link,$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu
 	QMAKE_LFLAGS += -Wl,-rpath-link,$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu/tegra
 	QMAKE_LFLAGS += -Wl,-rpath-link,$${JETSON_SYSROOT}/usr/local/cuda-10.2/lib64
+	QMAKE_LFLAGS += -Wl,-rpath-link,$${JETSON_SYSROOT}/usr/lib/gcc/aarch64-linux-gnu/9
+	
+	# Force using sysroot libraries for glibc compatibility
+	QMAKE_LFLAGS += -Wl,-rpath-link,$${JETSON_SYSROOT}/lib/aarch64-linux-gnu
+	QMAKE_LFLAGS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu
+	QMAKE_LFLAGS += -L$${JETSON_SYSROOT}/lib/aarch64-linux-gnu
+	
+	# Static link with compatible libstdc++ to avoid glibc version conflicts
+	QMAKE_LFLAGS += -static-libstdc++ -static-libgcc
 }
 
 # Adicionando flags de compilação para warnings e erros
 # QMAKE_CXXFLAGS += -Wall -Werror -Wextra -pedantic
+
+# Debug flags para análise de segfaults
+QMAKE_CXXFLAGS += -g -fopenmp
+QMAKE_CFLAGS += -g -fopenmp

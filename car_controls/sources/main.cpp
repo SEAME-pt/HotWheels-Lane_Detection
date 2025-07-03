@@ -16,8 +16,10 @@
 #include <QCoreApplication>
 #include <csignal>
 #include <iostream>
+#include <atomic>
 
 volatile bool keepRunning = true;
+std::atomic<bool> g_running{true}; //! REMOVE THIS LINE IF YOU DO NOT NEED IT
 
 ControlsManager *g_controlsManager = nullptr;
 

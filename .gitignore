@@ -3,12 +3,12 @@
 !**/.clang-format
 **.o
 **/*.txt
-outputs/
 **/.*
 **/__pycache__
 **/build/
+*.gif
+*.jpeg
+*.jpg
 *.keras
 *.png
-*.jpg
-*.jpeg
-*.gif
+outputs/

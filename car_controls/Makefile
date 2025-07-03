@@ -13,7 +13,7 @@ EQ            = =
 ####### Compiler, tools and options
 
 CC            = aarch64-linux-gnu-gcc
-CXX           = aarch64-linux-gnu-g++
+CXX           = aarch64-linux-gnu-g++-9
 DEFINES       = -DQT_NO_DEBUG -DQT_CORE_LIB
 CFLAGS        = -pipe -O2 -Wall -Wextra -D_REENTRANT -fPIC $(DEFINES)
 CXXFLAGS      = -pipe -O3 -DNDEBUG -O2 -std=gnu++1z -Wall -Wextra -D_REENTRANT -fPIC $(DEFINES)
