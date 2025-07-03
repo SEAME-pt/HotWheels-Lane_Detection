@@ -1,5 +1,5 @@
-#include "Logger.hpp"
 #include "LabelManager.hpp"
+#include "Logger.hpp"
 #include "Publisher.hpp"
 #include "Subscriber.hpp"
 #include <NvInfer.h>
