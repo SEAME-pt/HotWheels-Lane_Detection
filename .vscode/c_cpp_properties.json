@@ -4,10 +4,13 @@
             "name": "linux-clang-x64",
             "includePath": [
                 "${workspaceFolder}/**",
-                "/usr/include/opencv4",
-                "/usr/include/eigen3",
-                "/usr/include/x86_64-linux-gnu/qt5/QtCore",
-                "/usr/include/x86_64-linux-gnu/qt5"
+                "/home/michel/new_qtjetson/qt5.15/include/QtCore",
+                "/home/michel/new_qtjetson/qt5.15/include",
+                "/home/michel/new_qtjetson/sysroot/usr/include/",
+                "/home/michel/new_qtjetson/sysroot/usr/include/opencv4",
+                "/home/michel/new_qtjetson/sysroot/usr/include/eigen3",
+                "/home/michel/new_qtjetson/sysroot/usr/include/aarch64-linux-gnu",
+                "/home/michel/new_qtjetson/sysroot/usr/include/SDL2"
             ],
             "compilerPath": "/usr/bin/cc",
             "cStandard": "c17",

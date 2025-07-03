@@ -1,6 +1,6 @@
 #include "Debugger.hpp"
 #include <chrono>
-#include <filesystem>
+#include <experimental/filesystem>
 
 // DebugStream implementation
 DebugStream::DebugStream(Debugger *dbg, LogLevel lvl, const std::string &comp)
@@ -23,7 +23,7 @@ Debugger::Debugger()
 	base_output_dir = "outputs";
 
 	// Create outputs directory if it doesn't exist
-	std::filesystem::create_directories(base_output_dir);
+	std::experimental::filesystem::create_directories(base_output_dir);
 
 	startNewSession();
 }

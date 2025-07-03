@@ -16,8 +16,8 @@
 #include "LanePostProcessor.hpp"
 #include "Logger.hpp"
 
-#include "ZeroMQ/Publisher.hpp"
-#include "ZeroMQ/Subscriber.hpp"
+#include "Publisher.hpp"
+#include "Subscriber.hpp"
 
 class TensorRTInferencer : public IInferencer {
 	private:

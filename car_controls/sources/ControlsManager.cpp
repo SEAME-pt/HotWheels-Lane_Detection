@@ -1265,5 +1265,3 @@ void ControlsManager::applySteering(double steering) {
 	m_engineController.set_steering(steering_pwm);
 	m_lastSteering.store(steering);
 }
-
-#include "ControlsManager.moc"
