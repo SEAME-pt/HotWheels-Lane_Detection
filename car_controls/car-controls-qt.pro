@@ -130,7 +130,12 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
 	# OpenMP from sysroot to avoid GLIBC version conflicts
 	LIBS += -L$${JETSON_SYSROOT}/usr/lib/gcc/aarch64-linux-gnu/9
 	LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu
+	LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu/atlas
 	LIBS += -L$${JETSON_SYSROOT}/usr/lib/gcc/aarch64-linux-gnu/9/libgomp.a
+
+	# LAPACK and BLAS libraries
+	LIBS += -llapack -lcblas -lblas -ltbb
+	LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu -lgfortran
 
 	# GStreamer libraries
 	LIBS += -lgstreamer-1.0 -lgobject-2.0 -lglib-2.0
