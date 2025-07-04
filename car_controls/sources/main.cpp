@@ -14,6 +14,7 @@
 
 #include "ControlsManager.hpp"
 #include <QCoreApplication>
+#include <atomic>
 #include <csignal>
 #include <iostream>
 #include <atomic>

@@ -4,9 +4,9 @@
  * @brief Centralized debugging and logging system for the car controls project.
  * @version 0.1
  * @date 2025-06-27
- * 
+ *
  * @copyright Copyright (c) 2025
- * 
+ *
  */
 
 #ifndef DEBUGGER_HPP
@@ -30,7 +30,7 @@ enum class LogLevel { DEBUG = 0, INFO = 1, WARNING = 2, ERROR = 3, CRITICAL = 4 
 
 /**
  * @brief Forward declaration of Debugger class.
- * 
+ *
  * This is used to allow the DebugStream class to reference Debugger without
  * needing the full definition at this point.
  */
@@ -38,7 +38,7 @@ class Debugger;
 
 /**
  * @brief Helper class for stream-like logging.
- * 
+ *
  * This class allows for more natural C++-style logging using the stream operator
  * (<<) while still integrating with the Debugger's logging system.
  */
@@ -68,7 +68,7 @@ class DebugStream {
 
 /**
  * @brief Centralized debugging and logging system for the car controls project.
- * 
+ *
  * This class provides a unified interface for logging messages from different
  * components of the system, including console output, file output, and custom
  * log levels.

@@ -1,16 +1,3 @@
-# Configuração para cross-compilation
-contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
-    # Configurar sysroot
-    QMAKE_SYSROOT = /home/michel/new_qtjetson/sysroot
-    
-    # Configurar compiladores (usando GCC 9 compatível com Jetson)
-    QMAKE_CC = aarch64-linux-gnu-gcc-9
-    QMAKE_CXX = aarch64-linux-gnu-g++-9
-    QMAKE_LINK = aarch64-linux-gnu-g++-9
-    QMAKE_AR = aarch64-linux-gnu-ar
-    QMAKE_STRIP = aarch64-linux-gnu-strip
-}
-
 QT = core
 
 CONFIG += c++17 cmdline
@@ -21,13 +8,10 @@ TEMPLATE = app
 
 # Include Paths (explicit inheritance from root)
 INCLUDEPATH += \
+	$$PWD/../ZeroMQ \
 	$$PWD/includes \
 	$$PWD/includes/inference \
 	$$PWD/includes/objectDetection
-
-#include ZeroMQ
-
-INCLUDEPATH += $$PWD/../ZeroMQ
 
 # Eigen (header-only)
 INCLUDEPATH += /usr/include/eigen3
@@ -35,67 +19,59 @@ INCLUDEPATH += /usr/include/eigen3
 # OpenCV includes (for host compilation)
 INCLUDEPATH += /usr/include/opencv4
 
-
 # Application Sources
 SOURCES += \
+	sources/main.cpp \
+	sources/Debugger.cpp \
+    sources/MPCPlanner.cpp \
+    sources/Polyfitter.cpp \
 	../ZeroMQ/Publisher.cpp \
 	../ZeroMQ/Subscriber.cpp \
-	sources/inference/CameraStreamer.cpp \
-	# sources/inference/ONNXInferencer.cpp \
-	sources/inference/TensorRTInferencer.cpp \
-	sources/inference/KerasInferencer.cpp \
-	sources/inference/InferenceManager.cpp \
-	sources/inference/LanePostProcessor.cpp \
-	sources/inference/LaneCurveFitter.cpp \
-	sources/inference/PolyfitterInferencer.cpp \
-	sources/objectDetection/LabelManager.cpp \
-	sources/objectDetection/YOLOv5TRT.cpp \
-	sources/ControlsManager.cpp \
-	sources/JoysticksController.cpp \
-	sources/EngineController.cpp \
-	sources/PeripheralController.cpp \
-	sources/Debugger.cpp \
-	sources/main.cpp
-
-SOURCES += \
     sources/MPCOptimizer.cpp \
-    sources/MPCPlanner.cpp \
-    sources/Polyfitter.cpp
+	sources/ControlsManager.cpp \
+	sources/EngineController.cpp \
+	sources/JoysticksController.cpp \
+	sources/PeripheralController.cpp \
+	sources/inference/CameraStreamer.cpp \
+	sources/inference/KerasInferencer.cpp \
+	sources/inference/LaneCurveFitter.cpp \
+	sources/objectDetection/YOLOv5TRT.cpp \
+	sources/inference/InferenceManager.cpp \
+	# sources/inference/ONNXInferencer.cpp \
+	sources/inference/LanePostProcessor.cpp \
+	sources/objectDetection/LabelManager.cpp \
+	sources/inference/TensorRTInferencer.cpp \
+	sources/inference/PolyfitterInferencer.cpp
 
 HEADERS += \
+	includes/enums.hpp \
+	includes/Debugger.hpp \
+    includes/MPCConfig.hpp \
+    includes/MPCPlanner.hpp \
+    includes/Polyfitter.hpp \
 	../ZeroMQ/Publisher.hpp \
 	../ZeroMQ/Subscriber.hpp \
-	includes/inference/CameraStreamer.hpp \
-	includes/inference/TensorRTInferencer.hpp \
-	# includes/inference/ONNXInferencer.hpp \
-	includes/inference/KerasInferencer.hpp \
-	includes/inference/InferenceManager.hpp \
-	includes/inference/IInferencer.hpp \
-	includes/inference/LanePostProcessor.hpp \
-	includes/inference/LaneCurveFitter.hpp \
-	includes/inference/PolyfitterInferencer.hpp \
-	includes/objectDetection/LabelManager.hpp \
-	includes/objectDetection/YOLOv5TRT.hpp \
-	includes/ControlsManager.hpp \
-	includes/JoysticksController.hpp \
-	includes/EngineController.hpp \
-	includes/PeripheralController.hpp \
-	includes/IPeripheralController.hpp \
-	includes/Debugger.hpp \
-	includes/enums.hpp
-
-HEADERS += \
     includes/CommonTypes.hpp \
-    includes/MPCConfig.hpp \
     includes/MPCOptimizer.hpp \
-    includes/MPCPlanner.hpp \
-    includes/Polyfitter.hpp
+	includes/ControlsManager.hpp \
+	includes/EngineController.hpp \
+	includes/JoysticksController.hpp \
+	includes/PeripheralController.hpp \
+	includes/inference/IInferencer.hpp \
+	includes/IPeripheralController.hpp \
+	includes/inference/CameraStreamer.hpp \
+	includes/inference/KerasInferencer.hpp \
+	includes/inference/LaneCurveFitter.hpp \
+	includes/objectDetection/YOLOv5TRT.hpp \
+	# includes/inference/ONNXInferencer.hpp \
+	includes/inference/InferenceManager.hpp \
+	includes/inference/LanePostProcessor.hpp \
+	includes/inference/TensorRTInferencer.hpp \
+	includes/objectDetection/LabelManager.hpp \
+	includes/inference/PolyfitterInferencer.hpp
 
 # Common Libraries
-LIBS += -lSDL2 -lrt -lzmq
-# Dependências adicionais
-LIBS += -lnlopt -lmlpack
-LIBS += -lboost_system -lstdc++fs
+LIBS += -lSDL2 -lrt -lzmq -lnlopt -lmlpack -lboost_system -lstdc++fs
 
 # Conditionally add paths for cross-compilation
 contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
@@ -154,7 +130,7 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
 	# OpenMP from sysroot to avoid GLIBC version conflicts
 	LIBS += -L$${JETSON_SYSROOT}/usr/lib/gcc/aarch64-linux-gnu/9
 	LIBS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu
-	LIBS += $${JETSON_SYSROOT}/usr/lib/gcc/aarch64-linux-gnu/9/libgomp.a
+	LIBS += -L$${JETSON_SYSROOT}/usr/lib/gcc/aarch64-linux-gnu/9/libgomp.a
 
 	# GStreamer libraries
 	LIBS += -lgstreamer-1.0 -lgobject-2.0 -lglib-2.0
@@ -186,9 +162,5 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
 # QMAKE_CXXFLAGS += -Wall -Werror -Wextra -pedantic
 
 # Debug flags para análise de segfaults
-QMAKE_CXXFLAGS += -g
-QMAKE_CFLAGS += -g
-
-# OpenMP support
-QMAKE_CXXFLAGS += -fopenmp
-QMAKE_CFLAGS += -fopenmp
+QMAKE_CXXFLAGS += -g -fopenmp
+QMAKE_CFLAGS += -g -fopenmp

@@ -24,7 +24,7 @@ struct VehicleTransform {
 // Comando de controle (throttle, steer)
 struct ControlCommand {
 		double throttle, steer;
-		
+
 		// Constructors
 		ControlCommand() : throttle(0.0), steer(0.0) {}
 		ControlCommand(double t, double s) : throttle(t), steer(s) {}
