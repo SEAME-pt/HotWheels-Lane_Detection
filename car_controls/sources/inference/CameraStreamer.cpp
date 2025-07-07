@@ -212,23 +212,67 @@ CameraStreamer::~CameraStreamer() {
  * @see segmentationInferencer TensorRT engine performing lane detection inference
  */
 void CameraStreamer::segmentationWorker() {
-	while(m_running) {
-		cv::Mat frame;
-		if(segmentationBuffer.getFrame(frame)) {
-			// auto start = std::chrono::high_resolution_clock::now();
-
-			segmentationInferencer->doInference(frame);
-
-			// auto end = std::chrono::high_resolution_clock::now();
-			// auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end -
-			// start).count();
-
-			// std::cout << "[Segmentation] Inference time: " << duration_ms << " ms" << std::endl;
-		} else {
-			std::this_thread::sleep_for(std::chrono::milliseconds(1));
-		}
-	}
+    while(m_running) {
+        cv::Mat frame;
+        if(segmentationBuffer.getFrame(frame)) {
+            // === FLUXO DIRETO PARA MPC ===
+            // 1. Upload frame to GPU
+            cv::cuda::GpuMat gpuFrame;
+            gpuFrame.upload(frame);
+            
+            // 2. Execute TensorRT inference
+            cv::cuda::GpuMat maskResult = segmentationInferencer->makePrediction(gpuFrame);
+            
+            // 3. Download mask for Polyfitter processing
+            cv::Mat binaryMask;
+            maskResult.download(binaryMask);
+            
+            // 4. Convert to binary if needed
+            if(binaryMask.type() == CV_32F) {
+                cv::threshold(binaryMask, binaryMask, 0.5, 255, cv::THRESH_BINARY);
+                binaryMask.convertTo(binaryMask, CV_8U);
+            }
+            
+            // 5. Process with Polyfitter to extract lane information
+            LaneInfo laneInfo = m_polyfitter->processFrame(binaryMask);
+            
+            // === FLUXO DIRETO: Send directly to ControlsManager ===
+            if(m_mpcCallback && laneInfo.isValid) {
+                m_mpcCallback(laneInfo);
+            }
+            
+            // === FLUXO ZEROMQ: Maintain compatibility with external apps ===
+            if(m_publisherMPC) {
+                // Serialize LaneInfo for external applications
+                std::string laneData = serializeLaneInfo(laneInfo);
+                m_publisherMPC->publish("lane_info", laneData);
+            }
+            
+            if(m_publisherLanes) {
+                // Publish binary mask for external applications
+                std::vector<uchar> mask_buffer;
+                cv::imencode(".png", binaryMask, mask_buffer);
+                std::string mask_data(mask_buffer.begin(), mask_buffer.end());
+                m_publisherLanes->publish("binary_mask", mask_data);
+            }
+            
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    }
 }
+
+std::string CameraStreamer::serializeLaneInfo(const LaneInfo& laneInfo) {
+    std::ostringstream oss;
+    oss << laneInfo.left_boundary << "," 
+        << laneInfo.right_boundary << ","
+        << laneInfo.center_line << ","
+        << laneInfo.lateral_offset << ","
+        << laneInfo.yaw_error << ","
+        << (laneInfo.isValid ? 1 : 0);
+    return oss.str();
+}
+
 
 /**
  * @brief Dedicated worker thread for real-time object detection processing

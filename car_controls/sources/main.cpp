@@ -52,17 +52,24 @@ void handleSigint(int) {
  */
 
 int main(int argc, char *argv[]) {
-	QCoreApplication a(argc, argv);
-	// to handle Ctrl+C
-	std::signal(SIGINT, handleSigint);
-	// to handle when service shuts down, as it gives a SIGTERM signal
-	std::signal(SIGTERM, handleSigint);
+    QCoreApplication a(argc, argv);
+    std::signal(SIGINT, handleSigint);
+    std::signal(SIGTERM, handleSigint);
 
-	try {
-		g_controlsManager = new ControlsManager(argc, argv);
-		return a.exec();
-	} catch(const std::exception &e) {
-		std::cerr << "Error: " << e.what() << std::endl;
-		return 1;
-	}
+    try {
+        g_controlsManager = new ControlsManager(argc, argv);
+        
+        // === CONFIGURAÇÃO HÍBRIDA ===
+        g_controlsManager->setDirectFlowEnabled(true);    // Fluxo direto para MPC
+        g_controlsManager->setZeroMQMaintained(true);     // ZeroMQ para apps externas
+        
+        INFO_LOG("Main", "Sistema híbrido configurado:");
+        INFO_LOG("Main", "- Fluxo direto para MPC (baixa latência)");
+        INFO_LOG("Main", "- ZeroMQ mantido para aplicações externas");
+        
+        return a.exec();
+    } catch(const std::exception &e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
+    }
 }

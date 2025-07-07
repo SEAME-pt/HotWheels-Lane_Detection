@@ -74,10 +74,18 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
 
 	m_manualControllerThread->start();
 
-	// **Running camera streamer**
+	// **Running camera streamer** with hybrid integration
 	m_cameraStreamerThread = QThread::create([this, argc, argv]() {
 		try {
 			m_cameraStreamerObject = new CameraStreamer(0.5);
+
+			// === FLUXO DIRETO: Set up direct MPC callback ===
+			m_cameraStreamerObject->setMPCCallback(
+			    [this](const LaneInfo &lane_info) { receiveLaneDataDirect(lane_info); });
+
+			// === FLUXO ZEROMQ: Enable ZeroMQ for external apps ===
+			m_cameraStreamerObject->enableZeroMQPublishing(m_maintainZeroMQ);
+
 			m_cameraStreamerObject->start();
 		} catch(const std::exception &e) {
 			ERROR_STREAM("ControlsManager") << "Error: " << e.what();
@@ -128,14 +136,16 @@ ControlsManager::ControlsManager(int argc, char **argv, QObject *parent)
 
 	// === NEW: Initialize persistent ZMQ connections for data streams ===
 	// Initialize vision data subscriber in its own thread
-	m_visionSubscriber = std::make_unique<Subscriber>();
-	m_visionDataThread = QThread::create([this]() { visionDataUpdateLoop(); });
-	m_visionDataThread->start();
+	if(m_maintainZeroMQ) {
+		m_visionSubscriber = std::make_unique<Subscriber>();
+		m_visionDataThread = QThread::create([this]() { visionDataUpdateLoop(); });
+		m_visionDataThread->start();
 
-	// Initialize obstacle data subscriber in its own thread
-	m_obstacleSubscriber = std::make_unique<Subscriber>();
-	m_obstacleDataThread = QThread::create([this]() { obstacleDataUpdateLoop(); });
-	m_obstacleDataThread->start();
+		// Initialize obstacle data subscriber in its own thread
+		m_obstacleSubscriber = std::make_unique<Subscriber>();
+		m_obstacleDataThread = QThread::create([this]() { obstacleDataUpdateLoop(); });
+		m_obstacleDataThread->start();
+	}
 	INFO_LOG("ControlsManager", "ControlsManager initialized with optimized thread architecture");
 }
 
@@ -270,6 +280,119 @@ void ControlsManager::setMode(DrivingMode mode) {
 	m_currentMode = mode;
 	if(m_currentMode == DrivingMode::Automatic)
 		startAutonomousControl();
+	else
+		stopAutonomousControlMotor();
+}
+
+void ControlsManager::stopAutonomousControlMotor() {
+	// Stop engine and steering in manual mode
+	if(m_currentMode == DrivingMode::Manual) {
+		m_engineController.set_speed(0);
+		m_engineController.set_steering(0);
+		std::cout << "[STOP] Autonomous control stopped, motors set to zero" << std::endl;
+	} else {
+		m_engineController.set_speed(0);
+		m_engineController.set_steering(0);
+		std::cout << "[STOP] Autonomous control stopped, but still in automatic mode" << std::endl;
+	}
+}
+
+bool ControlsManager::getDirectLaneData(LaneInfo &lane_info) {
+	std::lock_guard<std::mutex> lock(m_directMPCData.mutex);
+	auto now = std::chrono::steady_clock::now();
+	auto age_ms =
+	    std::chrono::duration_cast<std::chrono::milliseconds>(now - m_directMPCData.timestamp)
+	        .count();
+
+	if(m_directMPCData.valid && age_ms < 100) { // 100ms timeout
+		lane_info = m_directMPCData.current_lane_info;
+		return true;
+	}
+	return false;
+}
+
+bool ControlsManager::getZeroMQLaneData(LaneInfo &lane_info) {
+	if(!m_maintainZeroMQ)
+		return false;
+
+	std::lock_guard<std::mutex> lock(m_cachedVisionData.mutex);
+	auto now = std::chrono::steady_clock::now();
+	auto age_ms =
+	    std::chrono::duration_cast<std::chrono::milliseconds>(now - m_cachedVisionData.timestamp)
+	        .count();
+
+	if(m_cachedVisionData.valid && age_ms < 200) { // 200ms timeout
+		lane_info = m_cachedVisionData.lane_info;
+		return true;
+	}
+	return false;
+}
+
+LaneInfo ControlsManager::generateStraightTrajectory() {
+    LaneInfo fallback_lane;
+    fallback_lane.left_boundary = -1.0;
+    fallback_lane.right_boundary = 1.0;
+    fallback_lane.center_line = 0.0;
+    fallback_lane.lateral_offset = 0.0;
+    fallback_lane.yaw_error = 0.0;
+    fallback_lane.isValid = true;
+    return fallback_lane;
+}
+
+ControlCommand ControlsManager::applySmoothSteering(const ControlCommand& control) {
+    static double last_steering = 0.0;
+    double max_steering_change = 0.05; // rad per step
+    double steering_diff = control.steer - last_steering;
+
+    ControlCommand smooth_control = control;
+    if(std::abs(steering_diff) > max_steering_change) {
+        smooth_control.steer = last_steering + 
+            (steering_diff > 0 ? max_steering_change : -max_steering_change);
+    }
+    last_steering = smooth_control.steer;
+    
+    return smooth_control;
+}
+
+void ControlsManager::applyControlsWithSafety(const ControlCommand& control, int control_counter) {
+    // Convert to hardware values with safety limits
+    int throttle_pct = static_cast<int>(
+        std::clamp(control.throttle * 100, 0.0, 20.0)); // Max 20%
+
+    // Servo protection: ±15° maximum
+    int steer_angle = static_cast<int>(
+        std::clamp(control.steer * 15, -15.0, 15.0));
+
+    // Rate limiting for servo protection
+    static int last_servo_angle = 0;
+    int max_servo_change = 2; // Maximum 2° per iteration
+    int servo_diff = steer_angle - last_servo_angle;
+
+    if(std::abs(servo_diff) > max_servo_change) {
+        steer_angle = last_servo_angle + 
+            (servo_diff > 0 ? max_servo_change : -max_servo_change);
+    }
+    last_servo_angle = steer_angle;
+
+    // Apply soft start to throttle
+    double target_throttle = throttle_pct / 100.0;
+    double final_throttle = applySoftStart(target_throttle);
+    int final_throttle_pct = static_cast<int>(final_throttle * 100);
+
+    // Store applied controls for state estimation
+    m_lastThrottle = final_throttle;
+    m_lastSteering = steer_angle * M_PI / 180.0;
+
+    // Debug logging
+    if(control_counter % 40 == 0) {
+        std::cout << "Controls: Target=" << throttle_pct 
+                  << "%, Final=" << final_throttle_pct 
+                  << "%, Steering=" << steer_angle << "°" << std::endl;
+    }
+
+    // Apply to hardware (inverted speed for motor cross-connection fix)
+    m_engineController.set_speed(-final_throttle_pct);
+    m_engineController.set_steering(steer_angle);
 }
 
 void ControlsManager::startAutonomousControl() {
@@ -291,6 +414,13 @@ void ControlsManager::startAutonomousControl() {
 
 	m_autonomousControlThread = QThread::create([this]() { autonomousControlLoop(); });
 	m_autonomousControlThread->start();
+}
+
+void ControlsManager::receiveLaneDataDirect(const LaneInfo &lane_info) {
+	std::lock_guard<std::mutex> lock(m_directMPCData.mutex);
+	m_directMPCData.current_lane_info = lane_info;
+	m_directMPCData.timestamp = std::chrono::steady_clock::now();
+	m_directMPCData.valid = true;
 }
 
 void ControlsManager::stopAutonomousControl() {

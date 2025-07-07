@@ -124,6 +124,14 @@ class ControlsManager : public QObject {
 				std::mutex mutex;
 		} m_cachedVisionData;
 
+		// === Direct MPC Integration (NOVO) ===
+		struct DirectMPCData {
+				LaneInfo current_lane_info;
+				std::chrono::steady_clock::time_point timestamp;
+				bool valid = false;
+				std::mutex mutex;
+		} m_directMPCData;
+
 		struct CachedObstacleData {
 				bool emergency_stop = false;
 				std::chrono::steady_clock::time_point timestamp;
@@ -141,6 +149,8 @@ class ControlsManager : public QObject {
 		bool m_constantSpeedMode = false;
 		double m_targetConstantSpeed = DEFAULT_CONSTANT_SPEED; // Use macro for easy adjustment
 		double m_constantThrottle = DEFAULT_CONSTANT_THROTTLE; // Use macro for easy adjustment
+
+		void receiveLaneDataDirect(const LaneInfo &lane_info);
 
 		// === NEW: Emergency stop system ===
 		std::atomic<bool> m_emergencyStop{false};
@@ -224,6 +234,30 @@ class ControlsManager : public QObject {
 
 		// === NEW: Soft start system for gradual acceleration ===
 		double applySoftStart(double target_throttle);
+
+		// Control flow selection
+		bool m_useDirectFlow = true;  // Priorizar fluxo direto
+		bool m_maintainZeroMQ = true; // Manter ZeroMQ para compatibilidade
+	public:
+		// === Flow Control Methods ===
+		void setDirectFlowEnabled(bool enable) {
+			m_useDirectFlow = enable;
+			INFO_STREAM("ControlsManager") << "Direct flow " << (enable ? "ENABLED" : "DISABLED");
+		}
+
+		void setZeroMQMaintained(bool maintain) {
+			m_maintainZeroMQ = maintain;
+			INFO_STREAM("ControlsManager")
+			    << "ZeroMQ compatibility " << (maintain ? "MAINTAINED" : "DISABLED");
+		}
+
+		// Get current flow status
+		bool isUsingDirectFlow() const {
+			return m_useDirectFlow;
+		}
+		bool isZeroMQMaintained() const {
+			return m_maintainZeroMQ;
+		}
 
 	private:
 		// === NEW: Thread-safe data access methods ===

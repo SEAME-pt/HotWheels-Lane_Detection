@@ -12,3 +12,4 @@
 *.keras
 *.png
 outputs/
+dot_analysis/

@@ -3,9 +3,37 @@
 #include <map>
 #include <numeric>
 #include <set>
+#include <algorithm>
 
 LaneCurveFitter::LaneCurveFitter(float eps, int minSamples, int windows, int laneWidthPx)
     : dbscanEps(eps), dbscanMinSamples(minSamples), numWindows(windows), laneWidthPx(laneWidthPx) {}
+
+std::optional<LaneCurveFitter::CenterlineResult>
+LaneCurveFitter::computeCenterline(const cv::Mat &binaryMask) {
+	if(binaryMask.empty()) {
+		return std::nullopt;
+	}
+
+	cv::Mat gray;
+	if(binaryMask.channels() == 3) {
+		cv::cvtColor(binaryMask, gray, cv::COLOR_BGR2GRAY);
+	} else {
+		gray = binaryMask;
+	}
+
+	auto lanes = fitLanes(gray);
+	if(lanes.empty()) {
+		return std::nullopt;
+	}
+
+	auto result = computeVirtualCenterline(lanes, gray.cols, gray.rows);
+	if(!result) {
+		return std::nullopt;
+	}
+
+	result->lanes = lanes;
+	return result;
+}
 
 std::vector<cv::Point> LaneCurveFitter::extractLanePoints(const cv::Mat &binaryMask) {
 	std::vector<cv::Point> points;
@@ -157,37 +185,142 @@ bool LaneCurveFitter::hasSignFlip(const std::vector<float> &xVals) {
 	return false;
 }
 
+std::vector<float> LaneCurveFitter::polyfit(const std::vector<float> &x,
+                                           const std::vector<float> &y, int degree) {
+	int n = x.size();
+	int m = degree + 1;
+
+	cv::Mat A(n, m, CV_32F);
+	cv::Mat B(n, 1, CV_32F);
+
+	for(int i = 0; i < n; i++) {
+		for(int j = 0; j < m; j++) {
+			A.at<float>(i, j) = std::pow(x[i], j);
+		}
+		B.at<float>(i, 0) = y[i];
+	}
+
+	cv::Mat coeffs;
+	if(!cv::solve(A, B, coeffs, cv::DECOMP_SVD)) {
+		return std::vector<float>(m, 0.0F);
+	}
+
+	std::vector<float> result(m);
+	for(int i = 0; i < m; i++) {
+		result[m - 1 - i] = coeffs.at<float>(i, 0);
+	}
+	return result;
+}
+
+std::vector<float> LaneCurveFitter::polyval(const std::vector<float> &coeffs,
+                                           const std::vector<float> &x) {
+	std::vector<float> result(x.size());
+	int degree = coeffs.size() - 1;
+
+	for(size_t i = 0; i < x.size(); i++) {
+		float val = 0;
+		for(int j = 0; j <= degree; j++) {
+			val += coeffs[j] * std::pow(x[i], degree - j);
+		}
+		result[i] = val;
+	}
+	return result;
+}
+
+std::vector<float> LaneCurveFitter::linspace(float start, float end, int num) {
+	std::vector<float> result(num);
+	float step = (end - start) / (num - 1);
+	for(int i = 0; i < num; i++) {
+		result[i] = start + i * step;
+	}
+	return result;
+}
+
+std::vector<float> LaneCurveFitter::interp(const std::vector<float> &xNew,
+                                          const std::vector<float> &x,
+                                          const std::vector<float> &y, 
+                                          float leftVal, float rightVal) {
+	std::vector<float> result(xNew.size());
+
+	for(size_t i = 0; i < xNew.size(); i++) {
+		float xi = xNew[i];
+
+		if(xi <= x[0]) {
+			result[i] = leftVal;
+		} else if(xi >= x.back()) {
+			result[i] = rightVal;
+		} else {
+			for(size_t j = 0; j < x.size() - 1; j++) {
+				if(xi >= x[j] && xi <= x[j + 1]) {
+					float t = (xi - x[j]) / (x[j + 1] - x[j]);
+					result[i] = y[j] + t * (y[j + 1] - y[j]);
+					break;
+				}
+			}
+		}
+	}
+	return result;
+}
+
+std::pair<LaneCurveFitter::LaneCurve*, LaneCurveFitter::LaneCurve*>
+LaneCurveFitter::selectRelevantLanes(std::vector<LaneCurve> &lanes, int imgWidth, int imgHeight) {
+	float imgCenter = imgWidth / 2.0F;
+	LaneCurve *leftLane = nullptr;
+	LaneCurve *rightLane = nullptr;
+
+	std::vector<std::pair<float, LaneCurve*>> laneInfos;
+
+	for(auto &lane : lanes) {
+		std::vector<float> bottomHalfX;
+		for(const auto &point : lane.curve) {
+			if(point.y >= imgHeight / 6.0F) {
+				bottomHalfX.push_back(point.x);
+			}
+		}
+
+		if(!bottomHalfX.empty()) {
+			float avgX = std::accumulate(bottomHalfX.begin(), bottomHalfX.end(), 0.0F) / bottomHalfX.size();
+			laneInfos.push_back({avgX, &lane});
+		}
+	}
+
+	std::sort(laneInfos.begin(), laneInfos.end());
+
+	for(const auto &[avgX, lane] : laneInfos) {
+		if(avgX < imgCenter) {
+			leftLane = lane;
+		} else if(avgX >= imgCenter && rightLane == nullptr) {
+			rightLane = lane;
+			break;
+		}
+	}
+
+	return {leftLane, rightLane};
+}
+
 std::vector<float> LaneCurveFitter::fitCurve(const std::vector<float> &y,
-                                             const std::vector<float> &x,
-                                             const std::vector<float> &yEval) {
+                                            const std::vector<float> &x,
+                                            const std::vector<float> &yEval) {
 	if(y.size() < 3 || x.size() < 3) {
-		// Fallback: return a straight horizontal line
 		std::vector<float> fallback(yEval.size(), x.empty() ? 0.0F : x[0]);
 		return fallback;
 	}
 
-	cv::Mat A(y.size(), 3, CV_32F);
-	cv::Mat X(x);
-
-	for(size_t i = 0; i < y.size(); ++i) {
-		A.at<float>(i, 0) = y[i] * y[i];
-		A.at<float>(i, 1) = y[i];
-		A.at<float>(i, 2) = 1.0F;
+	// Check if it's a straight line
+	if(isStraightLine(y, x)) {
+		auto coeffs = polyfit(y, x, 1);
+		return polyval(coeffs, yEval);
 	}
 
-	cv::Mat coeffs;
-	if(!cv::solve(A, X, coeffs, cv::DECOMP_SVD)) {
-		// Fallback in case of failure
-		std::vector<float> fallback(yEval.size(), x[0]);
-		return fallback;
+	// Try quadratic fit
+	auto coeffs = polyfit(y, x, 2);
+	if(coeffs.size() >= 3 && std::abs(coeffs[0]) > CURVE_THRESHOLD && x.size() >= 4) {
+		// Use higher degree polynomial for complex curves
+		auto splineCoeffs = polyfit(y, x, std::min(3, (int)x.size() - 1));
+		return polyval(splineCoeffs, yEval);
 	}
 
-	std::vector<float> result;
-	for(float yv : yEval) {
-		result.push_back(coeffs.at<float>(0) * yv * yv + coeffs.at<float>(1) * yv +
-		                 coeffs.at<float>(2));
-	}
-	return result;
+	return polyval(coeffs, yEval);
 }
 
 std::vector<LaneCurveFitter::LaneCurve> LaneCurveFitter::fitLanes(const cv::Mat &binaryMask) {
@@ -236,12 +369,10 @@ std::vector<LaneCurveFitter::LaneCurve> LaneCurveFitter::fitLanes(const cv::Mat 
 
 		float y_min = *std::min_element(y_sorted.begin(), y_sorted.end());
 		float y_max = *std::max_element(y_sorted.begin(), y_sorted.end());
-		std::vector<float> y_plot(300);
-		float step = (y_max + 10 - (y_min - 30)) / 300.0F;
-		for(int i = 0; i < 300; ++i)
-			y_plot[i] = y_max + 10 - i * step;
-
-		std::vector<float> x_plot = fitCurve(y_sorted, x_sorted, y_plot);
+		
+		auto y_plot = linspace(std::max(0.0F, y_min - 30), 
+		                      std::min((float)binaryMask.rows, y_max + 10), 300);
+		auto x_plot = fitCurve(y_sorted, x_sorted, y_plot);
 
 		std::vector<cv::Point2f> curve, cents;
 		for(size_t i = 0; i < y_plot.size(); ++i)
@@ -258,58 +389,75 @@ std::vector<LaneCurveFitter::LaneCurve> LaneCurveFitter::fitLanes(const cv::Mat 
 std::optional<LaneCurveFitter::CenterlineResult>
 LaneCurveFitter::computeVirtualCenterline(const std::vector<LaneCurve> &lanes, int imgWidth,
                                           int imgHeight) {
-	const float centerX = imgWidth / 2.0F;
-	LaneCurve left, right;
-	std::vector<std::pair<float, LaneCurve>> candidates;
+	auto lanesRef = const_cast<std::vector<LaneCurve>&>(lanes);
+	auto [leftLane, rightLane] = selectRelevantLanes(lanesRef, imgWidth, imgHeight);
+	float carX = imgWidth / 2.0F;
 
-	for(const auto &lane : lanes) {
-		std::vector<float> bottomXs;
-		for(const auto &pt : lane.curve)
-			if(pt.y >= imgHeight / 2)
-				bottomXs.push_back(pt.x);
-		if(bottomXs.empty())
-			continue;
+	CenterlineResult result;
 
-		float avgX = std::accumulate(bottomXs.begin(), bottomXs.end(), 0.0F) / bottomXs.size();
-		candidates.emplace_back(avgX, lane);
-	}
-
-	std::sort(candidates.begin(), candidates.end(),
-	          [](auto &a, auto &b) { return a.first < b.first; });
-
-	for(const auto &[avgX, lane] : candidates) {
-		if(avgX < centerX)
-			left = lane;
-		else if(!right.curve.size())
-			right = lane;
-	}
-
-	std::vector<cv::Point2f> c1, c2, blended;
-	if(!left.curve.empty() && !right.curve.empty()) {
-		std::vector<float> y_common(300);
-		float y_start = imgHeight - 1;
-		float y_end = std::max(left.curve.back().y, right.curve.back().y);
-		float dy = (y_start - y_end) / 299.0F;
-		for(int i = 0; i < 300; ++i)
-			y_common[i] = y_start - i * dy;
-
-		std::vector<float> xl(300), xr(300);
-		for(int i = 0; i < 300; ++i) {
-			xl[i] = interpolateXatY(left.curve, y_common[i]);
-			xr[i] = interpolateXatY(right.curve, y_common[i]);
+	if(leftLane && rightLane) {
+		// Midpoint method
+		std::vector<float> xLeft, yLeft, xRight, yRight;
+		for(const auto &point : leftLane->curve) {
+			xLeft.push_back(point.x);
+			yLeft.push_back(point.y);
+		}
+		for(const auto &point : rightLane->curve) {
+			xRight.push_back(point.x);
+			yRight.push_back(point.y);
 		}
 
-		for(int i = 0; i < 300; ++i) {
-			float mid = (xl[i] + xr[i]) / 2.0F;
-			float w = static_cast<float>(i) / 299.0F;
-			float blendX = w * mid + (1 - w) * centerX;
+		float yMin = std::max(*std::min_element(yLeft.begin(), yLeft.end()),
+		                     *std::min_element(yRight.begin(), yRight.end()));
+		float yStart = imgHeight - 1;
+		auto yCommon = linspace(yStart, yMin, 300);
 
-			c1.emplace_back(mid, y_common[i]);
-			c2.emplace_back(centerX, y_common[i]);
-			blended.emplace_back(blendX, y_common[i]);
+		auto xLeftInterp = interp(yCommon, yLeft, xLeft, xLeft[0], xLeft.back());
+		auto xRightInterp = interp(yCommon, yRight, xRight, xRight[0], xRight.back());
+
+		for(size_t i = 0; i < yCommon.size(); i++) {
+			float xMid = (xLeftInterp[i] + xRightInterp[i]) / 2.0F;
+			float w = static_cast<float>(i) / (yCommon.size() - 1);
+			float xBlend = w * xMid + (1 - w) * carX;
+
+			result.blended.emplace_back(xBlend, yCommon[i]);
+			result.midpoint.emplace_back(xMid, yCommon[i]);
+			result.straight.emplace_back(carX, yCommon[i]);
 		}
-		return CenterlineResult{blended, c1, c2};
+		result.valid = true;
+
+	} else if(leftLane || rightLane) {
+		// Offset method
+		LaneCurve *lane = leftLane ? leftLane : rightLane;
+		float direction = leftLane ? 1.0F : -1.0F;
+
+		std::vector<float> xLane, yLane;
+		for(const auto &point : lane->curve) {
+			xLane.push_back(point.x);
+			yLane.push_back(point.y);
+		}
+
+		float yMin = *std::min_element(yLane.begin(), yLane.end());
+		float yStart = imgHeight - 1;
+		auto yCommon = linspace(yStart, yMin, 300);
+
+		std::vector<float> xOffset;
+		for(float x : xLane) {
+			xOffset.push_back(x + direction * laneWidthPx / 2.0F);
+		}
+
+		auto xOffsetInterp = interp(yCommon, yLane, xOffset, xOffset[0], xOffset.back());
+
+		for(size_t i = 0; i < yCommon.size(); i++) {
+			float w = static_cast<float>(i) / (yCommon.size() - 1);
+			float xBlend = w * xOffsetInterp[i] + (1 - w) * carX;
+
+			result.blended.emplace_back(xBlend, yCommon[i]);
+			result.midpoint.emplace_back(xOffsetInterp[i], yCommon[i]);
+			result.straight.emplace_back(carX, yCommon[i]);
+		}
+		result.valid = true;
 	}
 
-	return std::nullopt;
+	return result.valid ? std::make_optional(result) : std::nullopt;
 }

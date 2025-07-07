@@ -1,19 +1,8 @@
 #include "Polyfitter.hpp"
-#include "Debugger.hpp"
-#include <algorithm>
-#include <cmath>
-#include <experimental/filesystem>
-#include <iostream>
-#include <map>
-#include <mlpack/core.hpp>
-#include <mlpack/methods/dbscan/dbscan.hpp>
-#include <numeric>
-#include <opencv2/highgui.hpp>
-#include <opencv2/imgproc.hpp>
+
 
 namespace fs = std::experimental::filesystem;
 
-CenterlineResult::CenterlineResult() : valid(false) {}
 Polyfitter::Polyfitter() {}
 Polyfitter::~Polyfitter() {}
 
@@ -158,7 +147,6 @@ bool Polyfitter::hasSignFlip(const std::vector<double> &curve) {
 			return true;
 		}
 	}
-
 	return false;
 }
 
@@ -247,84 +235,74 @@ std::vector<double> Polyfitter::fitLaneCurve(const std::vector<double> &y,
 	return polyval(coeffs, yPlot);
 }
 
-std::vector<Lane> Polyfitter::fitLanesInImage(const cv::Mat &img) {
-	auto points = extractLanePoints(img);
-	auto [labels, uniqueLabels] = clusterLanePoints(points);
+std::vector<Lane> Polyfitter::fitLanesInImage(const cv::Mat& img) {
+    // Implementação usando algoritmo melhorado do polyfit.cpp.txt
+    std::vector<Lane> lanes;
+    
+    // Extrair pontos de lane
+    auto lanePoints = extractLanePoints(img);
+    
+    // Clustering DBSCAN melhorado
+    auto [labels, uniqueLabels] = clusterLanePoints(lanePoints);
+    
+    // Para cada cluster, criar uma lane
+    for (int label : uniqueLabels) {
+        if (label == -1) continue; // Ruído
+        
+        Lane lane;
+        std::vector<double> clusterX, clusterY;
+        
+        for (size_t i = 0; i < lanePoints.size(); i++) {
+            if (labels[i] == label) {
+                clusterX.push_back(lanePoints[i].x);
+                clusterY.push_back(lanePoints[i].y);
+            }
+        }
+        
+        if (clusterX.size() >= MIN_SAMPLES) {
+            // Sliding window centroids
+            auto [centroidX, centroidY] = slidingWindowCentroids(clusterX, clusterY, img.size());
+            
+            // Converter para Point2D
+            for (size_t i = 0; i < centroidX.size(); i++) {
+                lane.centroids.push_back(Point2D(centroidX[i], centroidY[i]));
+            }
+            
+            // Fit curve usando parâmetros otimizados
+            auto yPlot = linspace(0, img.rows - 1, img.rows);
+            auto xFitted = fitLaneCurve(centroidY, centroidX, img.cols, yPlot);
+            
+            for (size_t i = 0; i < yPlot.size(); i++) {
+                lane.curve.push_back(Point2D(xFitted[i], yPlot[i]));
+            }
+            
+            lanes.push_back(lane);
+        }
+    }
+    
+    return lanes;
+}
 
-	std::vector<Lane> lanes;
-
-	for(int label : uniqueLabels) {
-		std::vector<double> x, y;
-		for(size_t i = 0; i < points.size(); i++) {
-			if(labels[i] == label) {
-				x.push_back(points[i].x);
-				y.push_back(points[i].y);
-			}
-		}
-
-		auto [centY, centX] = slidingWindowCentroids(x, y, img.size(), false);
-		if(centY.size() < 2)
-			continue;
-
-		// Sort by y coordinate
-		std::vector<size_t> indices(centY.size());
-		std::iota(indices.begin(), indices.end(), 0);
-		std::sort(indices.begin(), indices.end(),
-		          [&](size_t a, size_t b) { return centY[a] < centY[b]; });
-
-		std::vector<double> sortedCentY, sortedCentX;
-		for(size_t idx : indices) {
-			sortedCentY.push_back(centY[idx]);
-			sortedCentX.push_back(centX[idx]);
-		}
-
-		// Check for sign flip
-		try {
-			auto testCoeffs = polyfit(sortedCentY, sortedCentX, 2);
-			auto testCurve = polyval(testCoeffs, sortedCentY);
-			if(hasSignFlip(testCurve)) {
-				auto [newCentY, newCentX] = slidingWindowCentroids(x, y, img.size(), true);
-				std::vector<size_t> newIndices(newCentY.size());
-				std::iota(newIndices.begin(), newIndices.end(), 0);
-				std::sort(newIndices.begin(), newIndices.end(),
-				          [&](size_t a, size_t b) { return newCentY[a] < newCentY[b]; });
-
-				sortedCentY.clear();
-				sortedCentX.clear();
-				for(size_t idx : newIndices) {
-					sortedCentY.push_back(newCentY[idx]);
-					sortedCentX.push_back(newCentX[idx]);
-				}
-			}
-		} catch(...) {
-			continue;
-		}
-
-		double yMin = *std::min_element(sortedCentY.begin(), sortedCentY.end());
-		double yMax = *std::max_element(sortedCentY.begin(), sortedCentY.end());
-
-		std::vector<double> yPlot;
-		double yStart = std::max(0.0, yMin - 30);
-		double yEnd = std::min((double)img.rows, yMax + 10);
-
-		for(int i = 0; i < 300; i++) {
-			yPlot.push_back(yStart + (yEnd - yStart) * i / 299.0);
-		}
-
-		auto xPlot = fitLaneCurve(sortedCentY, sortedCentX, img.cols, yPlot);
-
-		Lane lane;
-		for(size_t i = 0; i < sortedCentX.size(); i++) {
-			lane.centroids.push_back(Point2D(sortedCentX[i], sortedCentY[i]));
-		}
-		for(size_t i = 0; i < xPlot.size(); i++) {
-			lane.curve.push_back(Point2D(xPlot[i], yPlot[i]));
-		}
-
-		lanes.push_back(lane);
-	}
-
-	return lanes;
+// === MÉTODO PRINCIPAL MELHORADO ===
+LaneInfo Polyfitter::processFrame(const cv::Mat& mask) {
+    // Usar novo algoritmo de fitting
+    std::vector<Lane> lanes = fitLanesInImage(mask);
+    
+    // Calcular centerline virtual com blending
+    CenterlineResult centerline = computeVirtualCenterline(lanes, mask.cols, mask.rows);
+    
+    LaneInfo result;
+    if (centerline.valid) {
+        // Converter centerline blended para formato MPC
+        for (const auto& point : centerline.blend) {
+            result.center_line = point.x;
+        }
+        result.isValid = true;
+    } else {
+        result.isValid = false;
+    }
+    
+    return result;
 }
 
 std::pair<Lane *, Lane *> Polyfitter::selectRelevantLanes(std::vector<Lane> &lanes, int imgWidth,
@@ -338,7 +316,7 @@ std::pair<Lane *, Lane *> Polyfitter::selectRelevantLanes(std::vector<Lane> &lan
 	for(auto &lane : lanes) {
 		std::vector<double> bottomHalfX;
 		for(const auto &point : lane.curve) {
-			if(point.y >= imgHeight / 2.0) {
+			if(point.y >= imgHeight / 3.0) {
 				bottomHalfX.push_back(point.x);
 			}
 		}
@@ -386,7 +364,6 @@ std::vector<double> Polyfitter::interp(const std::vector<double> &xNew,
 		} else if(xi >= x.back()) {
 			result[i] = rightVal;
 		} else {
-			// Linear interpolation
 			for(size_t j = 0; j < x.size() - 1; j++) {
 				if(xi >= x[j] && xi <= x[j + 1]) {
 					double t = (xi - x[j]) / (x[j + 1] - x[j]);
@@ -402,14 +379,13 @@ std::vector<double> Polyfitter::interp(const std::vector<double> &xNew,
 
 CenterlineResult Polyfitter::computeVirtualCenterline(std::vector<Lane> &lanes, int imgWidth,
                                                       int imgHeight) {
-	bool applyBlending = true;
 	auto [leftLane, rightLane] = selectRelevantLanes(lanes, imgWidth, imgHeight);
 	double carX = imgWidth / 2.0;
 
 	CenterlineResult result;
 
 	if(leftLane && rightLane) {
-		// Midpoint method
+		// Método midpoint melhorado
 		std::vector<double> xLeft, yLeft, xRight, yRight;
 		for(const auto &point : leftLane->curve) {
 			xLeft.push_back(point.x);
@@ -435,62 +411,14 @@ CenterlineResult Polyfitter::computeVirtualCenterline(std::vector<Lane> &lanes, 
 			xC1[i] = (xLeftInterp[i] + xRightInterp[i]) / 2.0;
 		}
 
-		if(!applyBlending) {
-			for(size_t i = 0; i < yCommon.size(); i++) {
-				result.blend.push_back(Point2D(xC1[i], yCommon[i]));
-				result.c1.push_back(Point2D(xC1[i], yCommon[i]));
-				result.c2.push_back(Point2D(xC2[i], yCommon[i]));
-			}
-		} else {
-			for(size_t i = 0; i < yCommon.size(); i++) {
-				double w = (yCommon[0] - yCommon[i]) / (yCommon[0] - yCommon.back());
-				double xBlend = w * xC1[i] + (1 - w) * xC2[i];
+		// Aplicar blending para suavizar transição
+		for(size_t i = 0; i < yCommon.size(); i++) {
+			double w = (yCommon[0] - yCommon[i]) / (yCommon[0] - yCommon.back());
+			double xBlend = w * xC1[i] + (1 - w) * xC2[i];
 
-				result.blend.push_back(Point2D(xBlend, yCommon[i]));
-				result.c1.push_back(Point2D(xC1[i], yCommon[i]));
-				result.c2.push_back(Point2D(xC2[i], yCommon[i]));
-			}
-		}
-
-		result.valid = true;
-	} else if(leftLane || rightLane) {
-		// Offset method
-		Lane *lane = leftLane ? leftLane : rightLane;
-		double direction = leftLane ? 1.0 : -1.0;
-
-		std::vector<double> xLane, yLane;
-		for(const auto &point : lane->curve) {
-			xLane.push_back(point.x);
-			yLane.push_back(point.y);
-		}
-
-		std::vector<double> xC1;
-		for(double x : xLane) {
-			xC1.push_back(x + direction * LANE_WIDTH_PX / 2.0);
-		}
-
-		double yMin = *std::min_element(yLane.begin(), yLane.end());
-		double yStart = imgHeight - 1;
-		auto yCommon = linspace(yStart, yMin, 300);
-
-		auto xC1Interp = interp(yCommon, yLane, xC1, xC1[0], xC1.back());
-		std::vector<double> xC2(yCommon.size(), carX);
-
-		if(!applyBlending) {
-			for(size_t i = 0; i < yCommon.size(); i++) {
-				result.blend.push_back(Point2D(xC1Interp[i], yCommon[i]));
-				result.c1.push_back(Point2D(xC1Interp[i], yCommon[i]));
-				result.c2.push_back(Point2D(xC2[i], yCommon[i]));
-			}
-		} else {
-			for(size_t i = 0; i < yCommon.size(); i++) {
-				double w = (yCommon[0] - yCommon[i]) / (yCommon[0] - yCommon.back());
-				double xBlend = w * xC1Interp[i] + (1 - w) * xC2[i];
-
-				result.blend.push_back(Point2D(xBlend, yCommon[i]));
-				result.c1.push_back(Point2D(xC1Interp[i], yCommon[i]));
-				result.c2.push_back(Point2D(xC2[i], yCommon[i]));
-			}
+			result.blend.push_back(Point2D(xBlend, yCommon[i]));
+			result.c1.push_back(Point2D(xC1[i], yCommon[i]));
+			result.c2.push_back(Point2D(xC2[i], yCommon[i]));
 		}
 
 		result.valid = true;
