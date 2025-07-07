@@ -3,6 +3,8 @@
 
 #include "CommonTypes.hpp"
 #include "Debugger.hpp"
+#include "Publisher.hpp"
+#include "Subscriber.hpp"
 #include <NvInfer.h>
 #include <algorithm>
 #include <cmath>
@@ -47,7 +49,15 @@ class Polyfitter {
 		static constexpr double CURVE_THRESHOLD = 0.0012;
 		static constexpr int LANE_WIDTH_PX = 300; // Era 120
 
-	public:
+		
+		private:
+		// === NOVO: Método de publicação ===
+		void publishLaneData(const LaneInfo &laneInfo, const cv::Mat &binaryMask);
+		std::string serializeLaneInfo(const LaneInfo &laneInfo);
+		
+		public:
+		bool m_zeromq_enabled;
+		Publisher *m_publisherLaneData;
 		Polyfitter();
 		~Polyfitter();
 
@@ -68,6 +78,8 @@ class Polyfitter {
 		                                 int imgWidth, const std::vector<double> &yPlot);
 		void displayImagesWithPolyfit(const std::vector<std::pair<std::string, cv::Mat>> &images,
 		                              int cols = 4);
+		void enableZeroMQPublishing(bool enable = true);
+		void setZeroMQPort(int port);
 
 		// === MÉTODOS NOVOS (ADICIONADOS) ===
 		bool hasSignFlip(const std::vector<double> &curve);

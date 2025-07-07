@@ -1,10 +1,119 @@
+
 #include "Polyfitter.hpp"
 
 
 namespace fs = std::experimental::filesystem;
 
-Polyfitter::Polyfitter() {}
-Polyfitter::~Polyfitter() {}
+Polyfitter::Polyfitter() 
+    : m_zeromq_enabled(false), m_publisherLaneData(nullptr) {
+    // Inicialização sem ZeroMQ por padrão
+}
+
+Polyfitter::~Polyfitter() {
+    if (m_publisherLaneData) {
+        delete m_publisherLaneData;
+        m_publisherLaneData = nullptr;
+    }
+}
+
+void Polyfitter::enableZeroMQPublishing(bool enable) {
+    m_zeromq_enabled = enable;
+    
+    if (enable && !m_publisherLaneData) {
+        // Create Publisher using public factory method or public constructor
+        try {
+            m_publisherLaneData = Publisher::create(5558);
+            INFO_LOG("Polyfitter", "ZeroMQ publishing enabled on port 5558");
+        } catch (const std::exception& e) {
+            ERROR_STREAM("Polyfitter") << "Failed to create Publisher: " << e.what();
+            m_publisherLaneData = nullptr;
+            m_zeromq_enabled = false;
+        }
+    } else if (!enable && m_publisherLaneData) {
+        delete m_publisherLaneData;
+        m_publisherLaneData = nullptr;
+        INFO_LOG("Polyfitter", "ZeroMQ publishing disabled");
+    }
+}
+
+LaneInfo Polyfitter::processFrame(const cv::Mat& mask) {
+    // Usar novo algoritmo de fitting
+    std::vector<Lane> lanes = fitLanesInImage(mask);
+    
+    // Calcular centerline virtual com blending
+    CenterlineResult centerline = computeVirtualCenterline(lanes, mask.cols, mask.rows);
+    
+    LaneInfo result;
+    if (centerline.valid) {
+        // Fix: center_line is a double, not a vector
+        if (!centerline.blend.empty()) {
+            // Use the y-coordinate of the first blend point as center_line
+            result.center_line = centerline.blend[0].y;
+            // Calculate lateral offset from center
+            result.lateral_offset = centerline.blend[0].x - (mask.cols / 2.0);
+        } else {
+            result.center_line = mask.cols / 2.0; // Default to image center
+            result.lateral_offset = 0.0;
+        }
+        
+        // Calculate boundaries if lanes exist
+        if (lanes.size() >= 2) {
+            result.left_boundary = lanes[0].centroids.empty() ? 0.0 : lanes[0].centroids[0].x;
+            result.right_boundary = lanes[1].centroids.empty() ? mask.cols : lanes[1].centroids[0].x;
+        } else {
+            result.left_boundary = 0.0;
+            result.right_boundary = mask.cols;
+        }
+        
+        result.yaw_error = 0.0; // Calculate based on trajectory if needed
+        result.isValid = true;
+        
+        // === PUBLICAR DADOS PARA APLICAÇÕES EXTERNAS ===
+        if (m_zeromq_enabled && m_publisherLaneData) {
+            publishLaneData(result, mask);
+        }
+    } else {
+        result.isValid = false;
+        result.left_boundary = 0.0;
+        result.right_boundary = mask.cols;
+        result.center_line = mask.cols / 2.0;
+        result.lateral_offset = 0.0;
+        result.yaw_error = 0.0;
+    }
+    
+    return result;
+}
+
+void Polyfitter::publishLaneData(const LaneInfo& laneInfo, const cv::Mat& binaryMask) {
+    if (!m_publisherLaneData) return;
+    
+    try {
+        // 1. Publicar informações da lane
+        std::string laneData = serializeLaneInfo(laneInfo);
+        m_publisherLaneData->publish("lane_info", laneData);
+        
+        // 2. Publicar máscara binária processada
+        std::vector<uchar> mask_buffer;
+        cv::imencode(".png", binaryMask, mask_buffer);
+        std::string mask_data(mask_buffer.begin(), mask_buffer.end());
+        m_publisherLaneData->publish("processed_mask", mask_data);
+        
+    } catch (const std::exception& e) {
+        ERROR_STREAM("Polyfitter") << "Error publishing ZeroMQ data: " << e.what();
+    }
+}
+
+std::string Polyfitter::serializeLaneInfo(const LaneInfo& laneInfo) {
+    std::ostringstream oss;
+    oss << laneInfo.left_boundary << "," 
+        << laneInfo.right_boundary << ","
+        << laneInfo.center_line << ","
+        << laneInfo.lateral_offset << ","
+        << laneInfo.yaw_error << ","
+        << (laneInfo.isValid ? 1 : 0);
+    return oss.str();
+}
+
 
 std::vector<std::pair<std::string, cv::Mat>>
 Polyfitter::loadImagesFromFolder(const std::string &folderPath) {
@@ -281,28 +390,6 @@ std::vector<Lane> Polyfitter::fitLanesInImage(const cv::Mat& img) {
     }
     
     return lanes;
-}
-
-// === MÉTODO PRINCIPAL MELHORADO ===
-LaneInfo Polyfitter::processFrame(const cv::Mat& mask) {
-    // Usar novo algoritmo de fitting
-    std::vector<Lane> lanes = fitLanesInImage(mask);
-    
-    // Calcular centerline virtual com blending
-    CenterlineResult centerline = computeVirtualCenterline(lanes, mask.cols, mask.rows);
-    
-    LaneInfo result;
-    if (centerline.valid) {
-        // Converter centerline blended para formato MPC
-        for (const auto& point : centerline.blend) {
-            result.center_line = point.x;
-        }
-        result.isValid = true;
-    } else {
-        result.isValid = false;
-    }
-    
-    return result;
 }
 
 std::pair<Lane *, Lane *> Polyfitter::selectRelevantLanes(std::vector<Lane> &lanes, int imgWidth,

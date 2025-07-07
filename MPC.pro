@@ -86,7 +86,7 @@ HEADERS += \
 QMAKE_CXXFLAGS += -std=c++17 -Wall -Wextra -O3 -fopenmp -fPIC \
                   -march=armv8-a -mcpu=cortex-a57 -mtune=cortex-a57 \
                   -DCUDA_AVAILABLE -DJETSON_NANO
-QMAKE_CXXFLAGS +=  -g -fdump-rtl-expand -fdump-rtl-all -funroll-loops # Para depuração, pode ser removido em produção
+QMAKE_CXXFLAGS +=  -g -fdump-rtl-expand 
 QMAKE_CFLAGS += -fopenmp
 
 # Library paths (baseado no Makefile)
