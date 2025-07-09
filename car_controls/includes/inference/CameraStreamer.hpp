@@ -44,8 +44,10 @@
 #ifndef CAMERA_STREAMER_HPP
 #define CAMERA_STREAMER_HPP
 
+#include "CommonTypes.hpp"
 #include "Debugger.hpp"
 #include "IInferencer.hpp"
+#include "Polyfitter.hpp"
 #include "Publisher.hpp"
 #include "Subscriber.hpp"
 #include "TensorRTInferencer.hpp"
@@ -142,7 +144,7 @@ class FrameBufferDetection {
 		 */
 		void update(const cv::Mat &frame) {
 			std::lock_guard<std::mutex> lock(mutex_);
-			frame_ = frame.clone(); // deep copy
+			frame_ = frame.clone();
 			has_new_frame_ = true;
 		}
 
@@ -229,6 +231,12 @@ class CameraStreamer {
 		 * @details Signals shutdown to all worker threads and waits for clean termination
 		 */
 		void stop();
+		void setMPCCallback(std::function<void(const LaneInfo &)> callback) {
+			m_mpcCallback = callback;
+		}
+		void enableZeroMQPublishing(bool enable = true) {
+			m_zeromq_enabled = enable;
+		}
 
 	private:
 		// === Core Hardware Interfaces ===
@@ -236,21 +244,16 @@ class CameraStreamer {
 		cv::VideoCapture cap;
 		// Frame scaling factor for performance tuning
 		double scale_factor;
-		// CUDA graphics resource for GPU interop
-		cudaGraphicsResource *cuda_resource;
-
-		// === Threading Control ===
-		// Master control flag for all threads
+		bool m_zeromq_enabled = true;	
+		cudaGraphicsResource* cuda_resource;
 		bool m_running;
 
 		// === Communication Infrastructure ===
 		// ZeroMQ publisher for inference results
 		Publisher *m_publisherFrameObject;
-
-		// === AI Inference Engines ===
-		// Lane detection engine
+		std::unique_ptr<Polyfitter> m_polyfitter;
+		std::function<void(const LaneInfo &)> m_mpcCallback;
 		std::shared_ptr<TensorRTInferencer> segmentationInferencer;
-		// Object detection engine
 		std::shared_ptr<YOLOv5TRT> yoloInferencer;
 
 		// === Thread-Safe Frame Management ===

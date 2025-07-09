@@ -46,28 +46,28 @@ std::atomic<bool> g_running{true};
 static ControlsManager *g_emergency_controls = nullptr;
 
 // Emergency motor stop function
-void emergencyMotorStop() {
-	if(g_emergency_controls) {
+void emergencyMotorStop () {
+	if (g_emergency_controls) {
 		try {
 			std::cout << "[EMERGENCY] Stopping all motors..." << std::endl;
 
 			// Use BOTH emergency stop methods for maximum safety
-			g_emergency_controls->emergencyStop();      // Critical emergency stop
-			g_emergency_controls->emergencyMotorStop(); // Motor-specific stop
+			g_emergency_controls->emergencyStop ();      // Critical emergency stop
+			g_emergency_controls->emergencyMotorStop (); // Motor-specific stop
 
 			std::cout << "[EMERGENCY] Motors stopped successfully" << std::endl;
 
-		} catch(const std::exception &e) {
-			ERROR_STREAM("Main") << "[EMERGENCY] Error stopping motors: " << e.what();
+		} catch (const std::exception &e) {
+			ERROR_STREAM ("Main") << "[EMERGENCY] Error stopping motors: " << e.what ();
 			// Try direct hardware stop as last resort
 			try {
 				std::cout << "[EMERGENCY] Attempting direct motor stop..." << std::endl;
-				g_emergency_controls->emergencyMotorStop();
-			} catch(...) {
-				ERROR_LOG("Main", "[EMERGENCY] CRITICAL: All motor stop attempts failed!");
+				g_emergency_controls->emergencyMotorStop ();
+			} catch (...) {
+				ERROR_LOG ("Main", "[EMERGENCY] CRITICAL: All motor stop attempts failed!");
 			}
-		} catch(...) {
-			ERROR_LOG("Main", "[EMERGENCY] Unknown error stopping motors");
+		} catch (...) {
+			ERROR_LOG ("Main", "[EMERGENCY] Unknown error stopping motors");
 		}
 	} else {
 		std::cout << "[EMERGENCY] No controls manager available for motor stop" << std::endl;
@@ -75,30 +75,30 @@ void emergencyMotorStop() {
 }
 
 // Signal handler for Ctrl+C
-void signalHandler(int signum) {
+void signalHandler (int signum) {
 	std::cout << "\nReceived signal " << signum << ". Shutting down gracefully..." << std::endl;
 	g_running = false;
 
 	// CRITICAL: Stop motors immediately on signal
-	emergencyMotorStop();
+	emergencyMotorStop ();
 
 	// Avoid CUDA operations during signal handling - they can cause core dumps
 	// Just set the flag and let the main cleanup handle CUDA resources
 
 	// Give minimal time for Qt to process the shutdown
-	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	std::this_thread::sleep_for (std::chrono::milliseconds (100));
 
 	// Signal Qt to quit if available
-	if(QApplication::instance()) {
-		QApplication::quit();
+	if (QApplication::instance ()) {
+		QApplication::quit ();
 	}
 
 	// Give Qt time to shutdown properly
-	std::this_thread::sleep_for(std::chrono::milliseconds(200));
+	std::this_thread::sleep_for (std::chrono::milliseconds (200));
 
 	// If we're still here after reasonable time, force exit to avoid hangs
 	std::cout << "[SignalHandler] Force exit to avoid CUDA/TensorRT issues" << std::endl;
-	std::_Exit(0); // Use _Exit to avoid destructors that might call CUDA
+	std::_Exit (0); // Use _Exit to avoid destructors that might call CUDA
 }
 
 class MPCIntegratedApp : public QObject {
@@ -144,15 +144,16 @@ class MPCIntegratedApp : public QObject {
 		double constant_throttle = DEFAULT_CONSTANT_THROTTLE;  // Use macro for easy adjustment
 
 	public:
-		MPCIntegratedApp(int argc, char **argv, QObject *parent = nullptr)
-		    : QObject(parent), controls_manager(nullptr), mpc_planner(nullptr), mpc_timer(nullptr) {
+		MPCIntegratedApp (int argc, char **argv, QObject *parent = nullptr)
+		    : QObject (parent), controls_manager (nullptr), mpc_planner (nullptr),
+		      mpc_timer (nullptr) {
 			// Setup signal handlers
-			signal(SIGINT, signalHandler);
-			signal(SIGTERM, signalHandler);
+			signal (SIGINT, signalHandler);
+			signal (SIGTERM, signalHandler);
 
 			try {
 				// Inicializar o sistema de controles existente
-				controls_manager = new ControlsManager(argc, argv, this);
+				controls_manager = new ControlsManager (argc, argv, this);
 
 				// Register for emergency motor stop
 				g_emergency_controls = controls_manager;
@@ -160,11 +161,11 @@ class MPCIntegratedApp : public QObject {
 				          << std::endl;
 
 				// Inicializar MPC
-				mpc_planner = new MPCPlanner();
+				mpc_planner = new MPCPlanner ();
 
 				// Timer para executar MPC periodicamente
-				mpc_timer = new QTimer(this);
-				connect(mpc_timer, &QTimer::timeout, this, &MPCIntegratedApp::runMPCStep);
+				mpc_timer = new QTimer (this);
+				connect (mpc_timer, &QTimer::timeout, this, &MPCIntegratedApp::runMPCStep);
 
 				std::cout << "=== MPC Integrated System ===" << std::endl;
 				std::cout << "Sistema iniciado com controle manual" << std::endl;
@@ -181,34 +182,34 @@ class MPCIntegratedApp : public QObject {
 				std::cout << "- Pressione 'q' para sair" << std::endl;
 
 				// Conectar stdin para comandos
-				setupKeyboardInput();
+				setupKeyboardInput ();
 
 				// Setup visualization
-				setupVisualization();
+				setupVisualization ();
 
 				// Initialize TensorRT inferencer for lane detection
 				try {
-					m_inferencer = std::make_unique<TensorRTInferencer>(
+					m_inferencer = std::make_unique<TensorRTInferencer> (
 					    "/home/jetson/models/lane-detection/model.engine");
 					std::cout << "[MPCIntegratedApp] TensorRT inferencer initialized" << std::endl;
-				} catch(const std::exception &e) {
+				} catch (const std::exception &e) {
 					std::cerr << "[MPCIntegratedApp] Failed to initialize TensorRT inferencer: "
-					          << e.what() << std::endl;
+					          << e.what () << std::endl;
 					// Continue without local inference - will use remote inference
 				}
-			} catch(const std::exception &e) {
-				ERROR_STREAM("Main") << "[MPCIntegratedApp] Initialization error: " << e.what();
+			} catch (const std::exception &e) {
+				ERROR_STREAM ("Main") << "[MPCIntegratedApp] Initialization error: " << e.what ();
 				throw;
 			}
 		}
 
-		~MPCIntegratedApp() {
+		~MPCIntegratedApp () {
 			std::cout << "[~MPCIntegratedApp] Starting cleanup..." << std::endl;
 
 			try {
 				// CRITICAL: Stop motors first thing in cleanup
 				std::cout << "[~MPCIntegratedApp] FAILSAFE: Stopping all motors..." << std::endl;
-				emergencyMotorStop();
+				emergencyMotorStop ();
 
 				// Set global flag to stop all operations
 				g_running = false;
@@ -217,51 +218,51 @@ class MPCIntegratedApp : public QObject {
 				g_emergency_controls = nullptr;
 
 				// Stop all timers first
-				if(mpc_timer) {
-					mpc_timer->stop();
-					mpc_timer->deleteLater();
+				if (mpc_timer) {
+					mpc_timer->stop ();
+					mpc_timer->deleteLater ();
 					mpc_timer = nullptr;
 				}
 
-				if(m_visualizationTimer) {
-					m_visualizationTimer->stop();
-					m_visualizationTimer->deleteLater();
+				if (m_visualizationTimer) {
+					m_visualizationTimer->stop ();
+					m_visualizationTimer->deleteLater ();
 					m_visualizationTimer = nullptr;
 				}
 
 				// Close OpenCV windows safely
 				try {
-					cv::destroyAllWindows();
-					cv::waitKey(1); // Process any pending events
+					cv::destroyAllWindows ();
+					cv::waitKey (1); // Process any pending events
 
 					// Clean up member matrices safely (avoid release() on fixed-size matrices)
-					if(!m_currentLaneMask.empty()) {
-						m_currentLaneMask = cv::Mat(); // Safe cleanup without release()
+					if (!m_currentLaneMask.empty ()) {
+						m_currentLaneMask = cv::Mat (); // Safe cleanup without release()
 					}
-					if(!m_processedFrame.empty()) {
-						m_processedFrame = cv::Mat(); // Safe cleanup without release()
+					if (!m_processedFrame.empty ()) {
+						m_processedFrame = cv::Mat (); // Safe cleanup without release()
 					}
 
 					// Force cleanup of OpenCV internal memory (safer method)
 					cv::Mat temp;
-					temp.create(1, 1, CV_8UC1);
-					temp = cv::Mat(); // Safe cleanup
-					std::this_thread::sleep_for(std::chrono::milliseconds(50));
+					temp.create (1, 1, CV_8UC1);
+					temp = cv::Mat (); // Safe cleanup
+					std::this_thread::sleep_for (std::chrono::milliseconds (50));
 
-				} catch(const cv::Exception &e) {
-					std::cerr << "[~MPCIntegratedApp] OpenCV cleanup warning: " << e.what()
+				} catch (const cv::Exception &e) {
+					std::cerr << "[~MPCIntegratedApp] OpenCV cleanup warning: " << e.what ()
 					          << std::endl;
-				} catch(...) {
+				} catch (...) {
 					// Ignore other OpenCV cleanup errors
 				}
 
 				// For SIGINT shutdowns, avoid CUDA operations entirely
-				if(m_inferencer) {
+				if (m_inferencer) {
 					try {
 						// Don't try to synchronize or reset CUDA during signal shutdown
 						// Just reset the pointer to avoid double-free
-						m_inferencer.reset();
-					} catch(...) {
+						m_inferencer.reset ();
+					} catch (...) {
 						std::cerr << "[~MPCIntegratedApp] Warning: TensorRT cleanup skipped "
 						             "(shutdown in progress)"
 						          << std::endl;
@@ -271,16 +272,16 @@ class MPCIntegratedApp : public QObject {
 
 				// Reset other smart pointers safely
 				try {
-					m_laneDetectionSubscriber.reset();
-				} catch(...) {
+					m_laneDetectionSubscriber.reset ();
+				} catch (...) {
 					// Ignore subscriber cleanup errors
 				}
 
 				// Delete MPC planner safely
-				if(mpc_planner) {
+				if (mpc_planner) {
 					try {
 						delete mpc_planner;
-					} catch(...) {
+					} catch (...) {
 						// Ignore MPC cleanup errors
 					}
 					mpc_planner = nullptr;
@@ -292,55 +293,55 @@ class MPCIntegratedApp : public QObject {
 
 				std::cout << "[~MPCIntegratedApp] Cleanup complete" << std::endl;
 
-			} catch(const std::exception &e) {
-				ERROR_STREAM("Main") << "[~MPCIntegratedApp] Error during cleanup: " << e.what();
-			} catch(...) {
-				ERROR_LOG("Main", "[~MPCIntegratedApp] Unknown error during cleanup");
+			} catch (const std::exception &e) {
+				ERROR_STREAM ("Main") << "[~MPCIntegratedApp] Error during cleanup: " << e.what ();
+			} catch (...) {
+				ERROR_LOG ("Main", "[~MPCIntegratedApp] Unknown error during cleanup");
 			}
 		}
 
 	private slots:
-		void runMPCStep() {
-			if(!mpc_active || !g_running) {
+		void runMPCStep () {
+			if (!mpc_active || !g_running) {
 				return;
 			}
 
 			try {
 				// CRITICAL: Always try to get fresh lane detection data for MPC
 				// This ensures MPC has the latest trajectory data independent of visualization
-				getLaneDetectionFrame();
+				getLaneDetectionFrame ();
 
 				// Use MPC predicted trajectory if available, otherwise fall back to recorded
 				// waypoints
 				std::vector<Point2D> reference_trajectory;
 
-				if(!m_predictedTrajectory.empty()) {
+				if (!m_predictedTrajectory.empty ()) {
 					reference_trajectory = m_predictedTrajectory;
 
 					// Log when using lane detection trajectory
 					static int lane_traj_counter = 0;
-					if(++lane_traj_counter % 100 == 0) {
+					if (++lane_traj_counter % 100 == 0) {
 						std::cout << "[MPC] Using LANE DETECTION trajectory ("
-						          << m_predictedTrajectory.size() << " points)" << std::endl;
+						          << m_predictedTrajectory.size () << " points)" << std::endl;
 					}
-				} else if(recorded_waypoints.size() >= 3) {
+				} else if (recorded_waypoints.size () >= 3) {
 					reference_trajectory = recorded_waypoints;
 
 					// Log when falling back to recorded waypoints
 					static int recorded_traj_counter = 0;
-					if(++recorded_traj_counter % 100 == 0) {
-						std::cout << "[MPC] Using RECORDED waypoints (" << recorded_waypoints.size()
-						          << " points)" << std::endl;
+					if (++recorded_traj_counter % 100 == 0) {
+						std::cout << "[MPC] Using RECORDED waypoints ("
+						          << recorded_waypoints.size () << " points)" << std::endl;
 					}
 				} else {
 					// Enhanced logging for no trajectory case
 					static int no_traj_counter = 0;
-					if(++no_traj_counter % 50 == 0) {
+					if (++no_traj_counter % 50 == 0) {
 						std::cout << "[MPC] WARNING: No trajectory available for control!"
 						          << std::endl;
 						std::cout << "[MPC] - Lane detection trajectory: "
-						          << m_predictedTrajectory.size() << " points" << std::endl;
-						std::cout << "[MPC] - Recorded waypoints: " << recorded_waypoints.size()
+						          << m_predictedTrajectory.size () << " points" << std::endl;
+						std::cout << "[MPC] - Recorded waypoints: " << recorded_waypoints.size ()
 						          << " points" << std::endl;
 						std::cout << "[MPC] - Check ZeroMQ connection on port 5556 for lane "
 						             "detection data"
@@ -350,14 +351,13 @@ class MPCIntegratedApp : public QObject {
 				}
 
 				// Usar trajetória como referência
-				LaneInfo lane_info(0.0, 0.0);
+				LaneInfo lane_info (0.0, 0.0);
 
 				// Get current state from ControlsManager instead of using static local variable
-				VehicleState current_state_from_controls =
-				    controls_manager->getCurrentVehicleState();
+				VehicleState current_state_from_controls = mpc_planner->getCurrentVehicleState ();
 
-				ControlCommand control = mpc_planner->plan(current_state_from_controls,
-				                                           reference_trajectory, &lane_info);
+				ControlCommand control = mpc_planner->plan (current_state_from_controls,
+				                                            reference_trajectory, &lane_info);
 
 				// Apply constant speed mode if enabled
 				if(constant_speed_mode) {
@@ -369,7 +369,7 @@ class MPCIntegratedApp : public QObject {
 					double max_steering_change = 0.05; // rad per step
 					double steering_diff = control.steer - last_steering;
 
-					if(std::abs(steering_diff) > max_steering_change) {
+					if (std::abs (steering_diff) > max_steering_change) {
 						control.steer = last_steering + (steering_diff > 0 ? max_steering_change
 						                                                   : -max_steering_change);
 					}
