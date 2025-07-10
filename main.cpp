@@ -865,9 +865,9 @@ class MPCIntegratedApp : public QObject {
 				m_visualizationFrame = cv::Mat::zeros (550, 900, CV_8UC3);
 
 				// Adjust regions for smaller window
-				cv::Rect cameraRegion (10, 10, 440, 330);      // Smaller camera feed
+				cv::Rect cameraRegion (10, 10, 440, 330); // Smaller camera feed
 				cv::Rect processedRegion (460, 10, 430,
-				                           450);  // Smaller processed view
+				                          450);                // Smaller processed view
 				cv::Rect trajectoryRegion (10, 350, 440, 150); // Trajectory area
 
 				// Get camera frame from ZeroMQ stream (for visualization only)
@@ -908,19 +908,17 @@ class MPCIntegratedApp : public QObject {
 					             cv::Point (15, 30), cv::FONT_HERSHEY_SIMPLEX, 0.6,
 					             cv::Scalar (0, 255, 255), 2);
 				} else {
-					cv::rectangle (m_visualizationFrame, cameraRegion,
-					               cv::Scalar (30, 30, 30), -1);
-					cv::putText (
-					    m_visualizationFrame, "Waiting for Lane Detection Data",
-					    cv::Point (cameraRegion.x + 80, cameraRegion.y + 165),
-					    cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar (0, 0, 255), 2);
+					cv::rectangle (m_visualizationFrame, cameraRegion, cv::Scalar (30, 30, 30), -1);
+					cv::putText (m_visualizationFrame, "Waiting for Lane Detection Data",
+					             cv::Point (cameraRegion.x + 80, cameraRegion.y + 165),
+					             cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar (0, 0, 255), 2);
 				}
 
 				// Draw trajectory comparison visualization
-				drawTrajectoryVisualization(trajectoryRegion);
+				drawTrajectoryVisualization (trajectoryRegion);
 
 				// Add compact system status
-				drawCompactSystemStatus();
+				drawCompactSystemStatus ();
 
 				// Display the frame
 				cv::imshow ("MPC Integrated System", m_visualizationFrame);

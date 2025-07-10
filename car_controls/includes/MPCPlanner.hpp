@@ -25,7 +25,7 @@ class MPCPlanner {
 		// Direct integration with enhanced inferencer
 		std::shared_ptr<PolyfitterInferencer> m_polyfitterInferencer;
 		bool m_useDirectInference;
-				struct CachedVisionData {
+		struct CachedVisionData {
 				std::vector<Point2D> waypoints;
 				LaneInfo lane_info{0.0, 0.0};
 				std::chrono::steady_clock::time_point timestamp;
