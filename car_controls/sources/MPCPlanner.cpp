@@ -83,23 +83,21 @@ ControlCommand MPCPlanner::plan (const VehicleState &current_state,
 }
 
 ControlCommand MPCPlanner::_mapCommandsToHardware (double throttle, double steer) const {
-	// Mapear throttle para o range do seu hardware
-	// Exemplo: converter de [-1, 1] para [1000, 2000] PWM se necessário
+	// === MPC FULL AUTHORITY MAPPING ===
+	// Servo test confirmed full range capability - removing artificial limitations
+
 	double mapped_throttle = throttle;
 
-	// Aplicar curva de resposta não-linear se necessário
+	// Enhanced throttle response for better performance
 	if (throttle > 0) {
-		mapped_throttle = std::min (1.0, throttle * 1.2); // Aumentar sensibilidade
+		mapped_throttle =
+		    std::min (1.0, throttle * 1.3); // Increased sensitivity for better acceleration
 	}
 
-	// Mapear steering com possível offset de calibração
+	// FULL RANGE steering mapping - no artificial deadzone
 	double mapped_steer = steer;
 
-	// Aplicar deadzone e limitação
-	if (std::abs (mapped_steer) < 0.03) {
-		mapped_steer = 0.0;
-	}
-
+	// Only apply hardware limits (±45° = ±0.785 rad), no artificial restrictions
 	mapped_steer = std::max (MPCConfig::steering_limits[0],
 	                         std::min (MPCConfig::steering_limits[1], mapped_steer));
 

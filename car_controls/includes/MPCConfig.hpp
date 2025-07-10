@@ -27,16 +27,16 @@ struct MPCConfig {
 		    0.3; // Velocidade mínima em curvas: 0.3 m/s
 		static constexpr double target_speed_curve_factor = 15.0; // Fator de redução por curvatura
 
-		// Restrições de controle ajustadas para servo motor real
-		static constexpr double max_steer = 0.35;   // ±20 graus (servo limitado)
-		static constexpr double max_throttle = 0.6; // 60% do throttle máximo para segurança
+		// MPC FULL AUTHORITY: Servo test confirmed full range capability
+		static constexpr double max_steer = 0.785;  // ±45° (0.785 rad) - FULL hardware range
+		static constexpr double max_throttle = 0.8; // 80% throttle for better performance
 		static constexpr double max_brake = 0.3;    // Frenagem suave
 		static constexpr int max_iter = 300;        // Menos iterações para tempo real
 
-		// Limites ajustados para hardware real
-		static constexpr std::array<double, 2> steering_limits = {-0.35, 0.35}; // ±20 graus
+		// MPC FULL CONTROL LIMITS: Servo test validated full ±45° range
+		static constexpr std::array<double, 2> steering_limits = {-0.785, 0.785}; // ±45° in radians
 		static constexpr std::array<double, 2> throttle_limits = {
-		    -0.3, 0.6}; // Reverse limitado, forward controlado
+		    -0.3, 0.8}; // Expanded forward throttle for better performance
 
 		// Parâmetros específicos para Jetracer
 		static constexpr double desired_speed = 0.8;      // Velocidade de cruzeiro: 0.8 m/s

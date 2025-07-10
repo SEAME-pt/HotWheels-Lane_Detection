@@ -39,28 +39,31 @@ class EngineController : public QObject {
 		std::atomic<int> m_current_angle;
 		CarDirection m_currentDirection = CarDirection::Stop;
 
-		void setDirection(CarDirection newDirection);
+		void setDirection (CarDirection newDirection);
 
 		IPeripheralController *pcontrol;
 
 	public:
-		EngineController();
-		EngineController(int servo_addr, int motor_addr, QObject *parent = nullptr);
-		~EngineController();
+		EngineController ();
+		EngineController (int servo_addr, int motor_addr, QObject *parent = nullptr);
+		~EngineController ();
 
-		void start();
-		void stop();
-		void set_speed(int speed);
-		void set_steering(int angle);
+		void start ();
+		void stop ();
+		void set_speed (int speed);
+		void set_steering (int angle);
+
+		// === SERVO INITIALIZATION TEST ===
+		void testServoInitialization (); // Tests servo movement during startup
 
 		// === CRITICAL SAFETY: Emergency stop methods ===
-		void forcedMotorStop();       // Forces all motors to zero - bypasses all logic
-		void emergencyHardwareStop(); // Multiple redundant hardware stops
+		void forcedMotorStop ();       // Forces all motors to zero - bypasses all logic
+		void emergencyHardwareStop (); // Multiple redundant hardware stops
 
 	signals:
-		void directionUpdated(CarDirection newDirection);
-		void steeringUpdated(int newAngle);
-		void speedUpdated(int newSpeed);
+		void directionUpdated (CarDirection newDirection);
+		void steeringUpdated (int newAngle);
+		void speedUpdated (int newSpeed);
 };
 
 #endif // ENGINECONTROLLER_HPP
