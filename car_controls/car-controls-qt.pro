@@ -33,11 +33,8 @@ SOURCES += \
 	sources/JoysticksController.cpp \
 	sources/PeripheralController.cpp \
 	sources/inference/CameraStreamer.cpp \
-	sources/inference/KerasInferencer.cpp \
 	sources/inference/LaneCurveFitter.cpp \
 	sources/objectDetection/YOLOv5TRT.cpp \
-	sources/inference/InferenceManager.cpp \
-	# sources/inference/ONNXInferencer.cpp \
 	sources/inference/LanePostProcessor.cpp \
 	sources/objectDetection/LabelManager.cpp \
 	sources/inference/TensorRTInferencer.cpp \
@@ -60,11 +57,8 @@ HEADERS += \
 	includes/inference/IInferencer.hpp \
 	includes/IPeripheralController.hpp \
 	includes/inference/CameraStreamer.hpp \
-	includes/inference/KerasInferencer.hpp \
 	includes/inference/LaneCurveFitter.hpp \
 	includes/objectDetection/YOLOv5TRT.hpp \
-	# includes/inference/ONNXInferencer.hpp \
-	includes/inference/InferenceManager.hpp \
 	includes/inference/LanePostProcessor.hpp \
 	includes/inference/TensorRTInferencer.hpp \
 	includes/objectDetection/LabelManager.hpp \

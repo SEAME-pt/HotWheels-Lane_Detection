@@ -91,7 +91,7 @@ class Polyfitter {
 		std::vector<double> linspace(double start, double end, int num);
 		std::vector<double> interp(const std::vector<double> &xNew, const std::vector<double> &x,
 		                           const std::vector<double> &y, double leftVal, double rightVal);
-
+		LaneInfo processMask(const cv::cuda::GpuMat& maskGpu);
 		// === MÉTODOS MELHORADOS (OTIMIZADOS) ===
 		bool isStraightLine(const std::vector<double> &y, const std::vector<double> &x) const;
 

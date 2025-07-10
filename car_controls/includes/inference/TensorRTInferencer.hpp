@@ -96,4 +96,5 @@ class TensorRTInferencer : public IInferencer {
 		cv::Mat getLastMask() const {
 			return lastMask;
 		}
+		cv::cuda::GpuMat renderFittedLane(const cv::cuda::GpuMat& processedMaskGpu);
 };

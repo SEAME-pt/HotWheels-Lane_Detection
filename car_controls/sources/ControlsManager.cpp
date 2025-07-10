@@ -187,7 +187,7 @@ void ControlsManager::initializeCommunication(int argc, char **argv) {
 
                 if(items[0].revents & ZMQ_POLLIN) {
                     zmq::message_t message;
-                    if(m_subscriberJoystickObject->getSocket().recv(&message, 0)) {
+                    if(m_subscriberJoystickObject->getSocket().recv(message, zmq::recv_flags::dontwait)) {
                         std::string received_msg(static_cast<char *>(message.data()), message.size());
                         
                         if(received_msg.find("joystick_value") == 0) {
@@ -401,38 +401,6 @@ bool ControlsManager::getZeroMQLaneData(LaneInfo &lane_info) {
 }
 
 /*!
- * @brief Generate straight trajectory fallback
- */
-LaneInfo ControlsManager::generateStraightTrajectory() {
-    LaneInfo fallback_lane;
-    fallback_lane.left_boundary = -1.0;
-    fallback_lane.right_boundary = 1.0;
-    fallback_lane.center_line = 0.0;
-    fallback_lane.lateral_offset = 0.0;
-    fallback_lane.yaw_error = 0.0;
-    fallback_lane.isValid = true;
-    return fallback_lane;
-}
-
-/*!
- * @brief Apply smooth steering to prevent servo damage
- */
-ControlCommand ControlsManager::applySmoothSteering(const ControlCommand &control) {
-    static double last_steering = 0.0;
-    double max_steering_change = 0.05; // rad per step
-    double steering_diff = control.steer - last_steering;
-    
-    ControlCommand smooth_control = control;
-    if(std::abs(steering_diff) > max_steering_change) {
-        smooth_control.steer = last_steering + 
-            (steering_diff > 0 ? max_steering_change : -max_steering_change);
-    }
-    last_steering = smooth_control.steer;
-    
-    return smooth_control;
-}
-
-/*!
  * @brief Apply controls with safety limits and servo protection
  */
 void ControlsManager::applyControlsWithSafety(const ControlCommand &control, int control_counter) {
@@ -474,26 +442,6 @@ void ControlsManager::applyControlsWithSafety(const ControlCommand &control, int
     // Apply to hardware (inverted speed for motor cross-connection fix)
     m_engineController.set_speed(-final_throttle_pct);
     m_engineController.set_steering(steer_angle);
-}
-
-/*!
- * @brief Extract waypoints from lane information
- */
-std::vector<Point2D> ControlsManager::extractWaypointsFromLaneInfo(const LaneInfo &lane_info) {
-    std::vector<Point2D> waypoints;
-    
-    if (lane_info.isValid) {
-        // Generate waypoints based on lane boundaries
-        double center_x = (lane_info.left_boundary + lane_info.right_boundary) / 2.0;
-        
-        // Generate forward waypoints
-        for (int i = 1; i <= MPCConfig::horizon; ++i) {
-            double distance_ahead = i * 2.0; // 2m spacing
-            waypoints.emplace_back(distance_ahead, center_x + lane_info.lateral_offset);
-        }
-    }
-    
-    return waypoints;
 }
 
 /*!
@@ -565,15 +513,13 @@ void ControlsManager::stopAutonomousControl() {
 void ControlsManager::autonomousControlLoop() {
     const double CONTROL_PERIOD = 1.0 / CONTROL_RATE;
     auto last_control_time = std::chrono::steady_clock::now();
-
-    // Add external reference to global running flag
     extern std::atomic<bool> g_running;
 
-    INFO_LOG("ControlsManager", "Autonomous control loop started with direct MPC flow");
+    INFO_LOG("ControlsManager", "Autonomous control loop started (MPC delegated)");
 
-    while(m_autonomousMode && m_running && g_running.load()) {
-        // CRITICAL SAFETY: Check emergency stop flag first
-        if(m_emergencyStop.load()) {
+    while (m_autonomousMode && m_running && g_running.load()) {
+        // 1. Segurança: parada de emergência
+        if (m_emergencyStop.load()) {
             m_engineController.set_speed(0);
             m_engineController.set_steering(0);
             INFO_LOG("ControlsManager", "Emergency stop is active - motors stopped");
@@ -581,74 +527,64 @@ void ControlsManager::autonomousControlLoop() {
             continue;
         }
 
+        // 2. Controle de período (tempo real)
         auto now = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration<double>(now - last_control_time).count();
-
-        // Precise timing control
-        if(elapsed < CONTROL_PERIOD) {
-            std::this_thread::sleep_for(std::chrono::microseconds(static_cast<long>(
-                (CONTROL_PERIOD - elapsed) * 1000000 * 0.8)
-            ));
+        if (elapsed < CONTROL_PERIOD) {
+            std::this_thread::sleep_for(
+                std::chrono::microseconds(static_cast<int>((CONTROL_PERIOD - elapsed) * 1e6 * 0.8))
+            );
             continue;
         }
         last_control_time = now;
 
-        // Reduced logging frequency
         static int control_counter = 0;
         control_counter++;
 
         try {
-            // === FLUXO DIRETO SIMPLIFICADO ===
-            // 1. Get current vehicle state
+            // 3. Estado do veículo
             VehicleState current_state = getVehicleStateWithDiagnostics();
 
-            // 2. Get lane data from direct flow (primary source)
+            // 4. Dados de faixa (LaneInfo) - fluxo direto ou fallback
             LaneInfo lane_info;
             bool has_valid_data = getDirectLaneData(lane_info);
-
-            // 3. Fallback to ZeroMQ if direct flow fails (optional)
             if (!has_valid_data && m_maintainZeroMQ) {
                 has_valid_data = getZeroMQLaneData(lane_info);
                 if (control_counter % 40 == 0) {
                     DEBUG_LOG("ControlsManager", "Using ZeroMQ fallback");
                 }
             }
-
-            // 4. Final fallback: straight trajectory
             if (!has_valid_data) {
-                lane_info = generateStraightTrajectory();
+                lane_info = m_mpcPlanner->generateStraightTrajectory();
                 if (control_counter % 40 == 0) {
                     DEBUG_LOG("ControlsManager", "Using straight fallback");
                 }
             }
 
-            // 5. Check for emergency obstacles
-            if(getCachedEmergencyStop()) {
+            // 5. Parada de emergência por obstáculos
+            if (getCachedEmergencyStop()) {
                 m_engineController.set_speed(0);
-                if(control_counter % 40 == 0) {
+                if (control_counter % 40 == 0) {
                     INFO_LOG("ControlsManager", "Emergency stop activated!");
                 }
                 continue;
             }
 
-            // 6. Extract waypoints from lane info
-            std::vector<Point2D> waypoints = extractWaypointsFromLaneInfo(lane_info);
-            
-            // 7. Calculate MPC control
-            ControlCommand control = m_mpcPlanner->plan(current_state, waypoints, &lane_info);
+            // 6. Delegação para o MPC: cálculo do comando ótimo
+            ControlCommand command = m_mpcPlanner->runAutonomousStep(current_state, lane_info);
 
-            // 8. Apply constant speed override if enabled
-            if(m_constantSpeedMode) {
-                control.throttle = m_constantThrottle;
-                control = applySmoothSteering(control);
+            // 7. Modo de velocidade constante (opcional para diagnóstico)
+            if (m_constantSpeedMode) {
+                command.throttle = m_constantThrottle;
+                command = m_mpcPlanner->applySmoothSteering(command);
             }
 
-            // 9. Apply hardware controls with safety limits
-            applyControlsWithSafety(control, control_counter);
+            // 8. Aplicação dos comandos ao hardware com proteção
+            applyControlsWithSafety(command, control_counter);
 
-        } catch(const std::exception &e) {
+        } catch (const std::exception &e) {
             ERROR_STREAM("ControlsManager") << "Autonomous control error: " << e.what();
-            m_engineController.set_speed(0); // Safety stop
+            m_engineController.set_speed(0); // Segurança
         }
     }
 
@@ -657,85 +593,8 @@ void ControlsManager::autonomousControlLoop() {
 
 // === Vehicle State Estimation Methods ===
 
-VehicleState ControlsManager::getCurrentVehicleState() {
-    return getEnhancedVehicleState();
-}
-
-VehicleState ControlsManager::getEnhancedVehicleState() {
-    std::lock_guard<std::mutex> lock(m_stateEstimator.m_stateMutex);
-    auto now = std::chrono::steady_clock::now();
-    double dt = std::chrono::duration<double>(now - m_stateEstimator.m_lastUpdate).count();
-    m_stateEstimator.m_lastUpdate = now;
-
-    if(!m_stateEstimator.m_initialized) {
-        m_stateEstimator.m_estimatedState = {0.0, 0.0, 0.0, 0.5};
-        m_stateEstimator.m_initialized = true;
-        return m_stateEstimator.m_estimatedState;
-    }
-
-    dt = std::clamp(dt, 0.001, 0.1);
-    double applied_throttle = m_lastThrottle.load();
-    double applied_steering = m_lastSteering.load();
-
-    updateVehicleStateEstimation(applied_throttle, applied_steering, dt);
-
-    if(m_stateEstimator.m_useRealSensors.load()) {
-        integrateRealSensorData();
-    }
-
-    return m_stateEstimator.m_estimatedState;
-}
-
-void ControlsManager::updateVehicleStateEstimation(double applied_throttle, double applied_steering, double dt) {
-    VehicleState &state = m_stateEstimator.m_estimatedState;
-    
-    // Vehicle parameters (tuned for Jetracer)
-    const double wheelbase = 0.15; // 15cm wheelbase
-    const double max_acceleration = 3.0;
-    const double max_deceleration = 4.0;
-    const double rolling_resistance = 0.1;
-    const double air_resistance = 0.05;
-    const double max_velocity = 2.0;
-    const double steering_response = 0.8;
-
-    // === Velocity dynamics ===
-    double target_acceleration = applied_throttle * max_acceleration;
-    double resistance_force = rolling_resistance + air_resistance * state.velocity * state.velocity;
-    double net_acceleration = target_acceleration - resistance_force;
-
-    if(net_acceleration > 0) {
-        net_acceleration = std::min(net_acceleration, max_acceleration);
-    } else {
-        net_acceleration = std::max(net_acceleration, -max_deceleration);
-    }
-
-    state.velocity += net_acceleration * dt;
-    state.velocity = std::clamp(state.velocity, 0.0, max_velocity);
-
-    if(state.velocity > 0.1) {
-        state.velocity += (((double)rand() / RAND_MAX) - 0.5) * 0.02;
-    }
-
-    // === Position integration ===
-    double distance = state.velocity * dt;
-    state.x += distance * std::cos(state.yaw);
-    state.y += distance * std::sin(state.yaw);
-
-    // === Yaw dynamics ===
-    if(std::abs(applied_steering) > 0.01 && state.velocity > 0.1) {
-        double turning_radius = wheelbase / std::tan(applied_steering * steering_response);
-        double angular_velocity = state.velocity / turning_radius;
-        angular_velocity = std::clamp(angular_velocity, -2.0, 2.0);
-        state.yaw += angular_velocity * dt;
-        state.yaw += (((double)rand() / RAND_MAX) - 0.5) * 0.01;
-
-        while(state.yaw > M_PI) state.yaw -= 2.0 * M_PI;
-        while(state.yaw < -M_PI) state.yaw += 2.0 * M_PI;
-    }
-}
-
 VehicleState ControlsManager::getVehicleStateWithDiagnostics() {
-    VehicleState state = getEnhancedVehicleState();
+    VehicleState state = m_mpcPlanner->getEnhancedVehicleState();
     
     static int diagnostic_counter = 0;
     diagnostic_counter++;
@@ -765,7 +624,7 @@ std::vector<Point2D> ControlsManager::getWaypointsFromVision() {
         
         if(items[0].revents & ZMQ_POLLIN) {
             zmq::message_t message;
-            if(m_visionSubscriber->getSocket().recv(&message, 0)) {
+            if(m_visionSubscriber->getSocket().recv(message, zmq::recv_flags::dontwait)) {
                 std::string received_msg(static_cast<char*>(message.data()), message.size());
                 const std::string topic = "binary_mask ";
                 
@@ -805,7 +664,7 @@ LaneInfo ControlsManager::getLaneInfoFromVision() {
         
         if(items[0].revents & ZMQ_POLLIN) {
             zmq::message_t message;
-            if(m_visionSubscriber->getSocket().recv(&message, 0)) {
+            if(m_visionSubscriber->getSocket().recv(message, zmq::recv_flags::dontwait)) {
                 std::string received_msg(static_cast<char*>(message.data()), message.size());
                 const std::string topic = "binary_mask ";
                 
@@ -850,7 +709,7 @@ bool ControlsManager::checkEmergencyObstacles() {
         
         if(items[0].revents & ZMQ_POLLIN) {
             zmq::message_t message;
-            if(m_obstacleSubscriber->getSocket().recv(&message, 0)) {
+            if(m_obstacleSubscriber->getSocket().recv(message, zmq::recv_flags::dontwait)) {
                 std::string received_msg(static_cast<char*>(message.data()), message.size());
                 const std::string topic = "emergency_stop ";
                 
@@ -867,24 +726,7 @@ bool ControlsManager::checkEmergencyObstacles() {
     return false;
 }
 
-// === Cached Data Access Methods ===
 
-std::vector<Point2D> ControlsManager::getCachedWaypoints() {
-    std::lock_guard<std::mutex> lock(m_cachedVisionData.mutex);
-    auto now = std::chrono::steady_clock::now();
-    auto age_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        now - m_cachedVisionData.timestamp).count();
-
-    if(m_cachedVisionData.valid && age_ms < DATA_TIMEOUT_MS) {
-        return m_cachedVisionData.waypoints;
-    }
-
-    std::vector<Point2D> fallback_waypoints;
-    for(int i = 1; i <= 10; ++i) {
-        fallback_waypoints.emplace_back(i * 2.0, 0.0);
-    }
-    return fallback_waypoints;
-}
 
 LaneInfo ControlsManager::getCachedLaneInfo() {
     std::lock_guard<std::mutex> lock(m_cachedVisionData.mutex);
@@ -1004,11 +846,6 @@ std::string ControlsManager::serializeMask(const cv::Mat &mask) {
     std::vector<uchar> buffer;
     cv::imencode(".png", mask, buffer);
     return std::string(buffer.begin(), buffer.end());
-}
-
-cv::Mat ControlsManager::deserializeMask(const std::string &data) {
-    std::vector<uchar> buffer(data.begin(), data.end());
-    return cv::imdecode(buffer, cv::IMREAD_GRAYSCALE);
 }
 
 // === Safety and Control Methods ===
@@ -1176,51 +1013,6 @@ void ControlsManager::resetVehicleState(const VehicleState &initial_state) {
              << initial_state.velocity << " m/s)";
 }
 
-void ControlsManager::integrateRealSensorData() {
-    VehicleState &state = m_stateEstimator.m_estimatedState;
-    
-    if(m_stateEstimator.m_useRealSensors.load()) {
-        // Use vision data for position correction
-        std::vector<Point2D> current_waypoints = getCachedWaypoints();
-        if(!current_waypoints.empty() && current_waypoints.size() >= 2) {
-            Point2D first_wp = current_waypoints[0];
-            Point2D second_wp = current_waypoints[1];
-            double expected_yaw = std::atan2(second_wp.y - first_wp.y, second_wp.x - first_wp.x);
-            
-            const double vision_weight = 0.1;
-            double yaw_correction = expected_yaw - state.yaw;
-            
-            while(yaw_correction > M_PI) yaw_correction -= 2.0 * M_PI;
-            while(yaw_correction < -M_PI) yaw_correction += 2.0 * M_PI;
-            
-            state.yaw += vision_weight * yaw_correction;
-        }
-
-        // Use applied controls for velocity estimation refinement
-        double real_throttle_effect = m_stateEstimator.m_realVelocity.load();
-        if(real_throttle_effect > 0.01) {
-            const double feedback_weight = 0.2;
-            state.velocity = feedback_weight * real_throttle_effect + 
-                           (1.0 - feedback_weight) * state.velocity;
-        }
-
-        // Add realistic measurement noise
-        double vision_noise_x = (((double)rand() / RAND_MAX) - 0.5) * 0.05;
-        double vision_noise_y = (((double)rand() / RAND_MAX) - 0.5) * 0.05;
-        state.x += vision_noise_x;
-        state.y += vision_noise_y;
-
-        double control_noise_vel = (((double)rand() / RAND_MAX) - 0.5) * 0.01;
-        double control_noise_yaw = (((double)rand() / RAND_MAX) - 0.5) * 0.005;
-        state.velocity += control_noise_vel;
-        state.velocity = std::max(0.0, state.velocity);
-        state.yaw += control_noise_yaw;
-
-        while(state.yaw > M_PI) state.yaw -= 2.0 * M_PI;
-        while(state.yaw < -M_PI) state.yaw += 2.0 * M_PI;
-    }
-}
-
 // === Direct Control Methods ===
 
 void ControlsManager::applyControlCommand(const ControlCommand &command) {
@@ -1242,58 +1034,7 @@ void ControlsManager::applySteering(double steering) {
     m_lastSteering.store(steering);
 }
 
-// === Debug and Visualization Methods ===
-
-void ControlsManager::showVisionDebug() {
-    Subscriber vision_sub;
-    vision_sub.connect("tcp://localhost:5556");
-    vision_sub.subscribe("binary_mask");
-    
-    try {
-        zmq::pollitem_t items[] = {{static_cast<void*>(vision_sub.getSocket()), 0, ZMQ_POLLIN, 0}};
-        zmq::poll(items, 1, 100);
-        
-        if(items[0].revents & ZMQ_POLLIN) {
-            zmq::message_t message;
-            if(vision_sub.getSocket().recv(&message, 0)) {
-                std::string received_msg(static_cast<char*>(message.data()), message.size());
-                const std::string topic = "binary_mask ";
-                
-                if(received_msg.find(topic) == 0) {
-                    std::string mask_data = received_msg.substr(topic.size());
-                    cv::Mat binary_mask = deserializeMask(mask_data);
-                    
-                    cv::Mat vis;
-                    cv::cvtColor(binary_mask, vis, cv::COLOR_GRAY2BGR);
-                    
-                    auto lanes = m_polyfitter->fitLanesInImage(binary_mask);
-                    for(const auto &lane : lanes) {
-                        for(size_t i = 1; i < lane.curve.size(); ++i) {
-                            cv::line(vis, 
-                                cv::Point(lane.curve[i-1].x, lane.curve[i-1].y),
-                                cv::Point(lane.curve[i].x, lane.curve[i].y),
-                                cv::Scalar(0, 255, 0), 2);
-                        }
-                    }
-                    
-                    auto centerline = m_polyfitter->computeVirtualCenterline(
-                        lanes, binary_mask.cols, binary_mask.rows);
-                    
-                    if(centerline.valid) {
-                        for(size_t i = 1; i < centerline.blend.size(); ++i) {
-                            cv::line(vis,
-                                cv::Point(centerline.blend[i-1].x, centerline.blend[i-1].y),
-                                cv::Point(centerline.blend[i].x, centerline.blend[i].y),
-                                cv::Scalar(0, 128, 255), 2);
-                        }
-                    }
-                    
-                    cv::imshow("Lane Detection Debug", vis);
-                    cv::waitKey(1);
-                }
-            }
-        }
-    } catch(const zmq::error_t &e) {
-        ERROR_STREAM("ControlsManager") << "Vision debug error: " << e.what();
-    }
+cv::Mat ControlsManager::deserializeMask(const std::string &data) {
+    std::vector<uchar> buffer(data.begin(), data.end());
+    return cv::imdecode(buffer, cv::IMREAD_GRAYSCALE);
 }

@@ -79,13 +79,17 @@ class CameraStreamer {
 		void enableZeroMQPublishing(bool enable = true) {
 			m_zeromq_enabled = enable;
 		}
-		std::string serializeLaneInfo(const LaneInfo &laneInfo);
 
 	private:
 		cv::VideoCapture cap;
 		double scale_factor;
-		bool m_zeromq_enabled = true;
+		bool m_zeromq_enabled = true;	
+		cudaGraphicsResource* cuda_resource;
 		bool m_running;
+
+		// === Communication Infrastructure ===
+		// ZeroMQ publisher for inference results
+		Publisher *m_publisherFrameObject;
 		std::unique_ptr<Polyfitter> m_polyfitter;
 		std::function<void(const LaneInfo &)> m_mpcCallback;
 		std::shared_ptr<TensorRTInferencer> segmentationInferencer;

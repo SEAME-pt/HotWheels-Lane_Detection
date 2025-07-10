@@ -124,8 +124,6 @@ class ControlsManager : public QObject {
 		void startAutonomousControl();
 		void stopAutonomousControl();
 		void autonomousControlLoop();
-		void showVisionDebug();
-		VehicleState getCurrentVehicleState();
 		void enableRealSensors(bool enable = true);
 		void updateRealVelocity(double velocity);
 		void updateRealYawRate(double yaw_rate);
@@ -189,11 +187,8 @@ class ControlsManager : public QObject {
 		void stopAutonomousControlMotor();
 		bool getDirectLaneData(LaneInfo &lane_info);
 		bool getZeroMQLaneData(LaneInfo &lane_info);
-		LaneInfo generateStraightTrajectory();
-		ControlCommand applySmoothSteering(const ControlCommand &control);
 		void applyControlsWithSafety(const ControlCommand &control, int control_counter);
-
-		std::vector<Point2D> extractWaypointsFromLaneInfo(const LaneInfo &lane_info);
+		cv::Mat deserializeMask(const std::string &data);
 
 	private:
 		void initializeHardwareControllers();
@@ -201,20 +196,14 @@ class ControlsManager : public QObject {
 		void initializeVisionPipeline(int argc, char **argv);
 		void initializeCommunication(int argc, char **argv);
 		void initializeDataThreads();
-		std::vector<Point2D> getCachedWaypoints();
 		LaneInfo getCachedLaneInfo();
 		bool getCachedEmergencyStop();
 		void visionDataUpdateLoop();
 		void obstacleDataUpdateLoop();
-		void updateVehicleStateEstimation(double applied_throttle, double applied_steering,
-		                                  double dt);
-		void integrateRealSensorData();
-		VehicleState getEnhancedVehicleState();
 		std::vector<Point2D> getWaypointsFromVision();
 		LaneInfo getLaneInfoFromVision();
 		bool checkEmergencyObstacles();
 		std::string serializeMask(const cv::Mat &mask);
-		cv::Mat deserializeMask(const std::string &data);
 	signals:
 		void emergencyStopSignal();
 		void modeChanged(DrivingMode mode);

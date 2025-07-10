@@ -1,24 +1,93 @@
 {
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "C/C++ Runner: Debug Session",
-      "type": "cppdbg",
-      "request": "launch",
-      "args": [],
-      "stopAtEntry": false,
-      "externalConsole": false,
-      "cwd": "/home/michel/Documents/other",
-      "program": "/home/michel/Documents/other/build/Debug/outDebug",
-      "MIMode": "gdb",
-      "miDebuggerPath": "gdb",
-      "setupCommands": [
-        {
-          "description": "Enable pretty-printing for gdb",
-          "text": "-enable-pretty-printing",
-          "ignoreFailures": true
-        }
-      ]
-    }
-  ]
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Debug Remote Jetson",
+			"type": "cppdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}/build/main",
+			"args": [],
+			"stopAtEntry": false,
+			"cwd": "${workspaceFolder}",
+			"environment": [],
+			"externalConsole": false,
+			"MIMode": "gdb",
+			"miDebuggerPath": "/usr/bin/gdb-multiarch",
+			"miDebuggerServerAddress": "localhost:2345",
+			"useExtendedRemote": true,
+			"sourceFileMap": {
+				"/home/jetson/Documents/MPC": "${workspaceFolder}"
+			},
+			"setupCommands": [
+				{
+					"description": "Enable pretty-printing for gdb",
+					"text": "-enable-pretty-printing",
+					"ignoreFailures": true
+				},
+				{
+					"description": "Set target architecture",
+					"text": "set architecture aarch64",
+					"ignoreFailures": true
+				}
+			]
+		},
+		{
+			"name": "Debug Remote Jetson (Alternative)",
+			"type": "cppdbg",
+			"request": "attach",
+			"program": "${workspaceFolder}/build/main",
+			"MIMode": "gdb",
+			"miDebuggerPath": "/usr/bin/gdb-multiarch",
+			"miDebuggerServerAddress": "localhost:2345",
+			"useExtendedRemote": true,
+			"sourceFileMap": {
+				"/home/jetson/Documents/MPC": "${workspaceFolder}",
+				"/home/michel/Documents/other": "${workspaceFolder}"
+			},
+			"setupCommands": [
+				{
+					"description": "Enable pretty-printing for gdb",
+					"text": "-enable-pretty-printing",
+					"ignoreFailures": true
+				},
+				{
+					"description": "Set target architecture",
+					"text": "set architecture aarch64",
+					"ignoreFailures": true
+				}
+			],
+			"logging": {
+				"engineLogging": true,
+				"trace": true,
+				"traceResponse": true
+			}
+		},
+		{
+			"name": "Debug Remote Jetson (Simple)",
+			"type": "cppdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}/build/main",
+			"args": [],
+			"stopAtEntry": false,
+			"cwd": "${workspaceFolder}",
+			"environment": [],
+			"externalConsole": false,
+			"MIMode": "gdb",
+			"miDebuggerPath": "/usr/bin/gdb-multiarch",
+			"miDebuggerServerAddress": "localhost:2345",
+			"useExtendedRemote": true,
+			"setupCommands": [
+				{
+					"description": "Enable pretty-printing for gdb",
+					"text": "-enable-pretty-printing",
+					"ignoreFailures": true
+				},
+				{
+					"description": "Set target architecture",
+					"text": "set architecture aarch64",
+					"ignoreFailures": true
+				}
+			]
+		}
+	]
 }

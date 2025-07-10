@@ -43,13 +43,10 @@ SOURCES += \
     car_controls/sources/MPCPlanner.cpp \
     car_controls/sources/Polyfitter.cpp \
     car_controls/sources/inference/LaneCurveFitter.cpp \
-    car_controls/sources/inference/KerasInferencer.cpp \
-    car_controls/sources/inference/InferenceManager.cpp \
     car_controls/sources/inference/TensorRTInferencer.cpp \
     car_controls/sources/inference/PolyfitterInferencer.cpp \
     car_controls/sources/inference/CameraStreamer.cpp \
     car_controls/sources/inference/LanePostProcessor.cpp \
-    car_controls/sources/inference/ONNXInferencer.cpp \
     car_controls/sources/MPCOptimizer.cpp \
     car_controls/sources/objectDetection/LabelManager.cpp \
     car_controls/sources/objectDetection/YOLOv5TRT.cpp
@@ -72,11 +69,8 @@ HEADERS += \
     car_controls/includes/inference/IInferencer.hpp \
     car_controls/includes/IPeripheralController.hpp \
     car_controls/includes/inference/CameraStreamer.hpp \
-    car_controls/includes/inference/KerasInferencer.hpp \
     car_controls/includes/inference/LaneCurveFitter.hpp \
     car_controls/includes/objectDetection/YOLOv5TRT.hpp \
-    car_controls/includes/inference/ONNXInferencer.hpp \
-    car_controls/includes/inference/InferenceManager.hpp \
     car_controls/includes/inference/LanePostProcessor.hpp \
     car_controls/includes/inference/TensorRTInferencer.hpp \
     car_controls/includes/objectDetection/LabelManager.hpp \
@@ -84,7 +78,7 @@ HEADERS += \
 
 # Compilation flags (otimizações do Makefile)
 QMAKE_CXXFLAGS += -std=c++17 -Wall -Wextra -O3 -fopenmp -fPIC \
-                  -march=armv8-a -mcpu=cortex-a57 -mtune=cortex-a57 \
+                  -march=armv8-a -mtune=cortex-a57 \
                   -DCUDA_AVAILABLE -DJETSON_NANO
 QMAKE_CXXFLAGS +=  -g -fdump-rtl-expand 
 QMAKE_CFLAGS += -fopenmp
