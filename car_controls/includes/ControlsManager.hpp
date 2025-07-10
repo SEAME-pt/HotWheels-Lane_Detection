@@ -71,8 +71,8 @@ class ControlsManager : public QObject {
 				static constexpr double MEASUREMENT_NOISE_VEL = 0.1;
 				std::mutex m_stateMutex;
 				bool m_initialized = false;
-				VehicleStateEstimator() {
-					m_lastUpdate = std::chrono::steady_clock::now();
+				VehicleStateEstimator () {
+					m_lastUpdate = std::chrono::steady_clock::now ();
 				}
 		} m_stateEstimator;
 
@@ -104,7 +104,7 @@ class ControlsManager : public QObject {
 		bool m_constantSpeedMode = false;
 		double m_targetConstantSpeed = DEFAULT_CONSTANT_SPEED;
 		double m_constantThrottle = DEFAULT_CONSTANT_THROTTLE;
-		void receiveLaneDataDirect(const LaneInfo &lane_info);
+		void receiveLaneDataDirect (const LaneInfo &lane_info);
 		std::atomic<bool> m_emergencyStop{false};
 		struct SoftStartConfig {
 				bool enabled = true;
@@ -116,97 +116,97 @@ class ControlsManager : public QObject {
 		} m_softStart;
 
 	public:
-		explicit ControlsManager(int argc, char **argv, QObject *parent = nullptr);
-		~ControlsManager();
-		void setMode(DrivingMode mode);
-		void readJoystickEnable();
-		bool isProcessRunning(const QString &processName);
-		void startAutonomousControl();
-		void stopAutonomousControl();
-		void autonomousControlLoop();
-		void enableRealSensors(bool enable = true);
-		void updateRealVelocity(double velocity);
-		void updateRealYawRate(double yaw_rate);
-		VehicleState getVehicleStateWithDiagnostics();
-		void resetVehicleState(const VehicleState &initial_state = {0.0, 0.0, 0.0, 0.0});
-		void applyControlCommand(const ControlCommand &command);
-		void applyThrottle(double throttle);
-		void applySteering(double steering);
-		DrivingMode getCurrentMode() const {
+		explicit ControlsManager (int argc, char **argv, QObject *parent = nullptr);
+		~ControlsManager ();
+		void setMode (DrivingMode mode);
+		void readJoystickEnable ();
+		bool isProcessRunning (const QString &processName);
+		void startAutonomousControl ();
+		void stopAutonomousControl ();
+		void autonomousControlLoop ();
+		void enableRealSensors (bool enable = true);
+		void updateRealVelocity (double velocity);
+		void updateRealYawRate (double yaw_rate);
+		VehicleState getVehicleStateWithDiagnostics ();
+		void resetVehicleState (const VehicleState &initial_state = {0.0, 0.0, 0.0, 0.0});
+		void applyControlCommand (const ControlCommand &command);
+		void applyThrottle (double throttle);
+		void applySteering (double steering);
+		DrivingMode getCurrentMode () const {
 			return m_currentMode;
 		}
-		void setConstantSpeedMode(bool enable, double target_speed = DEFAULT_CONSTANT_SPEED,
-		                          double throttle = DEFAULT_CONSTANT_THROTTLE);
-		void emergencyMotorStop();
-		void emergencyStop();
-		void resetEmergencyStop();
-		bool isEmergencyStopActive() const {
-			return m_emergencyStop.load();
+		void setConstantSpeedMode (bool enable, double target_speed = DEFAULT_CONSTANT_SPEED,
+		                           double throttle = DEFAULT_CONSTANT_THROTTLE);
+		void emergencyMotorStop ();
+		void emergencyStop ();
+		void resetEmergencyStop ();
+		bool isEmergencyStopActive () const {
+			return m_emergencyStop.load ();
 		}
-		bool isConstantSpeedMode() const {
+		bool isConstantSpeedMode () const {
 			return m_constantSpeedMode;
 		}
-		double getTargetConstantSpeed() const {
+		double getTargetConstantSpeed () const {
 			return m_targetConstantSpeed;
 		}
-		void setSoftStartEnabled(bool enabled) {
+		void setSoftStartEnabled (bool enabled) {
 			m_softStart.enabled = enabled;
 			std::cout << "[SOFT START] " << (enabled ? "ENABLED" : "DISABLED") << std::endl;
 		}
-		bool isSoftStartEnabled() const {
+		bool isSoftStartEnabled () const {
 			return m_softStart.enabled;
 		}
-		void setSoftStartParameters(double max_change_per_step, double initial_limit,
-		                            double warmup_duration) {
+		void setSoftStartParameters (double max_change_per_step, double initial_limit,
+		                             double warmup_duration) {
 			m_softStart.max_throttle_change_per_step = max_change_per_step;
 			m_softStart.initial_throttle_limit = initial_limit;
 			m_softStart.warmup_duration_seconds = warmup_duration;
 			std::cout << "[SOFT START] Parameters updated: Max change="
 			          << "%, Warmup=" << warmup_duration << "s" << std::endl;
 		}
-		double applySoftStart(double target_throttle);
+		double applySoftStart (double target_throttle);
 		bool m_useDirectFlow = true;
 		bool m_maintainZeroMQ = true;
 
 	public:
-		void setDirectFlowEnabled(bool enable) {
+		void setDirectFlowEnabled (bool enable) {
 			m_useDirectFlow = enable;
-			INFO_STREAM("ControlsManager") << "Direct flow " << (enable ? "ENABLED" : "DISABLED");
+			INFO_STREAM ("ControlsManager") << "Direct flow " << (enable ? "ENABLED" : "DISABLED");
 		}
-		void setZeroMQMaintained(bool maintain) {
+		void setZeroMQMaintained (bool maintain) {
 			m_maintainZeroMQ = maintain;
-			INFO_STREAM("ControlsManager")
+			INFO_STREAM ("ControlsManager")
 			    << "ZeroMQ compatibility " << (maintain ? "MAINTAINED" : "DISABLED");
 		}
-		bool isUsingDirectFlow() const {
+		bool isUsingDirectFlow () const {
 			return m_useDirectFlow;
 		}
-		bool isZeroMQMaintained() const {
+		bool isZeroMQMaintained () const {
 			return m_maintainZeroMQ;
 		}
-		void stopAutonomousControlMotor();
-		bool getDirectLaneData(LaneInfo &lane_info);
-		bool getZeroMQLaneData(LaneInfo &lane_info);
-		void applyControlsWithSafety(const ControlCommand &control, int control_counter);
-		cv::Mat deserializeMask(const std::string &data);
+		void stopAutonomousControlMotor ();
+		bool getDirectLaneData (LaneInfo &lane_info);
+		bool getZeroMQLaneData (LaneInfo &lane_info);
+		void applyControlsWithSafety (const ControlCommand &control, int control_counter);
+		cv::Mat deserializeMask (const std::string &data);
 
 	private:
-		void initializeHardwareControllers();
-		void initializeMPCComponents();
-		void initializeVisionPipeline(int argc, char **argv);
-		void initializeCommunication(int argc, char **argv);
-		void initializeDataThreads();
-		LaneInfo getCachedLaneInfo();
-		bool getCachedEmergencyStop();
-		void visionDataUpdateLoop();
-		void obstacleDataUpdateLoop();
-		std::vector<Point2D> getWaypointsFromVision();
-		LaneInfo getLaneInfoFromVision();
-		bool checkEmergencyObstacles();
-		std::string serializeMask(const cv::Mat &mask);
+		void initializeHardwareControllers ();
+		void initializeMPCComponents ();
+		void initializeVisionPipeline (int argc, char **argv);
+		void initializeCommunication (int argc, char **argv);
+		void initializeDataThreads ();
+		LaneInfo getCachedLaneInfo ();
+		bool getCachedEmergencyStop ();
+		void visionDataUpdateLoop ();
+		void obstacleDataUpdateLoop ();
+		std::vector<Point2D> getWaypointsFromVision ();
+		LaneInfo getLaneInfoFromVision ();
+		bool checkEmergencyObstacles ();
+		std::string serializeMask (const cv::Mat &mask);
 	signals:
-		void emergencyStopSignal();
-		void modeChanged(DrivingMode mode);
+		void emergencyStopSignal ();
+		void modeChanged (DrivingMode mode);
 };
 
 #endif

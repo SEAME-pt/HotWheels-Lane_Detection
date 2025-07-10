@@ -23,10 +23,10 @@ class TensorRTInferencer : public IInferencer {
 	private:
 		class Logger : public nvinfer1::ILogger {
 			public:
-				void log(Severity severity, const char *msg) noexcept override;
+				void log (Severity severity, const char *msg) noexcept override;
 		};
 
-		static Logger &getLogger() {
+		static Logger &getLogger () {
 			static Logger instance;
 			return instance;
 		}
@@ -69,32 +69,32 @@ class TensorRTInferencer : public IInferencer {
 
 		cv::Mat lastMask;
 
-		std::vector<char> readEngineFile(const std::string &enginePath);
-		void cleanupResources();
+		std::vector<char> readEngineFile (const std::string &enginePath);
+		void cleanupResources ();
 
-		std::string serializeMask(const cv::Mat &mask);
+		std::string serializeMask (const cv::Mat &mask);
 
 	public:
-		TensorRTInferencer(const std::string &enginePath);
-		~TensorRTInferencer();
+		TensorRTInferencer (const std::string &enginePath);
+		~TensorRTInferencer ();
 
-		cv::cuda::GpuMat preprocessImage(const cv::cuda::GpuMat &gpuImage);
-		void runInference(const cv::cuda::GpuMat &gpuInput);
-		cv::cuda::GpuMat makePrediction(const cv::cuda::GpuMat &gpuImage) override;
-		void initUndistortMaps();
-		void doInference(const cv::Mat &frame) override;
+		cv::cuda::GpuMat preprocessImage (const cv::cuda::GpuMat &gpuImage);
+		void runInference (const cv::cuda::GpuMat &gpuInput);
+		cv::cuda::GpuMat makePrediction (const cv::cuda::GpuMat &gpuImage) override;
+		void initUndistortMaps ();
+		void doInference (const cv::Mat &frame) override;
 
-		void *getDeviceInputPtr() const {
+		void *getDeviceInputPtr () const {
 			return deviceInput;
 		}
-		void *getDeviceOutputPtr() const {
+		void *getDeviceOutputPtr () const {
 			return deviceOutput;
 		}
-		cv::cuda::GpuMat getOutputMaskGpu() const {
+		cv::cuda::GpuMat getOutputMaskGpu () const {
 			return outputMaskGpu;
 		}
-		cv::Mat getLastMask() const {
+		cv::Mat getLastMask () const {
 			return lastMask;
 		}
-		cv::cuda::GpuMat renderFittedLane(const cv::cuda::GpuMat& processedMaskGpu);
+		cv::cuda::GpuMat renderFittedLane (const cv::cuda::GpuMat &processedMaskGpu);
 };

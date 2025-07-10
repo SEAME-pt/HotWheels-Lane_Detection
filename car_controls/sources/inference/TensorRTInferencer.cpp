@@ -46,9 +46,8 @@ TensorRTInferencer::TensorRTInferencer (const std::string &enginePath)
 	}
 
 	lanePostProcessor = new LanePostProcessor (
-	    350, 260, 10.0F, 10.0F); // Initialize lane post-processor with parameters
-	laneCurveFitter =
-	    new LaneCurveFitter (); // Initialize lane curve fitter
+	    350, 260, 10.0F, 10.0F);              // Initialize lane post-processor with parameters
+	laneCurveFitter = new LaneCurveFitter (); // Initialize lane curve fitter
 
 	for (int i = 0; i < engine->getNbBindings (); i++) { // Loop through all bindings
 		if (engine->bindingIsInput (i)) {                // If binding is input
@@ -363,32 +362,29 @@ void TensorRTInferencer::doInference (const cv::Mat &frame) {
 	    "inference_frame", d_resized_mask); // Publish frame to ZeroMQ publisher
 }
 
-cv::cuda::GpuMat TensorRTInferencer::renderFittedLane(const cv::cuda::GpuMat& processedMaskGpu) {
+cv::cuda::GpuMat TensorRTInferencer::renderFittedLane (const cv::cuda::GpuMat &processedMaskGpu) {
 	// Download the processed mask to CPU for lane fitting
 	cv::Mat maskCpu;
-	processedMaskGpu.download(maskCpu);
+	processedMaskGpu.download (maskCpu);
 
 	// Fit lanes and compute centerline
-	auto centerlineOpt = laneCurveFitter->computeCenterline(maskCpu);
+	auto centerlineOpt = laneCurveFitter->computeCenterline (maskCpu);
 
-	if (centerlineOpt.has_value()) {
-		const auto& result = centerlineOpt.value();
-		const auto& centerline = result.blended;
+	if (centerlineOpt.has_value ()) {
+		const auto &result = centerlineOpt.value ();
+		const auto &centerline = result.blended;
 
-		for (size_t i = 1; i < centerline.size(); ++i) {
-			cv::line(maskCpu,
-					cv::Point(centerline[i - 1]),
-					cv::Point(centerline[i]),
-					cv::Scalar(0, 255, 0),   // green
-					2,
-					cv::LINE_AA);
+		for (size_t i = 1; i < centerline.size (); ++i) {
+			cv::line (maskCpu, cv::Point (centerline[i - 1]), cv::Point (centerline[i]),
+			          cv::Scalar (0, 255, 0), // green
+			          2, cv::LINE_AA);
 		}
 	}
 
 	// Upload the mask with centerline back to GPU
 	cv::cuda::GpuMat fittedLaneGpu;
-	fittedLaneGpu.upload(maskCpu);
+	fittedLaneGpu.upload (maskCpu);
 
-	return fittedLaneGpu;  // Return
-	// the GPU mask with fitted lane drawn on it
+	return fittedLaneGpu; // Return
+	                      // the GPU mask with fitted lane drawn on it
 }

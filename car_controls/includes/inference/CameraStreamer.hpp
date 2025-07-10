@@ -24,17 +24,16 @@
 
 class FrameBufferSegmentation {
 	public:
-		void update(const cv::Mat &frame) {
-			std::lock_guard<std::mutex> lock(mutex_);
-			frame_ = frame.clone();
+		void update (const cv::Mat &frame) {
+			std::lock_guard<std::mutex> lock (mutex_);
+			frame_ = frame.clone ();
 			has_new_frame_ = true;
 		}
 
-		bool getFrame(cv::Mat &out) {
-			std::lock_guard<std::mutex> lock(mutex_);
-			if(!has_new_frame_)
-				return false;
-			out = frame_.clone();
+		bool getFrame (cv::Mat &out) {
+			std::lock_guard<std::mutex> lock (mutex_);
+			if (!has_new_frame_) return false;
+			out = frame_.clone ();
 			has_new_frame_ = false;
 			return true;
 		}
@@ -47,16 +46,15 @@ class FrameBufferSegmentation {
 
 class FrameBufferDetection {
 	public:
-		void update(const cv::Mat &frame) {
-			std::lock_guard<std::mutex> lock(mutex_);
-			frame_ = frame.clone();
+		void update (const cv::Mat &frame) {
+			std::lock_guard<std::mutex> lock (mutex_);
+			frame_ = frame.clone ();
 			has_new_frame_ = true;
 		}
-		bool getFrame(cv::Mat &out) {
-			std::lock_guard<std::mutex> lock(mutex_);
-			if(!has_new_frame_)
-				return false;
-			out = frame_.clone();
+		bool getFrame (cv::Mat &out) {
+			std::lock_guard<std::mutex> lock (mutex_);
+			if (!has_new_frame_) return false;
+			out = frame_.clone ();
 			has_new_frame_ = false;
 			return true;
 		}
@@ -69,36 +67,36 @@ class FrameBufferDetection {
 
 class CameraStreamer {
 	public:
-		CameraStreamer(double scale = 0.5);
-		~CameraStreamer();
-		void start();
-		void stop();
-		void setMPCCallback(std::function<void(const LaneInfo &)> callback) {
+		CameraStreamer (double scale = 0.5);
+		~CameraStreamer ();
+		void start ();
+		void stop ();
+		void setMPCCallback (std::function<void (const LaneInfo &)> callback) {
 			m_mpcCallback = callback;
 		}
-		void enableZeroMQPublishing(bool enable = true) {
+		void enableZeroMQPublishing (bool enable = true) {
 			m_zeromq_enabled = enable;
 		}
 
 	private:
 		cv::VideoCapture cap;
 		double scale_factor;
-		bool m_zeromq_enabled = true;	
-		cudaGraphicsResource* cuda_resource;
+		bool m_zeromq_enabled = true;
+		cudaGraphicsResource *cuda_resource;
 		bool m_running;
 
 		// === Communication Infrastructure ===
 		// ZeroMQ publisher for inference results
 		Publisher *m_publisherFrameObject;
 		std::unique_ptr<Polyfitter> m_polyfitter;
-		std::function<void(const LaneInfo &)> m_mpcCallback;
+		std::function<void (const LaneInfo &)> m_mpcCallback;
 		std::shared_ptr<TensorRTInferencer> segmentationInferencer;
 		std::shared_ptr<YOLOv5TRT> yoloInferencer;
 		FrameBufferSegmentation segmentationBuffer;
 		FrameBufferDetection detectionBuffer;
-		void segmentationWorker();
-		void detectionWorker();
-		void captureLoop();
+		void segmentationWorker ();
+		void detectionWorker ();
+		void captureLoop ();
 		std::thread captureThread;
 		std::thread segmentationThread;
 		std::thread detectionThread;
