@@ -46,7 +46,7 @@ std::atomic<bool> g_running{true};
 static ControlsManager *g_emergency_controls = nullptr;
 
 // Emergency motor stop function
-void emergencyMotorStop () {
+void emergencyMotorStop() {
 	if (g_emergency_controls) {
 		try {
 			std::cout << "[EMERGENCY] Stopping all motors..." << std::endl;

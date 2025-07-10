@@ -5,6 +5,11 @@
 
 set -e
 
+if [ -z "$1" ]; then
+    echo "Usage: $0 <source_directory>"
+    exit 1
+fi
+
 echo "=== Deploy via rsync ==="
 echo "Criando diretório no Jetson..."
 ssh jetson@hotwheels-car.netbird.cloud 'mkdir -p /home/jetson/Documents/MPC'
