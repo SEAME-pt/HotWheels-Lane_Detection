@@ -45,24 +45,13 @@ class ControlsManager : public QObject {
 		std::atomic<double> m_lastSteering{0.0};
 
 		// === Thread Management ===
-		std::atomic<bool> m_autonomousMode;
-		std::atomic<double> m_lastThrottle{0.0};
-		std::atomic<double> m_lastSteering{0.0};
-
-		// === Thread Management ===
 		QThread *m_cameraStreamerThread;
 		QThread *m_manualControllerThread;
 		QThread *m_subscriberJoystickThread;
 		QThread *m_autonomousControlThread;
 		QThread *m_visionDataThread;
 		QThread *m_obstacleDataThread;
-		QThread *m_visionDataThread;
-		QThread *m_obstacleDataThread;
 
-		// === Object Pointers ===
-		CameraStreamer *m_cameraStreamerObject;
-		JoysticksController *m_manualController;
-		Subscriber *m_subscriberJoystickObject;
 		// === Object Pointers ===
 		CameraStreamer *m_cameraStreamerObject;
 		JoysticksController *m_manualController;
@@ -92,17 +81,10 @@ class ControlsManager : public QObject {
 		struct CachedVisionData {
 				std::vector<Point2D> waypoints;
 				LaneInfo lane_info{0.0, 0.0};
-				LaneInfo lane_info{0.0, 0.0};
 				std::chrono::steady_clock::time_point timestamp;
 				bool valid = false;
 				std::mutex mutex;
 		} m_cachedVisionData;
-		struct DirectMPCData {
-				LaneInfo current_lane_info;
-				std::chrono::steady_clock::time_point timestamp;
-				bool valid = false;
-				std::mutex mutex;
-		} m_directMPCData;
 		struct DirectMPCData {
 				LaneInfo current_lane_info;
 				std::chrono::steady_clock::time_point timestamp;
@@ -119,10 +101,6 @@ class ControlsManager : public QObject {
 		static constexpr double DATA_TIMEOUT_MS = 200.0;
 		static constexpr double VISION_UPDATE_RATE = 10.0;
 		static constexpr double OBSTACLE_UPDATE_RATE = 20.0;
-		static constexpr double CONTROL_RATE = 20.0;
-		static constexpr double DATA_TIMEOUT_MS = 200.0;
-		static constexpr double VISION_UPDATE_RATE = 10.0;
-		static constexpr double OBSTACLE_UPDATE_RATE = 20.0;
 		bool m_constantSpeedMode = false;
 		double m_targetConstantSpeed = DEFAULT_CONSTANT_SPEED;
 		double m_constantThrottle = DEFAULT_CONSTANT_THROTTLE;
@@ -130,11 +108,6 @@ class ControlsManager : public QObject {
 		std::atomic<bool> m_emergencyStop{false};
 		struct SoftStartConfig {
 				bool enabled = true;
-				double max_throttle_change_per_step = 0.01;
-				double initial_throttle_limit = 0.05;
-				double warmup_duration_seconds = 3.0;
-				double current_throttle_output = 0.0;
-				std::chrono::steady_clock::time_point start_time;
 				double max_throttle_change_per_step = 0.01;
 				double initial_throttle_limit = 0.05;
 				double warmup_duration_seconds = 3.0;

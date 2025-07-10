@@ -2,10 +2,8 @@
 #define CAMERA_STREAMER_HPP
 
 #include "CommonTypes.hpp"
-#include "CommonTypes.hpp"
 #include "Debugger.hpp"
 #include "IInferencer.hpp"
-#include "Polyfitter.hpp"
 #include "Polyfitter.hpp"
 #include "Publisher.hpp"
 #include "Subscriber.hpp"

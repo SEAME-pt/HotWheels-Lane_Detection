@@ -36,14 +36,12 @@
  * @return The clamped value, or the original value if it is within the range.
  */
 template <typename T> T clamp (T value, T min_val, T max_val) {
-template <typename T> T clamp (T value, T min_val, T max_val) {
 	return (value < min_val) ? min_val : ((value > max_val) ? max_val : value);
 }
 
 /*!
  * @brief Default constructor for the EngineController class.
  */
-EngineController::EngineController () {}
 EngineController::EngineController () {}
 
 /*!
@@ -55,9 +53,6 @@ EngineController::EngineController () {}
  * @details Sets up the PeripheralController and initializes the servo and motor
  * controllers.
  */
-EngineController::EngineController (int servo_addr, int motor_addr, QObject *parent)
-    : QObject (parent), m_running (false), m_current_speed (0), m_current_angle (0) {
-	pcontrol = new PeripheralController (servo_addr, motor_addr);
 EngineController::EngineController (int servo_addr, int motor_addr, QObject *parent)
     : QObject (parent), m_running (false), m_current_speed (0), m_current_angle (0) {
 	pcontrol = new PeripheralController (servo_addr, motor_addr);
@@ -77,8 +72,6 @@ EngineController::EngineController (int servo_addr, int motor_addr, QObject *par
  */
 EngineController::~EngineController () {
 	stop ();
-EngineController::~EngineController () {
-	stop ();
 	delete pcontrol;
 }
 
@@ -87,7 +80,6 @@ EngineController::~EngineController () {
  *
  * @details Sets the m_running flag to true.
  */
-void EngineController::start () {
 void EngineController::start () {
 	m_running = true;
 }
@@ -99,10 +91,7 @@ void EngineController::start () {
  * 0.
  */
 void EngineController::stop () {
-void EngineController::stop () {
 	m_running = false;
-	set_speed (0);
-	set_steering (0);
 	set_speed (0);
 	set_steering (0);
 }
@@ -113,9 +102,6 @@ void EngineController::stop () {
  *
  * @param newDirection The new direction to set.
  */
-void EngineController::setDirection (CarDirection newDirection) {
-	if (newDirection != this->m_currentDirection) {
-		emit this->directionUpdated (newDirection);
 void EngineController::setDirection (CarDirection newDirection) {
 	if (newDirection != this->m_currentDirection) {
 		emit this->directionUpdated (newDirection);
@@ -136,29 +122,10 @@ void EngineController::setDirection (CarDirection newDirection) {
  */
 
 void EngineController::set_speed (int speed) {
-void EngineController::set_speed (int speed) {
 	// MOTOR: Funcionamento normal - motores são robustos e aceitam inputs extremos
 	speed = clamp (speed, -100, 100);
 	int pwm_value = static_cast<int> (std::abs (speed) / 100.0 * 4096);
-	speed = clamp (speed, -100, 100);
-	int pwm_value = static_cast<int> (std::abs (speed) / 100.0 * 4096);
 
-	if (speed < 0) { // Reverse (negative speed)
-		pcontrol->set_motor_pwm (0, pwm_value);
-		pcontrol->set_motor_pwm (1, 0);
-		pcontrol->set_motor_pwm (2, pwm_value);
-		pcontrol->set_motor_pwm (5, pwm_value);
-		pcontrol->set_motor_pwm (6, 0);
-		pcontrol->set_motor_pwm (7, pwm_value);
-		setDirection (CarDirection::Reverse);
-	} else if (speed > 0) { // Forward (positive speed)
-		pcontrol->set_motor_pwm (0, pwm_value);
-		pcontrol->set_motor_pwm (1, pwm_value);
-		pcontrol->set_motor_pwm (2, 0);
-		pcontrol->set_motor_pwm (5, 0);
-		pcontrol->set_motor_pwm (6, pwm_value);
-		pcontrol->set_motor_pwm (7, pwm_value);
-		setDirection (CarDirection::Drive);
 	if (speed < 0) { // Reverse (negative speed)
 		pcontrol->set_motor_pwm (0, pwm_value);
 		pcontrol->set_motor_pwm (1, 0);
@@ -179,10 +146,7 @@ void EngineController::set_speed (int speed) {
 		// Force ALL motor channels to 0 for safety
 		for (int channel = 0; channel <= 15; ++channel) { // Expanded range for safety
 			pcontrol->set_motor_pwm (channel, 0);
-		for (int channel = 0; channel <= 15; ++channel) { // Expanded range for safety
-			pcontrol->set_motor_pwm (channel, 0);
 		}
-		setDirection (CarDirection::Stop);
 		setDirection (CarDirection::Stop);
 	}
 	m_current_speed = speed;
@@ -204,10 +168,8 @@ void EngineController::set_steering (int angle) {
 	// MPC now has full control with safety switch as backup
 	static int last_angle = 0;
 	static auto last_servo_time = std::chrono::steady_clock::now ();
-	static auto last_servo_time = std::chrono::steady_clock::now ();
 
 	// Rate limiting temporal: mínimo 70ms entre comandos do servo (otimizado para MPC)
-	auto now = std::chrono::steady_clock::now ();
 	auto now = std::chrono::steady_clock::now ();
 	auto elapsed =
 	    std::chrono::duration_cast<std::chrono::milliseconds> (now - last_servo_time).count ();
@@ -237,7 +199,6 @@ void EngineController::set_steering (int angle) {
 	}
 
 	pcontrol->set_servo_pwm (STEERING_CHANNEL, 0, pwm);
-	pcontrol->set_servo_pwm (STEERING_CHANNEL, 0, pwm);
 	m_current_angle = angle;
 	last_angle = angle;
 	last_servo_time = now;
@@ -247,7 +208,6 @@ void EngineController::set_steering (int angle) {
 	                          << ") - Full range: ±" << HARDWARE_MAX_ANGLE << "°";
 
 	emit this->steeringUpdated (angle);
-	emit this->steeringUpdated (angle);
 }
 
 /*!
@@ -256,12 +216,9 @@ void EngineController::set_steering (int angle) {
  * It's designed to be called in emergency situations where normal motor control may fail.
  */
 void EngineController::forcedMotorStop () {
-void EngineController::forcedMotorStop () {
 
 	try {
 		// Force ALL possible motor channels to zero - no exceptions
-		for (int channel = 0; channel <= 15; ++channel) {
-			pcontrol->set_motor_pwm (channel, 0);
 		for (int channel = 0; channel <= 15; ++channel) {
 			pcontrol->set_motor_pwm (channel, 0);
 		}
@@ -273,18 +230,10 @@ void EngineController::forcedMotorStop () {
 		pcontrol->set_motor_pwm (5, 0);
 		pcontrol->set_motor_pwm (6, 0);
 		pcontrol->set_motor_pwm (7, 0);
-		pcontrol->set_motor_pwm (0, 0);
-		pcontrol->set_motor_pwm (1, 0);
-		pcontrol->set_motor_pwm (2, 0);
-		pcontrol->set_motor_pwm (5, 0);
-		pcontrol->set_motor_pwm (6, 0);
-		pcontrol->set_motor_pwm (7, 0);
 
 		m_current_speed = 0;
 		setDirection (CarDirection::Stop);
-		setDirection (CarDirection::Stop);
 
-	} catch (...) {
 	} catch (...) {
 	}
 }
@@ -295,30 +244,23 @@ void EngineController::forcedMotorStop () {
  * This is the most robust stop method available.
  */
 void EngineController::emergencyHardwareStop () {
-void EngineController::emergencyHardwareStop () {
 
 	// Call 1: Normal stop
 	try {
 		set_speed (0);
 	} catch (...) {
-		set_speed (0);
-	} catch (...) {
 	}
 
 	// Small delay for hardware to process
-	std::this_thread::sleep_for (std::chrono::milliseconds (5));
 	std::this_thread::sleep_for (std::chrono::milliseconds (5));
 
 	// Call 2: Forced stop
 	try {
 		forcedMotorStop ();
 	} catch (...) {
-		forcedMotorStop ();
-	} catch (...) {
 	}
 
 	// Small delay for hardware to process
-	std::this_thread::sleep_for (std::chrono::milliseconds (5));
 	std::this_thread::sleep_for (std::chrono::milliseconds (5));
 
 	// Call 3: Final redundant stop
@@ -326,14 +268,9 @@ void EngineController::emergencyHardwareStop () {
 		for (int i = 0; i < 3; ++i) {
 			for (int channel = 0; channel <= 15; ++channel) {
 				pcontrol->set_motor_pwm (channel, 0);
-		for (int i = 0; i < 3; ++i) {
-			for (int channel = 0; channel <= 15; ++channel) {
-				pcontrol->set_motor_pwm (channel, 0);
 			}
 			std::this_thread::sleep_for (std::chrono::milliseconds (2));
-			std::this_thread::sleep_for (std::chrono::milliseconds (2));
 		}
-	} catch (...) {
 	} catch (...) {
 	}
 

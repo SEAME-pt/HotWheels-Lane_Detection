@@ -5,22 +5,12 @@
 #include "Debugger.hpp"
 #include "Publisher.hpp"
 #include "Subscriber.hpp"
-#include "Debugger.hpp"
-#include "Publisher.hpp"
-#include "Subscriber.hpp"
 #include <NvInfer.h>
-#include <algorithm>
-#include <cmath>
 #include <algorithm>
 #include <cmath>
 #include <cuda_runtime.h>
 #include <experimental/filesystem>
-#include <experimental/filesystem>
 #include <iostream>
-#include <map>
-#include <mlpack/core.hpp>
-#include <mlpack/methods/dbscan/dbscan.hpp>
-#include <numeric>
 #include <map>
 #include <mlpack/core.hpp>
 #include <mlpack/methods/dbscan/dbscan.hpp>
@@ -30,12 +20,10 @@
 #include <opencv2/cudawarping.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
-#include <opencv2/imgproc.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/opencv.hpp>
 #include <vector>
 
-// === ESTRUTURAS MELHORADAS ===
 // === ESTRUTURAS MELHORADAS ===
 struct Lane {
 		std::vector<Point2D> centroids;
@@ -58,11 +46,6 @@ class Polyfitter {
 		static constexpr int MIN_SAMPLES = 5;  // Era 15
 		static constexpr int NUM_WINDOWS = 40; // Era 25
 		static constexpr double STRAIGHT_LINE_THRESHOLD = 0.98;
-		// === PARÂMETROS OTIMIZADOS (ALTERADOS) ===
-		static constexpr double EPS = 5.0;     // Era 8.0
-		static constexpr int MIN_SAMPLES = 5;  // Era 15
-		static constexpr int NUM_WINDOWS = 40; // Era 25
-		static constexpr double STRAIGHT_LINE_THRESHOLD = 0.98;
 		static constexpr double CURVE_THRESHOLD = 0.0012;
 		static constexpr int LANE_WIDTH_PX = 300; // Era 120
 
@@ -77,7 +60,6 @@ class Polyfitter {
 		Polyfitter ();
 		~Polyfitter ();
 
-		// === MÉTODOS EXISTENTES (MANTIDOS) ===
 		// === MÉTODOS EXISTENTES (MANTIDOS) ===
 		std::vector<std::pair<std::string, cv::Mat>>
 		loadImagesFromFolder (const std::string &folderPath);

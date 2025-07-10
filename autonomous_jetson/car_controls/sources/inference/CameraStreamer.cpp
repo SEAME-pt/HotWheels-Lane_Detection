@@ -447,4 +447,3 @@ void CameraStreamer::stop () {
 
 	std::cout << "[CameraStreamer] Shutdown complete." << std::endl;
 }
-

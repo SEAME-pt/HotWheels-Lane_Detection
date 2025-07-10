@@ -3,11 +3,8 @@
  * @brief Implementation of the ControlsManager class.
  * @version 0.2
  * @date 2025-07-07
- * @version 0.2
- * @date 2025-07-07
  * @details This file contains the implementation of the ControlsManager class,
  * which is responsible for managing the different controllers and worker threads
- * for the car controls with hybrid MPC architecture.
  * for the car controls with hybrid MPC architecture.
  *
  * @author Félix LE BIHAN (@Fle-bihh)
@@ -21,12 +18,7 @@
 #include "ControlsManager.hpp"
 #include "Debugger.hpp"
 #include <algorithm>
-#include <algorithm>
 #include <chrono>
-#include <cmath>
-#include <iomanip>
-#include <iostream>
-#include <thread>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
@@ -34,12 +26,10 @@
 
 /*!
  * @brief Constructs a ControlsManager object with hybrid MPC architecture.
- * @brief Constructs a ControlsManager object with hybrid MPC architecture.
  * @param argc The number of command-line arguments.
  * @param argv The array of command-line arguments.
  * @param parent The parent QObject for this ControlsManager.
  * @details Initializes the engine controller, joystick controller, and various
- * worker threads for managing car controls with optimized direct MPC flow.
  * worker threads for managing car controls with optimized direct MPC flow.
  */
 ControlsManager::ControlsManager (int argc, char **argv, QObject *parent)
@@ -479,19 +469,6 @@ void ControlsManager::receiveLaneDataDirect (const LaneInfo &lane_info) {
 /*!
  * @brief Stop autonomous control
  */
-/*!
- * @brief Receive lane data directly from CameraStreamer (direct flow)
- */
-void ControlsManager::receiveLaneDataDirect (const LaneInfo &lane_info) {
-	std::lock_guard<std::mutex> lock (m_directMPCData.mutex);
-	m_directMPCData.current_lane_info = lane_info;
-	m_directMPCData.timestamp = std::chrono::steady_clock::now ();
-	m_directMPCData.valid = true;
-}
-
-/*!
- * @brief Stop autonomous control
- */
 void ControlsManager::stopAutonomousControl () {
 	if (!m_autonomousMode) return;
 
@@ -759,7 +736,6 @@ bool ControlsManager::getCachedEmergencyStop () {
 	return false;
 }
 
-// === Background Data Update Threads ===
 // === Background Data Update Threads ===
 
 void ControlsManager::visionDataUpdateLoop () {

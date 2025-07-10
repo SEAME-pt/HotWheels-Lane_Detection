@@ -155,15 +155,6 @@ contains(QT_ARCH, arm)|contains(QT_ARCH, arm64)|contains(QT_ARCH, aarch64) {
 	
 	# Static link with compatible libstdc++ to avoid glibc version conflicts
 	QMAKE_LFLAGS += -static-libstdc++ -static-libgcc
-	QMAKE_LFLAGS += -Wl,-rpath-link,$${JETSON_SYSROOT}/usr/lib/gcc/aarch64-linux-gnu/9
-	
-	# Force using sysroot libraries for glibc compatibility
-	QMAKE_LFLAGS += -Wl,-rpath-link,$${JETSON_SYSROOT}/lib/aarch64-linux-gnu
-	QMAKE_LFLAGS += -L$${JETSON_SYSROOT}/usr/lib/aarch64-linux-gnu
-	QMAKE_LFLAGS += -L$${JETSON_SYSROOT}/lib/aarch64-linux-gnu
-	
-	# Static link with compatible libstdc++ to avoid glibc version conflicts
-	QMAKE_LFLAGS += -static-libstdc++ -static-libgcc
 }
 
 # Adicionando flags de compilação para warnings e erros
