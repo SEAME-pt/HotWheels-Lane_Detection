@@ -391,22 +391,22 @@ bool ControlsManager::getZeroMQLaneData (LaneInfo &lane_info) {
  * @brief Apply controls with safety limits and servo protection
  */
 void ControlsManager::applyControlsWithSafety (const ControlCommand &control, int control_counter) {
-	// Convert to hardware values with safety limits
-	int throttle_pct = static_cast<int> (std::clamp (control.throttle * 100, 0.0, 20.0)); // Max 20%
+	// === MPC FULL AUTHORITY MODE ===
+	// Servo test confirmed proper command transmission - giving MPC full control
+	// Physical safety switch is the primary safety mechanism
 
-    // Servo protection: ±15° maximum
-    int steer_angle = static_cast<int>(
-        std::clamp(control.steer * 22.5, -22.5, 22.5));
+	// Convert to hardware values with EXPANDED limits for MPC authority
+	int throttle_pct =
+	    static_cast<int> (std::clamp (control.throttle * 100, 0.0, 25.0)); // Increased to 25%
 
-	// Rate limiting for servo protection
+	// MPC FULL STEERING AUTHORITY: Use hardware limits (±45° as confirmed by test)
+	int steer_angle = static_cast<int> (
+	    std::clamp (control.steer * 45.0, -45.0, 45.0)); // Full ±45° range for MPC
+
+	// REMOVED rate limiting - MPC optimization handles smoothness
+	// Trust MPC's internal optimization for smooth control
 	static int last_servo_angle = 0;
-	int max_servo_change = 2; // Maximum 2° per iteration
-	int servo_diff = steer_angle - last_servo_angle;
-
-	if (std::abs (servo_diff) > max_servo_change) {
-		steer_angle = last_servo_angle + (servo_diff > 0 ? max_servo_change : -max_servo_change);
-	}
-	last_servo_angle = steer_angle;
+	last_servo_angle = steer_angle; // Track but don't limit
 
 	// Apply soft start to throttle
 	double target_throttle = throttle_pct / 100.0;
@@ -417,12 +417,12 @@ void ControlsManager::applyControlsWithSafety (const ControlCommand &control, in
 	m_lastThrottle = final_throttle;
 	m_lastSteering = steer_angle * M_PI / 180.0;
 
-    // Debug logging with MPC-servo synchronization info
-    if(control_counter % 40 == 0) {
-        std::cout << "Controls: Target=" << throttle_pct 
-                  << "%, Final=" << final_throttle_pct 
-                  << "%, Steering=" << steer_angle << "° (MPC@10Hz->Servo@70ms)" << std::endl;
-    }
+	// Enhanced logging for MPC full control mode
+	if (control_counter % 40 == 0) {
+		std::cout << "[MPC FULL CONTROL] Target=" << throttle_pct
+		          << "%, Final=" << final_throttle_pct << "%, Steering=" << steer_angle
+		          << "° (FULL ±45° range enabled)" << std::endl;
+	}
 
 	// Apply to hardware (inverted speed for motor cross-connection fix)
 	m_engineController.set_speed (-final_throttle_pct);
