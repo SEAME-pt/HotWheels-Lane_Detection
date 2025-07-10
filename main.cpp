@@ -46,7 +46,7 @@ std::atomic<bool> g_running{true};
 static ControlsManager *g_emergency_controls = nullptr;
 
 // Emergency motor stop function
-void emergencyMotorStop() {
+void emergencyMotorStop () {
 	if (g_emergency_controls) {
 		try {
 			std::cout << "[EMERGENCY] Stopping all motors..." << std::endl;
@@ -1179,10 +1179,10 @@ class MPCIntegratedApp : public QObject {
 				          << std::endl;
 				return;
 			}
-		mpc_active = true;
-		// Mudar para modo autônomo
-		controls_manager->setMode (DrivingMode::Automatic);
-		mpc_timer->start (100); // 10 Hz - Optimized for servo protection (70ms minimum)
+			mpc_active = true;
+			// Mudar para modo autônomo
+			controls_manager->setMode (DrivingMode::Automatic);
+			mpc_timer->start (100); // 10 Hz - Optimized for servo protection (70ms minimum)
 
 			if (!m_predictedTrajectory.empty ()) {
 				std::cout << "MPC ATIVADO - Seguindo detecção de pistas com "

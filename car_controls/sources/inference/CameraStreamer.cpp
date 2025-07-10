@@ -114,15 +114,15 @@ CameraStreamer::CameraStreamer (double scale)
 
 	// Define GStreamer pipeline for CSI camera
 	std::string pipeline = "nvarguscamerasrc sensor-mode=4 ! "
-			"video/x-raw(memory:NVMM), width=1280, height=720, "
-			"format=(string)NV12, framerate=30/1 ! "
-			"nvvidconv ! video/x-raw, format=(string)BGRx ! "
-			"videoconvert ! video/x-raw, format=(string)BGR ! "
-			"appsink drop=1 buffers=1";
+	                       "video/x-raw(memory:NVMM), width=1280, height=720, "
+	                       "format=(string)NV12, framerate=30/1 ! "
+	                       "nvvidconv ! video/x-raw, format=(string)BGRx ! "
+	                       "videoconvert ! video/x-raw, format=(string)BGR ! "
+	                       "appsink drop=1 buffers=1";
 
 	std::cout << "[CameraStreamer] Using GStreamer pipeline: " << pipeline << std::endl;
 
-	cap.open(pipeline, cv::CAP_GSTREAMER); // Open camera stream with GStreamer
+	cap.open (pipeline, cv::CAP_GSTREAMER); // Open camera stream with GStreamer
 
 	std::cout << "[CameraStreamer] Camera opened." << std::endl;
 
@@ -156,8 +156,8 @@ CameraStreamer::CameraStreamer (double scale)
  * @note The destructor is designed to be safe even if start() was never called or
  * 			if partial initialization occurred due to errors
  */
-CameraStreamer::~CameraStreamer() {
-	stop();  // Stop the camera stream
+CameraStreamer::~CameraStreamer () {
+	stop (); // Stop the camera stream
 
 	// Join all threads safely
 	if (captureThread.joinable ()) captureThread.join ();
@@ -209,7 +209,7 @@ CameraStreamer::~CameraStreamer() {
  * @see segmentationBuffer Thread-safe frame buffer providing input frames
  * @see segmentationInferencer TensorRT engine performing lane detection inference
  */
-void CameraStreamer::segmentationWorker() {
+void CameraStreamer::segmentationWorker () {
 	while (m_running) {
 		cv::Mat frame;
 		if (segmentationBuffer.getFrame (frame)) {
@@ -264,7 +264,7 @@ void CameraStreamer::segmentationWorker() {
  * @see detectionBuffer Thread-safe frame buffer providing input frames
  * @see yoloInferencer YOLOv5 TensorRT engine performing object detection
  */
-void CameraStreamer::detectionWorker() {
+void CameraStreamer::detectionWorker () {
 	while (m_running) {
 		cv::Mat frame;
 		if (detectionBuffer.getFrame (frame)) {
@@ -308,7 +308,7 @@ void CameraStreamer::detectionWorker() {
  *
  * @warning Call stop() before destruction to ensure clean thread termination
  */
-void CameraStreamer::start() {
+void CameraStreamer::start () {
 	m_running = true;
 
 	captureThread = std::thread (&CameraStreamer::captureLoop, this);
@@ -359,8 +359,8 @@ void CameraStreamer::start() {
  * @see segmentationBuffer Thread-safe buffer receiving frames for lane detection
  * @see detectionBuffer Thread-safe buffer receiving frames for object detection
  */
-void CameraStreamer::captureLoop() {
-	auto start_time = std::chrono::high_resolution_clock::now();
+void CameraStreamer::captureLoop () {
+	auto start_time = std::chrono::high_resolution_clock::now ();
 	int frame_count = 0;
 	const int framesToSkip = 1; // Skip frames to reduce processing load
 	cv::Mat frame;
@@ -433,7 +433,7 @@ void CameraStreamer::captureLoop() {
  * @note Thread joining occurs in the destructor, not in this function
  * @see ~CameraStreamer() Destructor handles actual thread joining and final cleanup
  */
-void CameraStreamer::stop() {
+void CameraStreamer::stop () {
 	if (!m_running) return;
 	m_running = false;
 
