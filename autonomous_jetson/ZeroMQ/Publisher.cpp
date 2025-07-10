@@ -1,0 +1,172 @@
+#include "Publisher.hpp"
+
+std::unordered_map<int, Publisher *> Publisher::instances;
+
+Publisher::Publisher(int port)
+    : context(1), publisher(context, ZMQ_PUB), joytstick_value(true), running(false),
+      isActive(true) {
+	boundAddress = "tcp://*:" + std::to_string(port);
+	publisher.bind(boundAddress); // Dynamic port binding
+}
+
+Publisher::~Publisher() {
+	std::lock_guard<std::mutex> lock(active_mtx);
+	isActive = false;
+	try {
+		if(publisher.connected()) {
+			publisher.unbind(boundAddress); // Use stored address
+		}
+		publisher.close();
+		context.close();
+		// Only log successful unbind to reduce noise
+		// std::cout << "[Publisher] Unbound from " << boundAddress << std::endl;
+	} catch(const zmq::error_t &e) {
+		// Silently handle unbind errors - they're not critical during shutdown
+		if(e.num() != ENOENT) { // Only log if it's not "No such file or directory"
+			std::cerr << "[Publisher] Unbind warning: " << e.what() << std::endl;
+		}
+	} catch(const std::exception &e) {
+		std::cerr << "[Publisher] Cleanup warning: " << e.what() << std::endl;
+	}
+}
+
+Publisher *Publisher::m_instance = nullptr;
+
+Publisher *Publisher::instance(int port) {
+	if(instances.find(port) == instances.end()) {
+		instances[port] = new Publisher(port);
+	}
+	return instances[port];
+}
+
+void Publisher::destroyAll() {
+	try {
+		// First mark all instances as inactive
+		for(auto &pair : instances) {
+			if(pair.second) {
+				std::lock_guard<std::mutex> lock(pair.second->active_mtx);
+				pair.second->isActive = false;
+			}
+		}
+
+		// Then delete them safely
+		for(auto &pair : instances) {
+			if(pair.second) {
+				try {
+					delete pair.second;
+				} catch(const std::exception &e) {
+					std::cerr << "[Publisher] Warning during destruction: " << e.what()
+					          << std::endl;
+				}
+			}
+		}
+		instances.clear();
+
+	} catch(const std::exception &e) {
+		std::cerr << "[Publisher] Error in destroyAll: " << e.what() << std::endl;
+	}
+}
+
+void Publisher::publish(const std::string &topic, const std::string &message) {
+	{
+		std::lock_guard<std::mutex> lock(active_mtx);
+		if(!isActive) {
+			// Optionally log: std::cerr << "[Publisher] Skipped publish (inactive) for topic: " <<
+			// topic << std::endl;
+			return;
+		}
+	}
+	// Silent publishing - only log errors
+	std::string full_message = topic + " " + message;
+	zmq::message_t zmq_message(full_message.begin(), full_message.end());
+
+	try {
+		publisher.send(zmq_message); // Send the message
+	} catch(const std::exception &e) {
+		std::cerr << "[Publisher] Error publishing " << topic << ": " << e.what() << std::endl;
+	}
+}
+
+void Publisher::setJoystickStatus(bool new_joytstick_value) {
+	std::cout << "[Publisher] Publishing joystick_value: " << (joytstick_value ? "true" : "false")
+	          << std::endl;
+
+	std::lock_guard<std::mutex> lock(joystick_mtx); // Ensure thread safety
+	if(new_joytstick_value != joytstick_value) {
+		joytstick_value = new_joytstick_value;
+		std::string bool_str = joytstick_value ? "true" : "false";
+		publish("joystick_value", bool_str); // Publish a new status message
+	}
+}
+
+void Publisher::publishInferenceFrame(const std::string &topic, const cv::cuda::GpuMat &gpu_image) {
+	std::lock_guard<std::mutex> lock(frame_mtx); // Ensure thread safety
+
+	try {
+		// Download GPU image to CPU
+		cv::Mat cpu_image;
+		gpu_image.download(cpu_image);
+
+		if(cpu_image.empty()) {
+			std::cerr << "[Publisher] Skipped: empty CPU image." << std::endl;
+			return;
+		}
+
+		// Encode to JPEG
+		std::vector<uchar> encoded;
+		if(!cv::imencode(".jpg", cpu_image, encoded)) {
+			std::cerr << "[Publisher] Encoding failed." << std::endl;
+			return;
+		}
+
+		// Build single message: "topic " + raw image bytes
+		std::string header = topic + " ";
+		std::vector<uchar> messageData;
+		messageData.reserve(header.size() + encoded.size());
+		messageData.insert(messageData.end(), header.begin(), header.end());
+		messageData.insert(messageData.end(), encoded.begin(), encoded.end());
+
+		zmq::message_t zmq_message(messageData.data(), messageData.size());
+		publisher.send(zmq_message);
+
+		// std::cout << "[Publisher] Sent image as single-part message. Size: " <<
+		// messageData.size() << std::endl;
+	} catch(const std::exception &e) {
+		std::cerr << "[Publisher] Failed to publish image: " << e.what() << std::endl;
+	}
+}
+
+/* void Publisher::publishCameraFrame(const std::string& topic, const cv::Mat&
+frame) { std::lock_guard<std::mutex> lock(frame_mtx);  // Ensure thread safety
+        try {
+                if (frame.empty()) {
+                        std::cerr << "[Publisher] Skipped: empty CPU image." <<
+std::endl; return;
+                }
+
+                // Encode to JPEG
+                std::vector<uchar> encoded;
+                if (!cv::imencode(".jpg", frame, encoded)) {
+                        std::cerr << "[Publisher] Encoding failed." <<
+std::endl; return;
+                }
+
+                // Build single message: "topic " + raw image bytes
+                std::string header = topic + " ";
+                std::vector<uchar> messageData;
+                messageData.reserve(header.size() + encoded.size());
+                messageData.insert(messageData.end(), header.begin(),
+header.end()); messageData.insert(messageData.end(), encoded.begin(),
+encoded.end());
+
+                zmq::message_t zmq_message(messageData.data(),
+messageData.size()); publisher.send(zmq_message);
+
+                //std::cout << "[Publisher] Sent image as single-part message.
+Size: " << messageData.size() << std::endl;
+
+        } catch (const std::exception& e) {
+                std::cerr << "[Publisher] Failed to publish image: " << e.what()
+<< std::endl;
+        }
+} */

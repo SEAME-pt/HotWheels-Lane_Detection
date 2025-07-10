@@ -1,0 +1,47 @@
+#ifndef PUBLISHER_HPP
+#define PUBLISHER_HPP
+
+#include <chrono>
+#include <cuda_runtime.h>
+#include <errno.h>
+#include <iostream>
+#include <mutex>
+#include <opencv2/core/cuda.hpp>
+#include <opencv2/opencv.hpp>
+#include <thread>
+#include <unordered_map>
+#include <zmq.hpp>
+
+class Publisher {
+	private:
+		explicit Publisher(int port);
+
+		zmq::context_t context;
+		zmq::socket_t publisher;
+		bool joytstick_value;
+		std::mutex joystick_mtx;
+		std::mutex frame_mtx;
+		std::string boundAddress;
+		bool running;
+
+		bool isActive = true;  // Flag to prevent publishing after shutdown
+		std::mutex active_mtx; // Mutex for isActive
+
+		static std::unordered_map<int, Publisher *> instances;
+
+	public:
+		// Publisher(int port);
+		~Publisher();
+		static Publisher *m_instance;
+		static void destroyAll();
+
+		// Singleton accessor
+		static Publisher *instance(int port); // default port
+
+		void publish(const std::string &topic, const std::string &message);
+		void setJoystickStatus(bool new_joytstick_value);
+		void publishInferenceFrame(const std::string &topic, const cv::cuda::GpuMat &gpu_image);
+		// void publishCameraFrame(const std::string& topic, const cv::Mat& frame);
+};
+
+#endif // PUBLISHER_HPP

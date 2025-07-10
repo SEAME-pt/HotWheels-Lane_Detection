@@ -1,0 +1,14 @@
+version = 1
+
+[[analyzers]]
+name = "test-coverage"
+enabled = true
+
+[[analyzers]]
+name = "shell"
+
+[[analyzers]]
+name = "cxx"
+
+[[transformers]]
+name = "clang-format"
