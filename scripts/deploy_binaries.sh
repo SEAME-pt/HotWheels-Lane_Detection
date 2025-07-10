@@ -48,8 +48,31 @@ echo -e "${BLUE}Verificando binários locais...${NC}"
 MAIN_BINARY="$LOCAL_BASE_PATH/build/main"
 CAR_CONTROLS_BINARY="$LOCAL_BASE_PATH/car_controls/build/car-controls-qt"
 
-check_binary "$MAIN_BINARY" "main (MPC)" || exit 1
-check_binary "$CAR_CONTROLS_BINARY" "car-controls-qt" || exit 1
+# Verificar binários individualmente
+MAIN_EXISTS=false
+CAR_CONTROLS_EXISTS=false
+
+if check_binary "$MAIN_BINARY" "main (MPC)"; then
+    MAIN_EXISTS=true
+fi
+
+if check_binary "$CAR_CONTROLS_BINARY" "car-controls-qt"; then
+    CAR_CONTROLS_EXISTS=true
+fi
+
+# Verificar se pelo menos um binário existe
+if [ "$MAIN_EXISTS" = false ] && [ "$CAR_CONTROLS_EXISTS" = false ]; then
+    echo -e "${RED}✗ Nenhum binário encontrado! Compile o projeto primeiro.${NC}"
+    exit 1
+fi
+
+if [ "$MAIN_EXISTS" = false ]; then
+    echo -e "${YELLOW}⚠ Apenas car-controls-qt será enviado${NC}"
+elif [ "$CAR_CONTROLS_EXISTS" = false ]; then
+    echo -e "${YELLOW}⚠ Apenas main (MPC) será enviado${NC}"
+else
+    echo -e "${GREEN}✓ Ambos os binários serão enviados${NC}"
+fi
 
 # Verificar conectividade com o Jetson
 echo -e "${BLUE}Verificando conectividade com Jetson Nano...${NC}"
@@ -73,57 +96,102 @@ echo -e "${GREEN}✓ Diretório criado/verificado${NC}"
 # Copiar binários
 echo -e "${BLUE}Copiando binários para o Jetson...${NC}"
 
-echo -e "${YELLOW}Enviando main (MPC)...${NC}"
-scp "$MAIN_BINARY" "$JETSON_USER@$JETSON_HOST:$JETSON_PATH/main" || {
-    echo -e "${RED}✗ Falha ao copiar main${NC}"
-    exit 1
-}
-echo -e "${GREEN}✓ main copiado com sucesso${NC}"
+# Copiar main (MPC) se existir
+if [ "$MAIN_EXISTS" = true ]; then
+    echo -e "${YELLOW}Enviando main (MPC)...${NC}"
+    if scp "$MAIN_BINARY" "$JETSON_USER@$JETSON_HOST:$JETSON_PATH/main"; then
+        echo -e "${GREEN}✓ main copiado com sucesso${NC}"
+    else
+        echo -e "${RED}✗ Falha ao copiar main${NC}"
+        exit 1
+    fi
+else
+    echo -e "${YELLOW}⏭ Pulando main (não encontrado)${NC}"
+fi
 
-echo -e "${YELLOW}Enviando car-controls-qt...${NC}"
-scp "$CAR_CONTROLS_BINARY" "$JETSON_USER@$JETSON_HOST:$JETSON_PATH/car-controls-qt" || {
-    echo -e "${RED}✗ Falha ao copiar car-controls-qt${NC}"
-    exit 1
-}
-echo -e "${GREEN}✓ car-controls-qt copiado com sucesso${NC}"
+# Copiar car-controls-qt se existir
+if [ "$CAR_CONTROLS_EXISTS" = true ]; then
+    echo -e "${YELLOW}Enviando car-controls-qt...${NC}"
+    if scp "$CAR_CONTROLS_BINARY" "$JETSON_USER@$JETSON_HOST:$JETSON_PATH/car-controls-qt"; then
+        echo -e "${GREEN}✓ car-controls-qt copiado com sucesso${NC}"
+    else
+        echo -e "${RED}✗ Falha ao copiar car-controls-qt${NC}"
+        exit 1
+    fi
+else
+    echo -e "${YELLOW}⏭ Pulando car-controls-qt (não encontrado)${NC}"
+fi
 
 # Verificar permissões no Jetson
 echo -e "${BLUE}Configurando permissões no Jetson...${NC}"
-ssh "$JETSON_USER@$JETSON_HOST" "chmod +x $JETSON_PATH/main $JETSON_PATH/car-controls-qt" || {
-    echo -e "${RED}✗ Falha ao configurar permissões${NC}"
-    exit 1
-}
-echo -e "${GREEN}✓ Permissões configuradas${NC}"
+
+# Construir comando chmod apenas para os binários que foram copiados
+CHMOD_FILES=""
+if [ "$MAIN_EXISTS" = true ]; then
+    CHMOD_FILES="$CHMOD_FILES $JETSON_PATH/main"
+fi
+if [ "$CAR_CONTROLS_EXISTS" = true ]; then
+    CHMOD_FILES="$CHMOD_FILES $JETSON_PATH/car-controls-qt"
+fi
+
+if [ -n "$CHMOD_FILES" ]; then
+    if ssh "$JETSON_USER@$JETSON_HOST" "chmod +x $CHMOD_FILES"; then
+        echo -e "${GREEN}✓ Permissões configuradas${NC}"
+    else
+        echo -e "${RED}✗ Falha ao configurar permissões${NC}"
+        exit 1
+    fi
+fi
 
 # Verificar tamanhos dos arquivos
 echo -e "${BLUE}Verificando integridade dos arquivos...${NC}"
-LOCAL_MAIN_SIZE=$(stat -c%s "$MAIN_BINARY")
-LOCAL_CAR_SIZE=$(stat -c%s "$CAR_CONTROLS_BINARY")
 
-REMOTE_MAIN_SIZE=$(ssh "$JETSON_USER@$JETSON_HOST" "stat -c%s $JETSON_PATH/main" 2>/dev/null || echo "0")
-REMOTE_CAR_SIZE=$(ssh "$JETSON_USER@$JETSON_HOST" "stat -c%s $JETSON_PATH/car-controls-qt" 2>/dev/null || echo "0")
-
-if [ "$LOCAL_MAIN_SIZE" -eq "$REMOTE_MAIN_SIZE" ]; then
-    echo -e "${GREEN}✓ main: $LOCAL_MAIN_SIZE bytes${NC}"
-else
-    echo -e "${RED}✗ main: tamanhos diferentes (local: $LOCAL_MAIN_SIZE, remoto: $REMOTE_MAIN_SIZE)${NC}"
+# Verificar main se foi copiado
+if [ "$MAIN_EXISTS" = true ]; then
+    LOCAL_MAIN_SIZE=$(stat -c%s "$MAIN_BINARY")
+    REMOTE_MAIN_SIZE=$(ssh "$JETSON_USER@$JETSON_HOST" "stat -c%s $JETSON_PATH/main" 2>/dev/null || echo "0")
+    
+    if [ "$LOCAL_MAIN_SIZE" -eq "$REMOTE_MAIN_SIZE" ]; then
+        echo -e "${GREEN}✓ main: $LOCAL_MAIN_SIZE bytes${NC}"
+    else
+        echo -e "${RED}✗ main: tamanhos diferentes (local: $LOCAL_MAIN_SIZE, remoto: $REMOTE_MAIN_SIZE)${NC}"
+    fi
 fi
 
-if [ "$LOCAL_CAR_SIZE" -eq "$REMOTE_CAR_SIZE" ]; then
-    echo -e "${GREEN}✓ car-controls-qt: $LOCAL_CAR_SIZE bytes${NC}"
-else
-    echo -e "${RED}✗ car-controls-qt: tamanhos diferentes (local: $LOCAL_CAR_SIZE, remoto: $REMOTE_CAR_SIZE)${NC}"
+# Verificar car-controls-qt se foi copiado
+if [ "$CAR_CONTROLS_EXISTS" = true ]; then
+    LOCAL_CAR_SIZE=$(stat -c%s "$CAR_CONTROLS_BINARY")
+    REMOTE_CAR_SIZE=$(ssh "$JETSON_USER@$JETSON_HOST" "stat -c%s $JETSON_PATH/car-controls-qt" 2>/dev/null || echo "0")
+    
+    if [ "$LOCAL_CAR_SIZE" -eq "$REMOTE_CAR_SIZE" ]; then
+        echo -e "${GREEN}✓ car-controls-qt: $LOCAL_CAR_SIZE bytes${NC}"
+    else
+        echo -e "${RED}✗ car-controls-qt: tamanhos diferentes (local: $LOCAL_CAR_SIZE, remoto: $REMOTE_CAR_SIZE)${NC}"
+    fi
 fi
 
 # Mostrar informações finais
 echo -e "${BLUE}=== Deploy Concluído ===${NC}"
 echo -e "${GREEN}Binários disponíveis no Jetson em:${NC}"
-echo -e "${YELLOW}  $JETSON_PATH/main${NC}"
-echo -e "${YELLOW}  $JETSON_PATH/car-controls-qt${NC}"
+
+if [ "$MAIN_EXISTS" = true ]; then
+    echo -e "${YELLOW}  $JETSON_PATH/main${NC}"
+fi
+if [ "$CAR_CONTROLS_EXISTS" = true ]; then
+    echo -e "${YELLOW}  $JETSON_PATH/car-controls-qt${NC}"
+fi
+
 echo ""
 echo -e "${BLUE}Para executar no Jetson:${NC}"
 echo -e "${YELLOW}  ssh $JETSON_USER@$JETSON_HOST${NC}"
-echo -e "${YELLOW}  cd $JETSON_PATH/bin${NC}"
-echo -e "${YELLOW}  ./main  # ou ./car-controls-qt${NC}"
+echo -e "${YELLOW}  cd $JETSON_PATH${NC}"
+
+if [ "$MAIN_EXISTS" = true ]; then
+    echo -e "${YELLOW}  ./main  # Executar MPC${NC}"
+fi
+if [ "$CAR_CONTROLS_EXISTS" = true ]; then
+    echo -e "${YELLOW}  ./car-controls-qt  # Executar Car Controls${NC}"
+fi
+
 echo ""
 echo -e "${GREEN}✓ Deploy realizado com sucesso!${NC}"

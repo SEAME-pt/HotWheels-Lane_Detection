@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LANEPOSTPROCESSOR_HPP
+#define LANEPOSTPROCESSOR_HPP
 
 #include <opencv2/cudaimgproc.hpp>
 #include <opencv2/opencv.hpp>
@@ -14,9 +15,9 @@ class LanePostProcessor {
 				std::vector<cv::Point> contour;
 		};
 
-		LanePostProcessor(int minArea, int minLength, float angleThresh, float mergeDist);
+		LanePostProcessor (int minArea, int minLength, float angleThresh, float mergeDist);
 
-		cv::cuda::GpuMat process(const cv::cuda::GpuMat &rawMaskGpu);
+		cv::cuda::GpuMat process (const cv::cuda::GpuMat &rawMaskGpu);
 
 	private:
 		int minComponentSize;
@@ -24,10 +25,13 @@ class LanePostProcessor {
 		float angleThreshold;
 		float mergeDistance;
 
-		std::vector<LaneInfo> extractLaneInfo(const cv::Mat &mask, bool filterSize,
-		                                      bool filterLength);
-		bool shouldMerge(const LaneInfo &a, const LaneInfo &b) const;
-		std::pair<cv::Point, cv::Point> getExtremities(const std::vector<cv::Point> &contour) const;
-		void drawLaneConnections(const std::vector<LaneInfo> &lanes, cv::Mat &canvas) const;
-		cv::Mat renderFilteredMask(const std::vector<LaneInfo> &lanes, cv::Size shape) const;
+		std::vector<LaneInfo> extractLaneInfo (const cv::Mat &mask, bool filterSize,
+		                                       bool filterLength);
+		bool shouldMerge (const LaneInfo &a, const LaneInfo &b) const;
+		std::pair<cv::Point, cv::Point>
+		getExtremities (const std::vector<cv::Point> &contour) const;
+		void drawLaneConnections (const std::vector<LaneInfo> &lanes, cv::Mat &canvas) const;
+		cv::Mat renderFilteredMask (const std::vector<LaneInfo> &lanes, cv::Size shape) const;
 };
+
+#endif
