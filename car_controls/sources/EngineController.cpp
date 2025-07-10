@@ -164,14 +164,14 @@ void EngineController::set_steering(int angle) {
 	static int last_angle = 0;
 	static auto last_servo_time = std::chrono::steady_clock::now();
 
-	// Rate limiting temporal: mínimo 80ms entre comandos do servo
+	// Rate limiting temporal: mínimo 70ms entre comandos do servo (otimizado para MPC)
 	auto now = std::chrono::steady_clock::now();
 	auto elapsed =
 	    std::chrono::duration_cast<std::chrono::milliseconds>(now - last_servo_time).count();
-	if(elapsed < 80) {
+	if(elapsed < 70) {
 		// Comando muito rápido para o servo - usar último ângulo seguro
 		INFO_STREAM("SERVO_PROTECTION")
-		    << "Comando muito rápido (" << elapsed << "ms) - aguardando para proteger servo";
+		    << "MPC timing conflict - comando " << elapsed << "ms (min: 70ms) angle=" << angle << "° blocked";
 		return; // Não executar comando muito rápido
 	}
 
@@ -183,8 +183,8 @@ void EngineController::set_steering(int angle) {
 	int angle_diff = angle - last_angle;
 	if(std::abs(angle_diff) > max_change) {
 		angle = last_angle + (angle_diff > 0 ? max_change : -max_change);
-		INFO_STREAM("SERVO_PROTECTION") << "Limitando mudança de " << angle_diff << "° para "
-		                                << (angle - last_angle) << "° (protegendo servo)";
+		INFO_STREAM("SERVO_PROTECTION") << "Rate limiting applied: " << angle_diff << "° -> "
+		                                << (angle - last_angle) << "° (max change: " << max_change << "°)";
 	}
 
 	// Aplicar clamp final do sistema original

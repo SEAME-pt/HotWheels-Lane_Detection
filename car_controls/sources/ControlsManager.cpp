@@ -410,7 +410,7 @@ void ControlsManager::applyControlsWithSafety(const ControlCommand &control, int
 
     // Servo protection: ±15° maximum
     int steer_angle = static_cast<int>(
-        std::clamp(control.steer * 15, -15.0, 15.0));
+        std::clamp(control.steer * 22.5, -22.5, 22.5));
 
     // Rate limiting for servo protection
     static int last_servo_angle = 0;
@@ -432,11 +432,11 @@ void ControlsManager::applyControlsWithSafety(const ControlCommand &control, int
     m_lastThrottle = final_throttle;
     m_lastSteering = steer_angle * M_PI / 180.0;
 
-    // Debug logging
+    // Debug logging with MPC-servo synchronization info
     if(control_counter % 40 == 0) {
         std::cout << "Controls: Target=" << throttle_pct 
                   << "%, Final=" << final_throttle_pct 
-                  << "%, Steering=" << steer_angle << "°" << std::endl;
+                  << "%, Steering=" << steer_angle << "° (MPC@10Hz->Servo@70ms)" << std::endl;
     }
 
     // Apply to hardware (inverted speed for motor cross-connection fix)

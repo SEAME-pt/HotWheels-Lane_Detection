@@ -1181,11 +1181,10 @@ class MPCIntegratedApp : public QObject {
 				          << std::endl;
 				return;
 			}
-
-			mpc_active = true;
-			// Mudar para modo autônomo
-			controls_manager->setMode (DrivingMode::Automatic);
-			mpc_timer->start (100); // 10 Hz - Reduced frequency to avoid interfering with camera
+		mpc_active = true;
+		// Mudar para modo autônomo
+		controls_manager->setMode (DrivingMode::Automatic);
+		mpc_timer->start (100); // 10 Hz - Optimized for servo protection (70ms minimum)
 
 			if (!m_predictedTrajectory.empty ()) {
 				std::cout << "MPC ATIVADO - Seguindo detecção de pistas com "
