@@ -1,0 +1,25 @@
+{
+    "configurations": [
+        {
+            "name": "linux-clang-x64",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/home/michel/new_qtjetson/qt5.15/include/QtCore",
+                "/home/michel/new_qtjetson/qt5.15/include",
+                "/home/michel/new_qtjetson/sysroot/usr/include/",
+                "/home/michel/new_qtjetson/sysroot/usr/include/opencv4",
+                "/home/michel/new_qtjetson/sysroot/usr/include/eigen3",
+                "/home/michel/new_qtjetson/sysroot/usr/include/aarch64-linux-gnu",
+                "/home/michel/new_qtjetson/sysroot/usr/include/SDL2"
+            ],
+            "compilerPath": "/usr/bin/cc",
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "linux-clang-x64",
+            "compilerArgs": [
+                ""
+            ]
+        }
+    ],
+    "version": 4
+}
