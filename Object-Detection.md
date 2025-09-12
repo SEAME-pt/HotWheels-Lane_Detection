@@ -62,8 +62,8 @@ Export to ONNX:
 	python export.py --weights ./runs/train/exp30/weights/best.pt --include onnx --opset 12 --simplify --img 640 --batch 1 --device 0
   
 ## Results 📊
-After several adjustments the final model consisted of only 10 classes, each one representing a specific street sign in the track, and in the video below we can see them being accurately identified.
-
-https://github.com/user-attachments/assets/4556ca30-7604-4370-a6ee-9804e0810a38
+After several adjustments the final model consisted of only 10 classes, each one representing a specific street sign in the track, and in the video below we can see them being accurately identified.  
+  
+https://github.com/user-attachments/assets/20246a01-96fc-43e5-80c1-bdf6c65b2202
 
 ___
